@@ -1,5 +1,6 @@
-# Orquestacion local. KEYCLOAK_CLIENT_SECRET es un valor de desarrollo; en
-# produccion debe venir de un secreto real, no quedar en este archivo.
+# Orquestacion local. Las variables KEYCLOAK_* y REDIS_URL del dashboard se leen
+# de un .env en la raiz del repo (docker compose lo carga solo); ese archivo
+# nunca se commitea. Ver .env.example para los nombres esperados.
 
 services:
   keycloak:
@@ -38,10 +39,10 @@ services:
       - keycloak
     environment:
       REDIS_URL: redis://redis:6379/0
-      KEYCLOAK_SERVER_URL: http://keycloak:8080/
-      KEYCLOAK_REALM: epi-surveillance
-      KEYCLOAK_CLIENT_ID: dashboard
-      KEYCLOAK_CLIENT_SECRET: changeme
+      KEYCLOAK_SERVER_URL: ${KEYCLOAK_SERVER_URL}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
     volumes:
       - ./data:/app/data
 

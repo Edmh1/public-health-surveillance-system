@@ -1,5 +1,6 @@
-streamlit
+streamlit>=1.37
 plotly
+python-dotenv
 pandas>=2.0
 pyarrow
 scikit-learn>=1.2
