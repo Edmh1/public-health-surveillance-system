@@ -13,9 +13,12 @@ import pandas as pd
 from core.audit.bitacora import registrar_movimiento
 from core.audit.registro_piezas import (
     eliminar_registro_pieza,
+    eliminar_registro_pieza_por_id,
+    marcar_activa_por_id,
     marcar_pieza_activa,
     marcar_pieza_inactiva,
     obtener_pieza_activa,
+    obtener_pieza_en_papelera,
 )
 from core.storage.consolidado import agregar_pieza, eliminar_pieza
 from core.storage.piezas import ruta_pieza
@@ -76,6 +79,8 @@ def restaurar_pieza(
         )
         raise ConflictoDeRestauracion(mensaje)
 
+    pieza_en_papelera = obtener_pieza_en_papelera(patologia, anio, codigo)
+
     origen = ruta_pieza(directorio_papelera, anio, codigo)
     pieza_restaurada = pd.read_parquet(origen)
 
@@ -85,7 +90,15 @@ def restaurar_pieza(
     destino.parent.mkdir(parents=True, exist_ok=True)
     origen.replace(destino)
 
-    marcar_pieza_activa(patologia, anio, codigo)
+    if pieza_activa_existente is not None:
+        # La pieza activa se reemplazo: su archivo ya se sobrescribio arriba (origen.replace
+        # destino), asi que no queda nada que recuperar de ella. Se elimina su registro en
+        # vez de marcarla inactiva, para no mostrarla como si todavia estuviera en papelera.
+        eliminar_registro_pieza_por_id(pieza_activa_existente["id"])
+        marcar_activa_por_id(pieza_en_papelera["id"])
+    else:
+        marcar_pieza_activa(patologia, anio, codigo)
+
     registrar_movimiento(patologia, anio, codigo, "restaurar", usuario)
 
     return destino

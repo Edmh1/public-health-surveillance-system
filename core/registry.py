@@ -39,12 +39,18 @@ class PathologyPlugin(ABC):
         """Limpia una pieza recien leida del Excel y devuelve el dataframe procesado."""
 
     @abstractmethod
-    def transformar(self, datos_procesados: pd.DataFrame) -> pd.DataFrame:
-        """Calcula transformaciones derivadas de la pieza procesada, como canal endemico e incidencia."""
+    def calcular_canal_endemico(self, datos_procesados: pd.DataFrame) -> pd.DataFrame:
+        """Calcula el canal endemico: percentiles historicos de casos por semana
+        epidemiologica (metodo Bortman o cuartiles), para comparar el anio actual
+        contra el historial. Tiene logica propia (no es un cociente simple como los
+        KPIs de calcular_indicadores) y no depende de poblacion en riesgo.
+        """
 
     @abstractmethod
     def calcular_indicadores(self, datos_consolidados: pd.DataFrame, filtros: dict[str, Any]) -> dict[str, Any]:
-        """Calcula los KPIs de la patologia sobre el consolidado filtrado.
+        """Calcula los KPIs de la patologia sobre el consolidado filtrado: cocientes
+        simples como incidencia, mortalidad, letalidad, letalidad grave, % de casos
+        confirmados graves o % de hospitalizados.
 
         Si falta una pieza necesaria para un indicador, ese indicador debe quedar marcado
         como no disponible, nunca en cero.

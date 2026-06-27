@@ -42,11 +42,14 @@ class DenguePathologyPlugin(PathologyPlugin):
     def limpiar(self, datos_crudos: pd.DataFrame) -> pd.DataFrame:
         return limpiar_dengue(datos_crudos)
 
-    def transformar(self, datos_procesados: pd.DataFrame) -> pd.DataFrame:
-        raise NotImplementedError("transformar (canal endemico, incidencia) todavia no esta construido")
+    def calcular_canal_endemico(self, datos_procesados: pd.DataFrame) -> pd.DataFrame:
+        raise NotImplementedError("calcular_canal_endemico todavia no esta construido")
 
     def calcular_indicadores(self, datos_consolidados: pd.DataFrame, filtros: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError("calcular_indicadores (KPIs) todavia no esta construido")
+        raise NotImplementedError(
+            "calcular_indicadores (incidencia, mortalidad, letalidad, letalidad grave, "
+            "% confirmados grave, % hospitalizados) todavia no esta construido"
+        )
 
     def obtener_esquema(self) -> dict[str, Any]:
         raise NotImplementedError("obtener_esquema todavia no esta construido")

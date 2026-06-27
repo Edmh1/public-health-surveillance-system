@@ -13,5 +13,10 @@ def directorio_papelera(patologia: str) -> Path:
     return DIR_DATA / patologia / "papelera"
 
 
+def directorio_subidas(patologia: str) -> Path:
+    """Carpeta de espera para archivos subidos, antes de que el worker los procese y los borre."""
+    return DIR_DATA / patologia / "subidas"
+
+
 def ruta_consolidado(patologia: str) -> Path:
     return DIR_DATA / patologia / "consolidado" / f"{patologia}_consolidado.parquet"

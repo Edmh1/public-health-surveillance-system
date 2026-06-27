@@ -103,6 +103,34 @@ def marcar_pieza_activa(patologia: str, anio: int, codigo: int) -> None:
     conexion.close()
 
 
+def marcar_activa_por_id(id_pieza: int) -> None:
+    """Marca activa una fila puntual por su id. Usar cuando ya se sabe exactamente
+    cual fila (no "la mas reciente"), como al restaurar reemplazando un conflicto.
+    """
+    conexion = conectar()
+    with conexion:
+        conexion.execute("UPDATE registro_piezas SET activa = 1 WHERE id = ?", (id_pieza,))
+    conexion.close()
+
+
+def marcar_inactiva_por_id(id_pieza: int) -> None:
+    """Marca inactiva una fila puntual por su id. Ver marcar_activa_por_id."""
+    conexion = conectar()
+    with conexion:
+        conexion.execute("UPDATE registro_piezas SET activa = 0 WHERE id = ?", (id_pieza,))
+    conexion.close()
+
+
+def eliminar_registro_pieza_por_id(id_pieza: int) -> None:
+    """Elimina una fila puntual por su id: se usa cuando esa fila ya no representa
+    ningun archivo real (ej. la pieza activa que se descarto al restaurar reemplazando).
+    """
+    conexion = conectar()
+    with conexion:
+        conexion.execute("DELETE FROM registro_piezas WHERE id = ?", (id_pieza,))
+    conexion.close()
+
+
 def eliminar_registro_pieza(patologia: str, anio: int, codigo: int) -> None:
     """Elimina el registro de la pieza mas reciente en papelera: se elimino para siempre."""
     conexion = conectar()
@@ -137,3 +165,13 @@ def listar_piezas(patologia: str | None = None) -> list[dict]:
 
     piezas = [dict(fila) for fila in filas]
     return piezas
+
+
+def listar_piezas_activas(patologia: str) -> list[dict]:
+    """Piezas activas de la patologia: las que estan en piezas/ y en el consolidado."""
+    return [pieza for pieza in listar_piezas(patologia) if pieza["activa"] == 1]
+
+
+def listar_piezas_en_papelera(patologia: str) -> list[dict]:
+    """Piezas inactivas de la patologia: las que estan en papelera/, fuera del consolidado."""
+    return [pieza for pieza in listar_piezas(patologia) if pieza["activa"] == 0]

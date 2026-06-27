@@ -7,11 +7,22 @@ obtener_vistas() cuando esten construidas.
 
 import streamlit as st
 
-from core.auth.permisos import PERMISO_VER_PROCESAMIENTOS, tiene_permiso
+from core.auth.permisos import (
+    PERMISO_ELIMINAR_PIEZA,
+    PERMISO_SUBIR_PIEZA,
+    PERMISO_VER_BITACORA,
+    PERMISO_VER_PAPELERA,
+    PERMISO_VER_PROCESAMIENTOS,
+    tiene_permiso,
+)
 from core.dashboard_base import datos as modulo_datos
 from core.dashboard_base import filtros as modulo_filtros
 from core.dashboard_base import sesion as modulo_sesion
 from core.dashboard_base.banner import fragmento_banner_datos_nuevos
+from core.dashboard_base.bitacora_vista import mostrar_bitacora
+from core.dashboard_base.gestion_papelera import mostrar_papelera
+from core.dashboard_base.gestion_piezas import mostrar_piezas_activas
+from core.dashboard_base.gestion_subida import fragmento_subidas_pendientes, mostrar_formulario_subida
 from core.dashboard_base.procesamientos_vista import mostrar_procesamientos
 from core.registry import listar_patologias, obtener_patologia
 
@@ -52,6 +63,39 @@ def ejecutar_dashboard() -> None:
     st.caption(
         f"{len(datos_filtrados):,} registros tras los filtros, de {len(datos_completos):,} en el consolidado."
     )
+
+    _mostrar_seccion_gestion(patologia, usuario)
+
+
+def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
+    hay_algo_que_gestionar = any(
+        tiene_permiso(usuario.rol, permiso)
+        for permiso in (
+            PERMISO_SUBIR_PIEZA,
+            PERMISO_ELIMINAR_PIEZA,
+            PERMISO_VER_PAPELERA,
+            PERMISO_VER_BITACORA,
+            PERMISO_VER_PROCESAMIENTOS,
+        )
+    )
+    if not hay_algo_que_gestionar:
+        return
+
+    st.divider()
+    st.header("Gestion")
+
+    if tiene_permiso(usuario.rol, PERMISO_SUBIR_PIEZA):
+        mostrar_formulario_subida(patologia, usuario)
+        fragmento_subidas_pendientes(usuario.nombre_usuario)
+
+    if tiene_permiso(usuario.rol, PERMISO_ELIMINAR_PIEZA):
+        mostrar_piezas_activas(patologia, usuario)
+
+    if tiene_permiso(usuario.rol, PERMISO_VER_PAPELERA):
+        mostrar_papelera(patologia, usuario)
+
+    if tiene_permiso(usuario.rol, PERMISO_VER_BITACORA):
+        mostrar_bitacora(patologia)
 
     if tiene_permiso(usuario.rol, PERMISO_VER_PROCESAMIENTOS):
         mostrar_procesamientos(patologia)
