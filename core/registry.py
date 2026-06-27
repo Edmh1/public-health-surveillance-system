@@ -21,6 +21,16 @@ class PathologyPlugin(ABC):
 
     @property
     @abstractmethod
+    def columna_anio(self) -> str:
+        """Nombre de la columna del dato procesado que identifica el anio de la pieza."""
+
+    @property
+    @abstractmethod
+    def columna_codigo(self) -> str:
+        """Nombre de la columna del dato procesado que identifica el codigo de la pieza."""
+
+    @property
+    @abstractmethod
     def manifest(self) -> dict[str, Any]:
         """Contenido del manifest.yaml: nombre, codigos esperados, rutas y columnas esperadas."""
 
@@ -47,3 +57,23 @@ class PathologyPlugin(ABC):
     @abstractmethod
     def obtener_vistas(self) -> list[Any]:
         """Devuelve las pestanas y graficos que la patologia expone al dashboard."""
+
+
+_PATOLOGIAS_REGISTRADAS: dict[str, PathologyPlugin] = {}
+
+
+def registrar_patologia(plugin: PathologyPlugin) -> None:
+    """Registra un plugin de patologia bajo su nombre, para que el resto del sistema lo use por nombre."""
+    _PATOLOGIAS_REGISTRADAS[plugin.nombre] = plugin
+
+
+def obtener_patologia(nombre: str) -> PathologyPlugin:
+    """Devuelve el plugin registrado para una patologia, o lanza KeyError si no esta registrada."""
+    if nombre not in _PATOLOGIAS_REGISTRADAS:
+        raise KeyError(f"Patologia no registrada: {nombre}")
+    return _PATOLOGIAS_REGISTRADAS[nombre]
+
+
+def listar_patologias() -> list[str]:
+    """Lista los nombres de las patologias registradas."""
+    return sorted(_PATOLOGIAS_REGISTRADAS.keys())

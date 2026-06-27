@@ -1,5 +1,13 @@
 # Manifest de la patologia dengue: nombre, codigos esperados, rutas y columnas esperadas.
-nombre:
+nombre: dengue
 codigos_esperados:
+  - 210
+  - 220
+  - 580
+columna_anio: ano
+columna_codigo: cod_eve
 rutas:
+  piezas: data/dengue/piezas
+  consolidado: data/dengue/consolidado/dengue_consolidado.parquet
+  papelera: data/dengue/papelera
 columnas_esperadas:
