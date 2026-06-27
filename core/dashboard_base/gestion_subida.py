@@ -21,7 +21,7 @@ CLAVE_SUBIDAS_PENDIENTES = "subidas_pendientes_por_usuario"
 
 
 def mostrar_formulario_subida(patologia: str, usuario) -> None:
-    st.subheader("Subir archivo")
+    st.subheader(":material/upload_file: Subir archivo")
 
     archivo_subido = st.file_uploader(
         "Archivo SIVIGILA (.xls o .xlsx)", type=["xls", "xlsx"], key=f"subir_{patologia}"
@@ -43,7 +43,7 @@ def mostrar_formulario_subida(patologia: str, usuario) -> None:
         st.caption("Confirma anio y codigo antes de procesar (red de seguridad contra archivos mal nombrados).")
         anio = st.number_input("Anio", min_value=2000, max_value=2100, value=anio_sugerido or 2024, step=1)
         codigo = st.number_input("Codigo", min_value=0, value=codigo_sugerido or 0, step=1)
-        confirmado = st.form_submit_button("Confirmar y procesar")
+        confirmado = st.form_submit_button("Confirmar y procesar", type="primary", icon=":material/check_circle:")
 
     if not confirmado:
         return
@@ -78,7 +78,7 @@ def _encolar_subida(patologia: str, anio: int, codigo: int, archivo_subido, usua
         }
     )
 
-    st.success(f"{archivo_subido.name} encolado. El resultado aparece abajo en unos segundos.")
+    st.info(f":material/schedule: {archivo_subido.name} encolado. El resultado aparece abajo en unos segundos.")
 
 
 @st.fragment(run_every="4s")
@@ -114,6 +114,6 @@ def _buscar_resultado(pendiente: dict) -> dict | None:
 def _mostrar_resultado(pendiente: dict, resultado: dict) -> None:
     descripcion = f"Datos_{pendiente['anio']}_{pendiente['codigo']}"
     if resultado["estado"] == "listo":
-        st.success(f"{descripcion}: procesado correctamente.")
+        st.markdown(f":material/check_circle: {descripcion}: procesado correctamente.")
     else:
         st.error(f"{descripcion}: fallo. Motivo: {resultado['motivo_fallo']}")

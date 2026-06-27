@@ -16,11 +16,11 @@ CLAVE_CONFIRMAR_ELIMINAR = "papelera_confirmar_eliminar_para_siempre"
 
 
 def mostrar_papelera(patologia: str, usuario) -> None:
-    st.subheader("Papelera")
+    st.subheader(":material/delete: Papelera")
 
     piezas = listar_piezas_en_papelera(patologia)
     if not piezas:
-        st.caption("La papelera esta vacia para esta patologia.")
+        st.caption("La papelera esta vacia. Aqui apareceran las piezas que elimines.")
         return
 
     for pieza in piezas:
@@ -32,17 +32,22 @@ def _mostrar_fila(patologia: str, pieza: dict, usuario) -> None:
     codigo = pieza["codigo"]
     clave = f"{patologia}_{anio}_{codigo}"
 
-    columna_info, columna_restaurar, columna_eliminar = st.columns([6, 2, 2])
+    columna_info, columna_restaurar, columna_eliminar = st.columns([6, 2, 2], vertical_alignment="center")
     with columna_info:
-        st.write(f"Anio {anio}, codigo {codigo} - {pieza['archivo_original']}")
+        st.write(f"Anio {anio}, codigo {codigo} · {pieza['archivo_original']}")
 
     with columna_restaurar:
-        if st.button("Restaurar", key=f"restaurar_{clave}"):
+        if st.button("Restaurar", icon=":material/restore:", key=f"restaurar_{clave}", use_container_width=True):
             _restaurar(patologia, anio, codigo, usuario, clave, forzar=False)
 
     with columna_eliminar:
         if tiene_permiso(usuario.rol, PERMISO_ELIMINAR_PARA_SIEMPRE):
-            if st.button("Eliminar para siempre", key=f"eliminar_siempre_{clave}"):
+            if st.button(
+                "Eliminar para siempre",
+                icon=":material/delete_forever:",
+                key=f"eliminar_siempre_{clave}",
+                use_container_width=True,
+            ):
                 st.session_state.setdefault(CLAVE_CONFIRMAR_ELIMINAR, {})[clave] = True
 
     if st.session_state.get(CLAVE_CONFLICTO_RESTAURAR, {}).get(clave):
@@ -53,22 +58,34 @@ def _mostrar_fila(patologia: str, pieza: dict, usuario) -> None:
 
 
 def _mostrar_confirmacion_restaurar(patologia: str, anio: int, codigo: int, usuario, clave: str) -> None:
-    st.warning("Ya existe una pieza activa con el mismo anio y codigo. Restaurar la reemplazara.")
+    st.warning(":material/warning: Ya existe una pieza activa con el mismo anio y codigo. Restaurar la reemplazara.")
     columna_si, columna_no = st.columns(2)
     with columna_si:
-        if st.button("Si, reemplazar", key=f"confirmar_restaurar_si_{clave}"):
+        if st.button(
+            "Si, reemplazar",
+            type="primary",
+            icon=":material/published_with_changes:",
+            key=f"confirmar_restaurar_si_{clave}",
+            use_container_width=True,
+        ):
             _restaurar(patologia, anio, codigo, usuario, clave, forzar=True)
     with columna_no:
-        if st.button("Cancelar", key=f"confirmar_restaurar_no_{clave}"):
+        if st.button("Cancelar", key=f"confirmar_restaurar_no_{clave}", use_container_width=True):
             st.session_state[CLAVE_CONFLICTO_RESTAURAR][clave] = False
             st.rerun()
 
 
 def _mostrar_confirmacion_eliminar(patologia: str, anio: int, codigo: int, usuario, clave: str) -> None:
-    st.warning("Esto destruye el archivo de forma irreversible. No se puede deshacer.")
+    st.warning(":material/warning: Esto destruye el archivo de forma irreversible. No se puede deshacer.")
     columna_si, columna_no = st.columns(2)
     with columna_si:
-        if st.button("Si, eliminar para siempre", key=f"confirmar_eliminar_si_{clave}"):
+        if st.button(
+            "Si, eliminar para siempre",
+            type="primary",
+            icon=":material/delete_forever:",
+            key=f"confirmar_eliminar_si_{clave}",
+            use_container_width=True,
+        ):
             eliminar_para_siempre(
                 patologia,
                 rutas.directorio_papelera(patologia),
@@ -81,7 +98,7 @@ def _mostrar_confirmacion_eliminar(patologia: str, anio: int, codigo: int, usuar
             st.session_state[CLAVE_CONFIRMAR_ELIMINAR][clave] = False
             st.rerun()
     with columna_no:
-        if st.button("Cancelar", key=f"confirmar_eliminar_no_{clave}"):
+        if st.button("Cancelar", key=f"confirmar_eliminar_no_{clave}", use_container_width=True):
             st.session_state[CLAVE_CONFIRMAR_ELIMINAR][clave] = False
             st.rerun()
 

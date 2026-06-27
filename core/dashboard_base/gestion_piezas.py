@@ -15,11 +15,11 @@ from core.storage import rutas
 
 
 def mostrar_piezas_activas(patologia: str, usuario) -> None:
-    st.subheader("Piezas activas")
+    st.subheader(":material/folder_open: Piezas activas")
 
     piezas = listar_piezas_activas(patologia)
     if not piezas:
-        st.caption("No hay piezas activas registradas para esta patologia.")
+        st.caption(f"Aun no hay piezas activas. Sube el primer archivo de {patologia} para empezar.")
         return
 
     for pieza in piezas:
@@ -27,11 +27,11 @@ def mostrar_piezas_activas(patologia: str, usuario) -> None:
         codigo = pieza["codigo"]
         clave = f"eliminar_{patologia}_{anio}_{codigo}"
 
-        columna_info, columna_accion = st.columns([8, 2])
+        columna_info, columna_accion = st.columns([8, 2], vertical_alignment="center")
         with columna_info:
-            st.write(f"Anio {anio}, codigo {codigo} - {pieza['archivo_original']}")
+            st.write(f"Anio {anio}, codigo {codigo} · {pieza['archivo_original']}")
         with columna_accion:
-            if st.button("Eliminar", key=clave):
+            if st.button("Eliminar", icon=":material/delete:", key=clave, use_container_width=True):
                 _eliminar(patologia, anio, codigo, usuario)
 
 

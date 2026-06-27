@@ -35,14 +35,17 @@ def _mostrar_banner(patologia: str, hay_datos_nuevos: bool) -> None:
     columna_mensaje, columna_actualizar, columna_cerrar = st.columns([8, 2, 1])
 
     with columna_mensaje:
-        st.info("Hay datos nuevos disponibles para esta patologia.")
+        st.info(":material/new_releases: Hay datos nuevos disponibles para esta patologia.")
 
     with columna_actualizar:
-        if st.button("Actualizar", key=f"actualizar_banner_{patologia}"):
+        if st.button(
+            "Actualizar", type="primary", icon=":material/refresh:",
+            key=f"actualizar_banner_{patologia}", use_container_width=True,
+        ):
             modulo_datos.actualizar(patologia)
             st.rerun()
 
     with columna_cerrar:
-        if st.button("x", key=f"cerrar_banner_{patologia}"):
+        if st.button("", icon=":material/close:", help="Cerrar este aviso", key=f"cerrar_banner_{patologia}"):
             cerrados_por_patologia[patologia] = mtime_actual
             st.rerun()

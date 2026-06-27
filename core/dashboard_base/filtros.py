@@ -26,7 +26,7 @@ def _opciones_de_columna(datos: pd.DataFrame, columna: str) -> list:
 
 def mostrar_filtros_globales(datos: pd.DataFrame, columna_anio: str) -> dict:
     """Dibuja los filtros globales en la barra lateral y devuelve los valores elegidos."""
-    st.sidebar.subheader("Filtros")
+    st.sidebar.subheader(":material/filter_alt: Filtros")
 
     anios_disponibles = _opciones_de_columna(datos, columna_anio)
     anios_elegidos = st.sidebar.multiselect("Anio", anios_disponibles, default=anios_disponibles)

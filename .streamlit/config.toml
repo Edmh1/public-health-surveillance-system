@@ -1,0 +1,10 @@
+# Tema visual del dashboard. Ver DESIGN.md para la guia de identidad completa.
+# Los hexadecimales son aproximaciones institucionales hasta tener el manual de marca oficial.
+
+[theme]
+base = "light"
+primaryColor = "#1b3a6b"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F6F8"
+textColor = "#1A1A1A"
+font = "sans serif"
