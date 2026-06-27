@@ -1,14 +1,49 @@
-# Esqueleto de orquestacion. Servicios sin configuracion interna todavia.
+# Orquestacion local. KEYCLOAK_CLIENT_SECRET es un valor de desarrollo; en
+# produccion debe venir de un secreto real, no quedar en este archivo.
 
 services:
   keycloak:
-    # Proveedor de identidad.
+    image: quay.io/keycloak/keycloak:25.0
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data
 
   redis:
-    # Cola de trabajos para RQ.
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
 
   worker:
-    # Proceso RQ que procesa las piezas, aparte del dashboard.
+    build: .
+    command: python worker.py
+    depends_on:
+      - redis
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./data:/app/data
 
   dashboard:
-    # Aplicacion Streamlit.
+    build: .
+    command: streamlit run app.py --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    depends_on:
+      - redis
+      - keycloak
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      KEYCLOAK_SERVER_URL: http://keycloak:8080/
+      KEYCLOAK_REALM: epi-surveillance
+      KEYCLOAK_CLIENT_ID: dashboard
+      KEYCLOAK_CLIENT_SECRET: changeme
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  keycloak_data:

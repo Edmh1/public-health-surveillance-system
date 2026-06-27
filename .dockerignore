@@ -1,0 +1,6 @@
+.git
+__pycache__
+.venv
+data/*/piezas
+data/*/consolidado
+data/*/papelera

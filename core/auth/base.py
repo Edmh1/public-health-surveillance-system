@@ -6,11 +6,18 @@ from dataclasses import dataclass
 
 @dataclass
 class Usuario:
-    """Datos minimos de la persona autenticada: identidad y rol."""
+    """Datos minimos de la persona autenticada: identidad y rol.
+
+    token_acceso y token_refresco son opcionales: el contrato no los exige, pero
+    una implementacion como Keycloak los necesita para poder cerrar la sesion en
+    el proveedor de identidad (no solo en la app).
+    """
 
     id_usuario: str
     nombre_usuario: str
     rol: str
+    token_acceso: str | None = None
+    token_refresco: str | None = None
 
 
 class AuthProvider(ABC):
