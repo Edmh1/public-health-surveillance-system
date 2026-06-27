@@ -1,0 +1,14 @@
+# Esqueleto de orquestacion. Servicios sin configuracion interna todavia.
+
+services:
+  keycloak:
+    # Proveedor de identidad.
+
+  redis:
+    # Cola de trabajos para RQ.
+
+  worker:
+    # Proceso RQ que procesa las piezas, aparte del dashboard.
+
+  dashboard:
+    # Aplicacion Streamlit.
