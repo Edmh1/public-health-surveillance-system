@@ -62,6 +62,14 @@ def aplicar_estilos() -> None:
             padding: 0.5rem 1.2rem !important;
             box-shadow: 0 1px 3px rgba(16, 24, 40, 0.07);
         }
+        /* Streamlit envuelve cada elemento de nivel superior en un stLayoutWrapper que,
+           por su layout flex interno, rompe position:sticky en sus hijos directos. El
+           sticky si funciona aplicado al wrapper mismo, por eso se selecciona con :has(). */
+        div[data-testid="stLayoutWrapper"]:has(.st-key-barra_superior) {
+            position: sticky !important;
+            top: 60px !important;
+            z-index: 999 !important;
+        }
         [data-testid^="stBaseButton-"] {
             border-radius: 8px !important;
         }
@@ -70,6 +78,7 @@ def aplicar_estilos() -> None:
             border-radius: 16px;
             box-shadow: 0 1px 3px rgba(16, 24, 40, 0.07), 0 10px 28px rgba(16, 24, 40, 0.07);
             overflow: hidden;
+            margin-top: 7vh;
         }
         .st-key-tarjeta_login div[data-testid="stForm"] {
             border: none;
@@ -77,6 +86,22 @@ def aplicar_estilos() -> None:
             border-radius: 0;
             padding: 0.5rem 2.5rem 2rem 2.5rem;
             background-color: transparent;
+        }
+        .st-key-tarjeta_login label p {
+            font-size: 1rem !important;
+        }
+        .st-key-tarjeta_login input {
+            font-size: 1.05rem !important;
+        }
+        /* El padre directo de la lista de pestanas (no stLayoutWrapper, ese rompe sticky
+           en sus hijos) se fija debajo de la barra superior; el contenido de cada pestana
+           sigue siendo hermano de este padre, asi que se desplaza con normalidad. */
+        div[data-testid="stTabs"] div:has(> div[role="tablist"]) {
+            position: sticky !important;
+            top: 128px !important;
+            z-index: 998 !important;
+            background-color: #EEF1F5;
+            padding-top: 0.5rem;
         }
         </style>
         """,

@@ -31,6 +31,7 @@ def mostrar_papelera(patologia: str, usuario) -> None:
         tabla,
         hide_index=True,
         width="stretch",
+        height=280,
         on_select="rerun",
         selection_mode="single-row",
         key=f"tabla_papelera_{patologia}",

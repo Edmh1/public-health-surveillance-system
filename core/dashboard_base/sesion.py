@@ -22,6 +22,7 @@ from core.dashboard_base.estilos import (
 
 CLAVE_USUARIO = "usuario"
 CLAVE_PROVEEDOR_AUTH = "_proveedor_auth"
+CLAVE_INTENTO_LOGIN = "_intento_login"
 
 
 def obtener_proveedor_auth() -> AuthProvider:
@@ -54,13 +55,29 @@ def cerrar_sesion() -> None:
 
 
 def mostrar_formulario_login() -> None:
+    """Dibuja el login en dos fases para evitar el parpadeo de la tarjeta completa
+    mientras se espera la respuesta de Keycloak:
+
+    1. El usuario confirma el formulario -> se guarda el intento en session_state y
+       se relanza de inmediato (este primer rerun es instantaneo, no toca la red).
+    2. En el siguiente rerun, en vez de volver a dibujar el formulario completo, se
+       muestra solo el spinner dentro de la misma tarjeta mientras se verifica contra
+       Keycloak. Asi nunca hay dos tarjetas pesadas superpuestas, solo el contenido
+       interno cambia.
+    """
     aplicar_estilos()
+
+    intento = st.session_state.get(CLAVE_INTENTO_LOGIN)
 
     _, columna_centro, _ = st.columns([1, 1.2, 1])
     with columna_centro:
         with st.container(key="tarjeta_login"):
             _mostrar_franja_tricolor_superior()
             _mostrar_cabecera_login()
+
+            if intento is not None:
+                _verificar_credenciales(intento)
+                return
 
             with st.form("formulario_login"):
                 correo = st.text_input("Correo electronico", placeholder="nombre@unimagdalena.edu.co")
@@ -73,18 +90,32 @@ def mostrar_formulario_login() -> None:
                     "de la Universidad del Magdalena."
                 )
 
+            error_previo = st.session_state.pop("_error_login", None)
+            if error_previo is not None:
+                st.error(error_previo)
+
     if not enviado:
         return
 
-    try:
-        with st.spinner("Verificando credenciales..."):
-            usuario = iniciar_sesion(correo, contrasena)
-    except KeycloakConnectionError:
-        st.error("No se pudo conectar al servidor de autenticacion. Intenta de nuevo en un momento.")
-        return
+    st.session_state[CLAVE_INTENTO_LOGIN] = (correo, contrasena)
+    st.rerun()
 
+
+def _verificar_credenciales(intento: tuple[str, str]) -> None:
+    correo, contrasena = intento
+    with st.spinner("Verificando credenciales..."):
+        try:
+            usuario = iniciar_sesion(correo, contrasena)
+        except KeycloakConnectionError:
+            st.session_state.pop(CLAVE_INTENTO_LOGIN, None)
+            st.session_state["_error_login"] = "No se pudo conectar al servidor de autenticacion. Intenta de nuevo en un momento."
+            st.rerun()
+            return
+
+    st.session_state.pop(CLAVE_INTENTO_LOGIN, None)
     if usuario is None:
-        st.error("Correo o contrasena invalidos, o el usuario no tiene un rol asignado en Keycloak")
+        st.session_state["_error_login"] = "Correo o contrasena invalidos, o el usuario no tiene un rol asignado en Keycloak"
+        st.rerun()
         return
 
     st.rerun()

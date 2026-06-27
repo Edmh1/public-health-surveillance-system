@@ -68,6 +68,16 @@ def ejecutar_dashboard() -> None:
     _mostrar_pestanas(patologia, usuario, plugin, datos_filtrados)
 
 
+ICONOS_PESTANAS = {
+    "Tendencia": ":material/trending_up:",
+    "Situacion": ":material/insights:",
+    "Sociodemografica": ":material/groups:",
+    "Morbilidad": ":material/healing:",
+    "Mortalidad": ":material/bar_chart:",
+    "Gestion": ":material/admin_panel_settings:",
+}
+
+
 def _mostrar_pestanas(patologia: str, usuario, plugin, datos_filtrados) -> None:
     """Las 5 pestanas que expone la patologia, mas la pestana de Gestion al final
     (solo si el rol del usuario habilita algo que gestionar).
@@ -79,7 +89,8 @@ def _mostrar_pestanas(patologia: str, usuario, plugin, datos_filtrados) -> None:
     if mostrar_gestion:
         nombres_pestanas = nombres_pestanas + ["Gestion"]
 
-    pestanas = st.tabs(nombres_pestanas)
+    etiquetas_pestanas = [f"{ICONOS_PESTANAS.get(nombre, '')} {nombre}".strip() for nombre in nombres_pestanas]
+    pestanas = st.tabs(etiquetas_pestanas)
 
     for pestana, (_, funcion_render) in zip(pestanas, vistas):
         with pestana:
@@ -130,6 +141,12 @@ def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
 
 
 def _mostrar_filtros_en_sidebar(patologia: str, datos_completos, columna_anio: str) -> dict:
+    icono_data_uri = imagen_a_data_uri(RUTA_ICONO_SIVIDEM)
+    st.sidebar.markdown(
+        f'<img src="{icono_data_uri}" style="width:36px; height:36px; margin-bottom:0.5rem;" />',
+        unsafe_allow_html=True,
+    )
+
     if st.sidebar.button(
         "Actualizar datos", icon=":material/refresh:", use_container_width=True, key="actualizar_datos_sidebar"
     ):

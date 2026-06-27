@@ -37,4 +37,4 @@ def mostrar_procesamientos(patologia: str) -> None:
     tabla["motivo_fallo"] = tabla["motivo_fallo"].fillna("")
     tabla = tabla[list(COLUMNAS_TABLA.keys())].rename(columns=COLUMNAS_TABLA)
 
-    st.dataframe(tabla, hide_index=True, width="stretch")
+    st.dataframe(tabla, hide_index=True, width="stretch", height=280)

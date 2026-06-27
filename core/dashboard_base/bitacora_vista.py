@@ -37,4 +37,4 @@ def mostrar_bitacora(patologia: str) -> None:
     tabla["accion"] = tabla["accion"].map(lambda accion: ETIQUETAS_ACCION.get(accion, accion))
     tabla = tabla[list(COLUMNAS_TABLA.keys())].rename(columns=COLUMNAS_TABLA)
 
-    st.dataframe(tabla, hide_index=True, width="stretch")
+    st.dataframe(tabla, hide_index=True, width="stretch", height=280)
