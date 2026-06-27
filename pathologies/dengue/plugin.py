@@ -8,6 +8,7 @@ import yaml
 
 from core.registry import PathologyPlugin
 from pathologies.dengue.clean import limpiar as limpiar_dengue
+from pathologies.dengue.views import obtener_vistas_dengue
 
 RUTA_MANIFEST = Path(__file__).parent / "manifest.yaml"
 
@@ -55,4 +56,4 @@ class DenguePathologyPlugin(PathologyPlugin):
         raise NotImplementedError("obtener_esquema todavia no esta construido")
 
     def obtener_vistas(self) -> list[Any]:
-        raise NotImplementedError("obtener_vistas (las 5 pestanas) todavia no esta construido")
+        return obtener_vistas_dengue()

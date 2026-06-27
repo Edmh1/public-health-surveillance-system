@@ -3,16 +3,25 @@
 Visible solo para Editor y Admin (lo gatea quien llama, segun core/auth/permisos.py).
 """
 
+import pandas as pd
 import streamlit as st
 
 from core.audit.bitacora import listar_movimientos
 
-ICONOS_POR_ACCION = {
-    "agregar": ":material/add_circle:",
-    "editar": ":material/edit:",
-    "eliminar": ":material/delete:",
-    "restaurar": ":material/restore:",
-    "eliminar_permanente": ":material/delete_forever:",
+ETIQUETAS_ACCION = {
+    "agregar": "Agregar",
+    "editar": "Editar",
+    "eliminar": "Eliminar",
+    "restaurar": "Restaurar",
+    "eliminar_permanente": "Eliminar para siempre",
+}
+
+COLUMNAS_TABLA = {
+    "fecha": "Fecha",
+    "accion": "Accion",
+    "anio": "Anio",
+    "codigo": "Codigo",
+    "usuario": "Usuario",
 }
 
 
@@ -24,11 +33,8 @@ def mostrar_bitacora(patologia: str) -> None:
         st.caption("Aqui vas a ver el historial de movimientos en cuanto haya el primero.")
         return
 
-    for movimiento in movimientos:
-        icono = ICONOS_POR_ACCION.get(movimiento["accion"], ":material/circle:")
-        descripcion = (
-            f"{icono} {movimiento['fecha']} · {movimiento['accion']} · "
-            f"anio {movimiento['anio']}, codigo {movimiento['codigo']} · "
-            f"por {movimiento['usuario']}"
-        )
-        st.markdown(descripcion)
+    tabla = pd.DataFrame(movimientos)
+    tabla["accion"] = tabla["accion"].map(lambda accion: ETIQUETAS_ACCION.get(accion, accion))
+    tabla = tabla[list(COLUMNAS_TABLA.keys())].rename(columns=COLUMNAS_TABLA)
+
+    st.dataframe(tabla, hide_index=True, width="stretch")

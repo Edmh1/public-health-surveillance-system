@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="56" viewBox="0 0 240 56" role="img" aria-label="SIVIDEM - Sistema de Vigilancia Departamental del Magdalena">
+  <title>SIVIDEM</title>
+  <desc>Identificador del Sistema de Vigilancia Departamental del Magdalena</desc>
+  <rect x="0" y="8" width="40" height="40" rx="9" fill="#1b3a6b"/>
+  <path d="M9 28 H15 L18 20 L23 36 L26 28 H31"
+        fill="none" stroke="#ffffff" stroke-width="2.2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="52" y="27" font-family="Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="20" font-weight="600" fill="#1b3a6b" letter-spacing="0.5">SIVIDEM</text>
+  <text x="52" y="43" font-family="Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="10" font-weight="400" fill="#5f5e5a">Vigilancia Departamental del Magdalena</text>
+</svg>

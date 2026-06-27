@@ -10,7 +10,15 @@ from keycloak.exceptions import KeycloakConnectionError
 
 from core.auth.base import AuthProvider, Usuario
 from core.auth.keycloak_provider import KeycloakAuthProvider
-from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, aplicar_estilos, mostrar_franja_tricolor
+from core.dashboard_base.estilos import (
+    AZUL_INSTITUCIONAL,
+    NARANJA_INSTITUCIONAL,
+    RUTA_ESCUDO_UNIMAGDALENA,
+    RUTA_LOGO_SIVIDEM,
+    VERDE_INSTITUCIONAL,
+    aplicar_estilos,
+    imagen_a_data_uri,
+)
 
 CLAVE_USUARIO = "usuario"
 CLAVE_PROVEEDOR_AUTH = "_proveedor_auth"
@@ -38,31 +46,39 @@ def cerrar_sesion() -> None:
     usuario = usuario_actual()
     if usuario is not None:
         proveedor = obtener_proveedor_auth()
-        proveedor.cerrar_sesion(usuario)
+        try:
+            proveedor.cerrar_sesion(usuario)
+        except Exception:
+            pass
     st.session_state.clear()
 
 
 def mostrar_formulario_login() -> None:
     aplicar_estilos()
-    _mostrar_cabecera_login()
 
-    _, columna_centro, _ = st.columns([1, 1.3, 1])
+    _, columna_centro, _ = st.columns([1, 1.2, 1])
     with columna_centro:
-        with st.form("formulario_login"):
-            correo = st.text_input("Correo electronico", placeholder="nombre@unimagdalena.edu.co")
-            contrasena = st.text_input("Contrasena", type="password")
-            enviado = st.form_submit_button(
-                "Entrar", type="primary", icon=":material/login:", use_container_width=True
-            )
-        st.caption(
-            ":material/lock: Acceso seguro, vinculado a tu cuenta institucional de la Universidad del Magdalena."
-        )
+        with st.container(key="tarjeta_login"):
+            _mostrar_franja_tricolor_superior()
+            _mostrar_cabecera_login()
+
+            with st.form("formulario_login"):
+                correo = st.text_input("Correo electronico", placeholder="nombre@unimagdalena.edu.co")
+                contrasena = st.text_input("Contrasena", type="password")
+                enviado = st.form_submit_button(
+                    "Entrar", type="primary", icon=":material/login:", use_container_width=True
+                )
+                st.caption(
+                    ":material/lock: Acceso seguro, vinculado a tu cuenta institucional "
+                    "de la Universidad del Magdalena."
+                )
 
     if not enviado:
         return
 
     try:
-        usuario = iniciar_sesion(correo, contrasena)
+        with st.spinner("Verificando credenciales..."):
+            usuario = iniciar_sesion(correo, contrasena)
     except KeycloakConnectionError:
         st.error("No se pudo conectar al servidor de autenticacion. Intenta de nuevo en un momento.")
         return
@@ -74,24 +90,39 @@ def mostrar_formulario_login() -> None:
     st.rerun()
 
 
-def _mostrar_cabecera_login() -> None:
-    # TODO: una vez autorizado el uso del escudo oficial (ver DESIGN.md), poner la
-    # imagen real en assets/ y reemplazar el circulo con iniciales de abajo por ella.
+def _mostrar_franja_tricolor_superior() -> None:
     st.markdown(
         f"""
-        <div style="background-color:{AZUL_INSTITUCIONAL}; padding: 28px 32px; border-radius: 12px;
-                    margin-bottom: 0; display:flex; align-items:center; gap:14px;">
-            <div style="width:44px; height:44px; border-radius:50%; background-color:white;
-                        color:{AZUL_INSTITUCIONAL}; display:flex; align-items:center; justify-content:center;
-                        font-weight:500; font-size:15px; flex-shrink:0;">
-                CITES
-            </div>
-            <div>
-                <div style="color:white; font-size:22px; font-weight:500;">Vigilancia epidemiologica</div>
-                <div style="color:#cfd8e6; font-size:14px;">CITES - Universidad del Magdalena</div>
-            </div>
+        <div style="display:flex; height:5px;">
+            <div style="flex:1; background-color:{AZUL_INSTITUCIONAL};"></div>
+            <div style="flex:1; background-color:{NARANJA_INSTITUCIONAL};"></div>
+            <div style="flex:1; background-color:{VERDE_INSTITUCIONAL};"></div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    mostrar_franja_tricolor()
+
+
+def _mostrar_cabecera_login() -> None:
+    # Pendiente: confirmar con la tutora / Direccion de Comunicaciones la autorizacion
+    # formal de uso del escudo de la Universidad del Magdalena (ver DESIGN.md). Por eso
+    # se usa puntualmente solo aqui, en el login, y no en el resto de la aplicacion.
+    escudo_data_uri = imagen_a_data_uri(RUTA_ESCUDO_UNIMAGDALENA)
+    logo_data_uri = imagen_a_data_uri(RUTA_LOGO_SIVIDEM)
+    st.markdown(
+        f"""
+        <div style="padding: 32px 36px 20px 36px; display:flex; align-items:center; gap:18px;">
+            <div style="width:52px; height:52px; border-radius:50%; overflow:hidden; flex-shrink:0;
+                        box-shadow: 0 0 0 1px #e2e5ea;">
+                <img src="{escudo_data_uri}" style="width:100%; height:100%; object-fit:cover;" />
+            </div>
+            <div style="width:1px; height:40px; background-color:#e2e5ea;"></div>
+            <div>
+                <img src="{logo_data_uri}" style="height:42px;" />
+                <div style="color:#666666; font-size:12px; margin-top:2px;">CITES - Universidad del Magdalena</div>
+            </div>
+        </div>
+        <div style="height:1px; background-color:#eef0f3; margin: 0 36px 20px 36px;"></div>
+        """,
+        unsafe_allow_html=True,
+    )

@@ -52,11 +52,17 @@ class KeycloakAuthProvider(AuthProvider):
         client_id: str | None = None,
         client_secret_key: str | None = None,
     ):
+        # max_retries=1 (el default de la libreria) duplica la espera real ante una
+        # caida de Keycloak: cada intento agota el timeout completo antes de reintentar
+        # una vez, asi que el congelamiento real es timeout x 2. Se fija en 0 para que
+        # timeout sea el limite real de espera (ver bug del login pegado).
         self.cliente_keycloak = KeycloakOpenID(
             server_url=server_url or os.environ["KEYCLOAK_SERVER_URL"],
             realm_name=realm_name or os.environ["KEYCLOAK_REALM"],
             client_id=client_id or os.environ["KEYCLOAK_CLIENT_ID"],
             client_secret_key=client_secret_key or os.environ.get("KEYCLOAK_CLIENT_SECRET"),
+            timeout=5,
+            max_retries=0,
         )
 
     def autenticar(self, nombre_usuario: str, contrasena: str) -> Usuario | None:
@@ -70,8 +76,15 @@ class KeycloakAuthProvider(AuthProvider):
         return usuario
 
     def cerrar_sesion(self, usuario: Usuario) -> None:
-        if usuario.token_refresco is not None:
+        """Revoca la sesion en Keycloak. Best effort: si el servidor esta lento o
+        no responde, la sesion local se cierra igual (ver core/dashboard_base/sesion.py).
+        """
+        if usuario.token_refresco is None:
+            return
+        try:
             self.cliente_keycloak.logout(usuario.token_refresco)
+        except Exception:
+            pass
 
     def validar_sesion(self, token: str) -> Usuario | None:
         try:

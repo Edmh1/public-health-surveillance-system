@@ -2,6 +2,7 @@
 anio+codigo) o eliminar para siempre (solo Admin, con confirmacion explicita).
 """
 
+import pandas as pd
 import streamlit as st
 
 from core.auth.permisos import PERMISO_ELIMINAR_PARA_SIEMPRE, tiene_permiso
@@ -14,6 +15,8 @@ from core.storage import rutas
 CLAVE_CONFLICTO_RESTAURAR = "papelera_conflicto_restaurar"
 CLAVE_CONFIRMAR_ELIMINAR = "papelera_confirmar_eliminar_para_siempre"
 
+COLUMNAS_TABLA = {"anio": "Anio", "codigo": "Codigo", "archivo_original": "Archivo"}
+
 
 def mostrar_papelera(patologia: str, usuario) -> None:
     st.subheader(":material/delete: Papelera")
@@ -23,19 +26,31 @@ def mostrar_papelera(patologia: str, usuario) -> None:
         st.caption("La papelera esta vacia. Aqui apareceran las piezas que elimines.")
         return
 
-    for pieza in piezas:
-        _mostrar_fila(patologia, pieza, usuario)
+    tabla = pd.DataFrame(piezas)[list(COLUMNAS_TABLA.keys())].rename(columns=COLUMNAS_TABLA)
+    seleccion = st.dataframe(
+        tabla,
+        hide_index=True,
+        width="stretch",
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"tabla_papelera_{patologia}",
+    )
+
+    filas_seleccionadas = seleccion.selection.rows
+    if not filas_seleccionadas:
+        st.caption("Selecciona una fila de la tabla para restaurarla o eliminarla para siempre.")
+        return
+
+    pieza = piezas[filas_seleccionadas[0]]
+    _mostrar_acciones(patologia, pieza, usuario)
 
 
-def _mostrar_fila(patologia: str, pieza: dict, usuario) -> None:
+def _mostrar_acciones(patologia: str, pieza: dict, usuario) -> None:
     anio = pieza["anio"]
     codigo = pieza["codigo"]
     clave = f"{patologia}_{anio}_{codigo}"
 
-    columna_info, columna_restaurar, columna_eliminar = st.columns([6, 2, 2], vertical_alignment="center")
-    with columna_info:
-        st.write(f"Anio {anio}, codigo {codigo} · {pieza['archivo_original']}")
-
+    columna_restaurar, columna_eliminar = st.columns(2)
     with columna_restaurar:
         if st.button("Restaurar", icon=":material/restore:", key=f"restaurar_{clave}", use_container_width=True):
             _restaurar(patologia, anio, codigo, usuario, clave, forzar=False)

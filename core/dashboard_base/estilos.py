@@ -9,7 +9,15 @@ se construya el canal endemico. st.error se mantiene para errores reales
 no una decoracion.
 """
 
+import base64
+from pathlib import Path
+
 import streamlit as st
+
+RUTA_ASSETS = Path(__file__).resolve().parents[2] / "assets"
+RUTA_ESCUDO_UNIMAGDALENA = RUTA_ASSETS / "unimagdalena.svg"
+RUTA_ICONO_SIVIDEM = RUTA_ASSETS / "icono_sividem.svg"
+RUTA_LOGO_SIVIDEM = RUTA_ASSETS / "logo_sividem.svg"
 
 AZUL_INSTITUCIONAL = "#1b3a6b"
 NARANJA_INSTITUCIONAL = "#e8852c"
@@ -32,9 +40,43 @@ def aplicar_estilos() -> None:
         """
         <style>
         div[data-testid="stForm"] {
-            border: 0.5px solid #e0e0e0;
+            background-color: #ffffff;
+            border: 0.5px solid #e2e5ea;
             border-radius: 12px;
             padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(16, 24, 40, 0.07);
+        }
+        div[data-testid="stMainBlockContainer"] {
+            padding-top: 2.5rem;
+            padding-bottom: 2rem;
+        }
+        div[data-testid="stDataFrame"] {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(16, 24, 40, 0.07);
+        }
+        .st-key-barra_superior {
+            background-color: #ffffff !important;
+            border: none !important;
+            border-radius: 12px !important;
+            padding: 0.5rem 1.2rem !important;
+            box-shadow: 0 1px 3px rgba(16, 24, 40, 0.07);
+        }
+        [data-testid^="stBaseButton-"] {
+            border-radius: 8px !important;
+        }
+        .st-key-tarjeta_login {
+            background-color: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(16, 24, 40, 0.07), 0 10px 28px rgba(16, 24, 40, 0.07);
+            overflow: hidden;
+        }
+        .st-key-tarjeta_login div[data-testid="stForm"] {
+            border: none;
+            box-shadow: none;
+            border-radius: 0;
+            padding: 0.5rem 2.5rem 2rem 2.5rem;
+            background-color: transparent;
         }
         </style>
         """,
@@ -43,15 +85,9 @@ def aplicar_estilos() -> None:
     st.session_state[CLAVE_ESTILOS_APLICADOS] = True
 
 
-def mostrar_franja_tricolor() -> None:
-    """Franja delgada azul/naranja/verde: guino institucional discreto bajo la cabecera."""
-    st.markdown(
-        f"""
-        <div style="display:flex; height:4px; margin-bottom:1.5rem;">
-            <div style="flex:1; background-color:{AZUL_INSTITUCIONAL};"></div>
-            <div style="flex:1; background-color:{NARANJA_INSTITUCIONAL};"></div>
-            <div style="flex:1; background-color:{VERDE_INSTITUCIONAL};"></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+@st.cache_data(show_spinner=False)
+def imagen_a_data_uri(ruta: Path) -> str:
+    """Codifica una imagen de assets/ como data URI para incrustarla en HTML."""
+    contenido = ruta.read_bytes()
+    codificado = base64.b64encode(contenido).decode("ascii")
+    return f"data:image/svg+xml;base64,{codificado}"

@@ -48,10 +48,14 @@ def mostrar_formulario_subida(patologia: str, usuario) -> None:
     if not confirmado:
         return
 
-    _encolar_subida(patologia, int(anio), int(codigo), archivo_subido, usuario)
+    encolar_subida(patologia, int(anio), int(codigo), archivo_subido, usuario)
 
 
-def _encolar_subida(patologia: str, anio: int, codigo: int, archivo_subido, usuario) -> None:
+def encolar_subida(patologia: str, anio: int, codigo: int, archivo_subido, usuario) -> None:
+    """Encola un archivo para procesar como agregar o editar (el worker decide segun si ya
+    existe una pieza activa con ese anio+codigo). La usan tanto el formulario de subida
+    como el flujo de editar desde piezas activas (ver gestion_piezas.py).
+    """
     directorio_subidas = rutas.directorio_subidas(patologia)
     directorio_subidas.mkdir(parents=True, exist_ok=True)
     ruta_archivo = directorio_subidas / f"{anio}_{codigo}_{archivo_subido.name}"

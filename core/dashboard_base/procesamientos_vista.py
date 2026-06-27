@@ -4,15 +4,25 @@ Visible solo para Editor y Admin (lo gatea quien llama, segun core/auth/permisos
 Es la pieza permanente que complementa al banner efimero: si alguien cierra el
 banner o no lo vio, el motivo de un fallo sigue consultable aqui.
 
-Los procesamientos listos se muestran como filas neutras (no en verde): es un
-historial largo, no un mensaje puntual, y el verde queda reservado para el
-canal endemico (ver DESIGN.md). Los fallos si usan st.error: son la excepcion,
-no la norma, y necesitan llamar la atencion para que alguien los corrija.
+La tabla muestra el estado como texto neutro ("listo" o "fallo"), sin colorear
+filas completas: el verde y el rojo quedan reservados para el canal endemico
+(ver DESIGN.md). Cada fallo trae su motivo en la propia tabla.
 """
 
+import pandas as pd
 import streamlit as st
 
 from core.audit.procesamientos import listar_procesamientos
+
+COLUMNAS_TABLA = {
+    "fecha": "Fecha",
+    "archivo_original": "Archivo",
+    "anio": "Anio",
+    "codigo": "Codigo",
+    "usuario": "Usuario",
+    "estado": "Estado",
+    "motivo_fallo": "Motivo del fallo",
+}
 
 
 def mostrar_procesamientos(patologia: str) -> None:
@@ -23,15 +33,8 @@ def mostrar_procesamientos(patologia: str) -> None:
         st.caption("Aqui vas a ver el historial de cargues en cuanto subas el primer archivo.")
         return
 
-    for procesamiento in procesamientos:
-        descripcion = (
-            f"{procesamiento['fecha']} · {procesamiento['archivo_original']} "
-            f"(anio {procesamiento['anio']}, codigo {procesamiento['codigo']}) · "
-            f"subido por {procesamiento['usuario']}"
-        )
+    tabla = pd.DataFrame(procesamientos)
+    tabla["motivo_fallo"] = tabla["motivo_fallo"].fillna("")
+    tabla = tabla[list(COLUMNAS_TABLA.keys())].rename(columns=COLUMNAS_TABLA)
 
-        if procesamiento["estado"] == "listo":
-            st.markdown(f":material/check_circle: {descripcion} · listo")
-        else:
-            motivo_fallo = procesamiento["motivo_fallo"] or "sin motivo registrado"
-            st.error(f"{descripcion} · fallo. Motivo: {motivo_fallo}")
+    st.dataframe(tabla, hide_index=True, width="stretch")

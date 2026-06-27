@@ -1,8 +1,10 @@
 """Layout base del dashboard: login, barra superior, filtros globales, banner de
-datos nuevos y apartado de Gestion. Ver DESIGN.md para la identidad visual.
+datos nuevos, las pestanas de la patologia y la pestana de Gestion. Ver DESIGN.md
+para la identidad visual.
 
-No dibuja pestanas de graficos todavia; eso lo expone cada patologia via
-obtener_vistas() cuando esten construidas.
+Las primeras pestanas las expone cada patologia via obtener_vistas(); la ultima
+(Gestion) es del core y solo aparece si el rol del usuario habilita algo que
+gestionar (ver core/auth/permisos.py).
 """
 
 import streamlit as st
@@ -20,7 +22,12 @@ from core.dashboard_base import filtros as modulo_filtros
 from core.dashboard_base import sesion as modulo_sesion
 from core.dashboard_base.banner import fragmento_banner_datos_nuevos
 from core.dashboard_base.bitacora_vista import mostrar_bitacora
-from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, aplicar_estilos
+from core.dashboard_base.estilos import (
+    AZUL_INSTITUCIONAL,
+    RUTA_ICONO_SIVIDEM,
+    aplicar_estilos,
+    imagen_a_data_uri,
+)
 from core.dashboard_base.gestion_papelera import mostrar_papelera
 from core.dashboard_base.gestion_piezas import mostrar_piezas_activas
 from core.dashboard_base.gestion_subida import fragmento_subidas_pendientes, mostrar_formulario_subida
@@ -29,7 +36,8 @@ from core.registry import listar_patologias, obtener_patologia
 
 
 def ejecutar_dashboard() -> None:
-    st.set_page_config(page_title="Vigilancia epidemiologica - CITES", layout="wide")
+    # page_icon no acepta SVG en esta version de Streamlit (favicon quedaria roto); se omite.
+    st.set_page_config(page_title="SIVIDEM - CITES", layout="wide")
     aplicar_estilos()
 
     usuario = modulo_sesion.usuario_actual()
@@ -57,21 +65,49 @@ def ejecutar_dashboard() -> None:
         f"{len(datos_filtrados):,} registros tras los filtros, de {len(datos_completos):,} en el consolidado."
     )
 
-    _mostrar_seccion_gestion(patologia, usuario)
+    _mostrar_pestanas(patologia, usuario, plugin, datos_filtrados)
+
+
+def _mostrar_pestanas(patologia: str, usuario, plugin, datos_filtrados) -> None:
+    """Las 5 pestanas que expone la patologia, mas la pestana de Gestion al final
+    (solo si el rol del usuario habilita algo que gestionar).
+    """
+    vistas = plugin.obtener_vistas()
+    nombres_pestanas = [nombre for nombre, _ in vistas]
+
+    mostrar_gestion = _tiene_algo_que_gestionar(usuario)
+    if mostrar_gestion:
+        nombres_pestanas = nombres_pestanas + ["Gestion"]
+
+    pestanas = st.tabs(nombres_pestanas)
+
+    for pestana, (_, funcion_render) in zip(pestanas, vistas):
+        with pestana:
+            funcion_render(datos_filtrados)
+
+    if mostrar_gestion:
+        with pestanas[-1]:
+            _mostrar_seccion_gestion(patologia, usuario)
 
 
 def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
     """Marca a la izquierda, selector de patologia al centro, identidad y rol a la derecha."""
-    with st.container(border=True):
+    with st.container(key="barra_superior"):
         columna_marca, columna_patologia, columna_usuario = st.columns([3, 2, 2], vertical_alignment="center")
 
         with columna_marca:
+            icono_data_uri = imagen_a_data_uri(RUTA_ICONO_SIVIDEM)
             st.markdown(
                 f"""
-                <div style="color:{AZUL_INSTITUCIONAL}; font-size:18px; font-weight:500;">
-                    Vigilancia epidemiologica
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <img src="{icono_data_uri}" style="width:32px; height:32px; flex-shrink:0;" />
+                    <div>
+                        <div style="color:{AZUL_INSTITUCIONAL}; font-size:18px; font-weight:500; letter-spacing:0.3px;">
+                            SIVIDEM
+                        </div>
+                        <div style="color:#666666; font-size:12px;">CITES - Universidad del Magdalena</div>
+                    </div>
                 </div>
-                <div style="color:#666666; font-size:12px;">CITES - Universidad del Magdalena</div>
                 """,
                 unsafe_allow_html=True,
             )
@@ -103,8 +139,8 @@ def _mostrar_filtros_en_sidebar(patologia: str, datos_completos, columna_anio: s
     return modulo_filtros.mostrar_filtros_globales(datos_completos, columna_anio)
 
 
-def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
-    hay_algo_que_gestionar = any(
+def _tiene_algo_que_gestionar(usuario) -> bool:
+    return any(
         tiene_permiso(usuario.rol, permiso)
         for permiso in (
             PERMISO_SUBIR_PIEZA,
@@ -114,12 +150,9 @@ def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
             PERMISO_VER_PROCESAMIENTOS,
         )
     )
-    if not hay_algo_que_gestionar:
-        return
 
-    st.divider()
-    st.header(":material/admin_panel_settings: Gestion")
 
+def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
     if tiene_permiso(usuario.rol, PERMISO_SUBIR_PIEZA):
         mostrar_formulario_subida(patologia, usuario)
         fragmento_subidas_pendientes(usuario.nombre_usuario)
