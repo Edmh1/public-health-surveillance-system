@@ -1,0 +1,12 @@
+streamlit
+plotly
+pandas>=2.0
+pyarrow
+scikit-learn>=1.2
+openpyxl
+xlrd
+python-calamine
+redis
+rq
+python-keycloak
+PyYAML
