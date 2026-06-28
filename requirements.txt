@@ -11,3 +11,4 @@ redis
 rq
 python-keycloak
 PyYAML
+tzdata

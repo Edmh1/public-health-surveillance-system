@@ -25,6 +25,7 @@ from core.dashboard_base.bitacora_vista import mostrar_bitacora
 from core.dashboard_base.estilos import (
     AZUL_INSTITUCIONAL,
     RUTA_ICONO_SIVIDEM,
+    RUTA_ICONO_SIVIDEM_PNG,
     aplicar_estilos,
     imagen_a_data_uri,
 )
@@ -36,8 +37,9 @@ from core.registry import listar_patologias, obtener_patologia
 
 
 def ejecutar_dashboard() -> None:
-    # page_icon no acepta SVG en esta version de Streamlit (favicon quedaria roto); se omite.
-    st.set_page_config(page_title="SIVIDEM - CITES", layout="wide")
+    # page_icon no acepta SVG; se usa el PNG rasterizado a partir del mismo icono
+    # (ver assets/icono_sividem.png), generado una vez a partir de icono_sividem.svg.
+    st.set_page_config(page_title="SIVIDEM - CITES", page_icon=str(RUTA_ICONO_SIVIDEM_PNG), layout="wide")
     aplicar_estilos()
 
     usuario = modulo_sesion.usuario_actual()
@@ -50,20 +52,30 @@ def ejecutar_dashboard() -> None:
         st.error("No hay patologias registradas en el sistema.")
         return
 
-    patologia = _mostrar_barra_superior(usuario, patologias_disponibles)
-    plugin = obtener_patologia(patologia)
+    with st.container(key="encabezado_fijo"):
+        # El titulo y el contador de registros van visualmente arriba de la barra de marca
+        # (logo/patologia/usuario), pero su texto depende de la patologia que se elige EN
+        # esa barra. Se reserva el espacio con st.empty() y se llena despues, una vez ya se
+        # conoce la patologia: el placeholder mantiene su posicion (arriba), aunque se
+        # escriba en el mas tarde en el orden del script.
+        marcador_titulo = st.empty()
 
-    modulo_datos.cargar_si_falta(patologia)
+        patologia = _mostrar_barra_superior(usuario, patologias_disponibles)
+        plugin = obtener_patologia(patologia)
+
+        modulo_datos.cargar_si_falta(patologia)
+
+        datos_completos = modulo_datos.obtener_datos(patologia)
+        filtros = _mostrar_filtros_en_sidebar(patologia, datos_completos, plugin.columna_anio)
+        datos_filtrados = modulo_filtros.aplicar_filtros(datos_completos, filtros)
+
+        with marcador_titulo.container():
+            st.title(f"Vigilancia de {plugin.nombre}")
+            st.caption(
+                f"{len(datos_filtrados):,} registros tras los filtros, de {len(datos_completos):,} en el consolidado."
+            )
+
     fragmento_banner_datos_nuevos(patologia)
-
-    datos_completos = modulo_datos.obtener_datos(patologia)
-    filtros = _mostrar_filtros_en_sidebar(patologia, datos_completos, plugin.columna_anio)
-    datos_filtrados = modulo_filtros.aplicar_filtros(datos_completos, filtros)
-
-    st.title(f"Vigilancia de {plugin.nombre}")
-    st.caption(
-        f"{len(datos_filtrados):,} registros tras los filtros, de {len(datos_completos):,} en el consolidado."
-    )
 
     _mostrar_pestanas(patologia, usuario, plugin, datos_filtrados)
 
@@ -110,7 +122,7 @@ def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
             icono_data_uri = imagen_a_data_uri(RUTA_ICONO_SIVIDEM)
             st.markdown(
                 f"""
-                <div style="display:flex; align-items:center; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px; padding-bottom:6px;">
                     <img src="{icono_data_uri}" style="width:32px; height:32px; flex-shrink:0;" />
                     <div>
                         <div style="color:{AZUL_INSTITUCIONAL}; font-size:18px; font-weight:500; letter-spacing:0.3px;">
@@ -141,12 +153,6 @@ def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
 
 
 def _mostrar_filtros_en_sidebar(patologia: str, datos_completos, columna_anio: str) -> dict:
-    icono_data_uri = imagen_a_data_uri(RUTA_ICONO_SIVIDEM)
-    st.sidebar.markdown(
-        f'<img src="{icono_data_uri}" style="width:36px; height:36px; margin-bottom:0.5rem;" />',
-        unsafe_allow_html=True,
-    )
-
     if st.sidebar.button(
         "Actualizar datos", icon=":material/refresh:", use_container_width=True, key="actualizar_datos_sidebar"
     ):
@@ -170,6 +176,15 @@ def _tiene_algo_que_gestionar(usuario) -> bool:
 
 
 def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
+    columna_titulo, columna_actualizar = st.columns([6, 1])
+    with columna_titulo:
+        st.caption("Piezas, papelera, bitacora y procesamientos no se autoactualizan; usa este boton para refrescarlos.")
+    with columna_actualizar:
+        if st.button(
+            "Actualizar", icon=":material/refresh:", use_container_width=True, key=f"actualizar_gestion_{patologia}",
+        ):
+            st.rerun()
+
     if tiene_permiso(usuario.rol, PERMISO_SUBIR_PIEZA):
         mostrar_formulario_subida(patologia, usuario)
         fragmento_subidas_pendientes(usuario.nombre_usuario)

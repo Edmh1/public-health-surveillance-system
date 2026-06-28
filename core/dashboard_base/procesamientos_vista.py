@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from core.audit.procesamientos import listar_procesamientos
+from core.audit.zona_horaria import formatear_fecha_local
 
 COLUMNAS_TABLA = {
     "fecha": "Fecha",
@@ -35,6 +36,7 @@ def mostrar_procesamientos(patologia: str) -> None:
 
     tabla = pd.DataFrame(procesamientos)
     tabla["motivo_fallo"] = tabla["motivo_fallo"].fillna("")
+    tabla["fecha"] = tabla["fecha"].map(formatear_fecha_local)
     tabla = tabla[list(COLUMNAS_TABLA.keys())].rename(columns=COLUMNAS_TABLA)
 
     st.dataframe(tabla, hide_index=True, width="stretch", height=280)

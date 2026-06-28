@@ -18,6 +18,7 @@ from core.storage import rutas
 COLUMNAS_TABLA = {"anio": "Anio", "codigo": "Codigo", "archivo_original": "Archivo"}
 
 CLAVE_EDITANDO = "piezas_editando"
+CLAVE_CONTADOR_UPLOADER_EDITAR = "piezas_contador_widget_uploader_editar"
 
 
 def mostrar_piezas_activas(patologia: str, usuario) -> None:
@@ -74,12 +75,17 @@ def _mostrar_formulario_editar(patologia: str, pieza: dict, usuario, clave_pieza
     anio = pieza["anio"]
     codigo = pieza["codigo"]
 
+    contadores_uploader = st.session_state.setdefault(CLAVE_CONTADOR_UPLOADER_EDITAR, {})
+    contador = contadores_uploader.get(clave_pieza, 0)
+
     with st.form(f"editar_pieza_{clave_pieza}"):
         st.caption(
             f"Subir version corregida de anio {anio}, codigo {codigo}. "
             f"Reemplaza por completo a {pieza['archivo_original']}; el historico de otros anios no se toca."
         )
-        archivo_corregido = st.file_uploader("Archivo SIVIGILA (.xls o .xlsx)", type=["xls", "xlsx"])
+        archivo_corregido = st.file_uploader(
+            "Archivo SIVIGILA (.xls o .xlsx)", type=["xls", "xlsx"], key=f"archivo_editar_{clave_pieza}_{contador}"
+        )
         confirmado = st.form_submit_button("Confirmar y procesar", type="primary", icon=":material/check_circle:")
 
     if not confirmado:
@@ -89,8 +95,11 @@ def _mostrar_formulario_editar(patologia: str, pieza: dict, usuario, clave_pieza
         st.warning("Selecciona un archivo antes de confirmar.")
         return
 
-    encolar_subida(patologia, anio, codigo, archivo_corregido, usuario)
+    encolar_subida(patologia, anio, codigo, archivo_corregido.name, archivo_corregido.getvalue(), usuario)
     st.session_state[CLAVE_EDITANDO][clave_pieza] = False
+    # Rota la key del uploader: la prox vez que se abra este formulario de editar (esta
+    # misma pieza), el widget nace vacio en vez de seguir mostrando el archivo ya enviado.
+    contadores_uploader[clave_pieza] = contador + 1
 
 
 def _eliminar(patologia: str, anio: int, codigo: int, usuario) -> None:

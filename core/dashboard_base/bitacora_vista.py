@@ -7,6 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from core.audit.bitacora import listar_movimientos
+from core.audit.zona_horaria import formatear_fecha_local
 
 ETIQUETAS_ACCION = {
     "agregar": "Agregar",
@@ -35,6 +36,7 @@ def mostrar_bitacora(patologia: str) -> None:
 
     tabla = pd.DataFrame(movimientos)
     tabla["accion"] = tabla["accion"].map(lambda accion: ETIQUETAS_ACCION.get(accion, accion))
+    tabla["fecha"] = tabla["fecha"].map(formatear_fecha_local)
     tabla = tabla[list(COLUMNAS_TABLA.keys())].rename(columns=COLUMNAS_TABLA)
 
     st.dataframe(tabla, hide_index=True, width="stretch", height=280)

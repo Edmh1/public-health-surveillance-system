@@ -17,6 +17,7 @@ import streamlit as st
 RUTA_ASSETS = Path(__file__).resolve().parents[2] / "assets"
 RUTA_ESCUDO_UNIMAGDALENA = RUTA_ASSETS / "unimagdalena.svg"
 RUTA_ICONO_SIVIDEM = RUTA_ASSETS / "icono_sividem.svg"
+RUTA_ICONO_SIVIDEM_PNG = RUTA_ASSETS / "icono_sividem.png"
 RUTA_LOGO_SIVIDEM = RUTA_ASSETS / "logo_sividem.svg"
 
 AZUL_INSTITUCIONAL = "#1b3a6b"
@@ -28,15 +29,14 @@ COLOR_SEGURIDAD_EPIDEMIOLOGICO = "#6fb574"
 COLOR_ALERTA_EPIDEMIOLOGICO = "#efb23c"
 COLOR_EPIDEMIA = "#d0473f"
 
-CLAVE_ESTILOS_APLICADOS = "_estilos_aplicados"
-
-
 def aplicar_estilos() -> None:
-    """Inyecta el CSS compartido. Se puede llamar varias veces por rerun sin costo extra."""
-    if st.session_state.get(CLAVE_ESTILOS_APLICADOS):
-        return
-
-    st.markdown(
+    """Inyecta el CSS compartido. Se llama en cada rerun (login y dashboard) a proposito:
+    Streamlit quita del DOM cualquier elemento que un rerun no vuelva a emitir, asi que un
+    guard de "solo una vez por sesion" hacia que el bloque de estilos sobreviviera unicamente
+    en el primer render (la pantalla de login) y desapareciera en todos los reruns
+    posteriores del dashboard. Emitirlo siempre es barato (es solo texto) y evita ese bug.
+    """
+    st.html(
         """
         <style>
         div[data-testid="stForm"] {
@@ -59,16 +59,35 @@ def aplicar_estilos() -> None:
             background-color: #ffffff !important;
             border: none !important;
             border-radius: 12px !important;
-            padding: 0.5rem 1.2rem !important;
+            padding: 0.6rem 1.6rem !important;
             box-shadow: 0 1px 3px rgba(16, 24, 40, 0.07);
+        }
+        .st-key-encabezado_fijo {
+            background-color: #EEF1F5 !important;
+            padding-bottom: 0.3rem !important;
+            gap: 0.5rem !important;
+        }
+        .st-key-encabezado_fijo h1 {
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
         }
         /* Streamlit envuelve cada elemento de nivel superior en un stLayoutWrapper que,
            por su layout flex interno, rompe position:sticky en sus hijos directos. El
-           sticky si funciona aplicado al wrapper mismo, por eso se selecciona con :has(). */
-        div[data-testid="stLayoutWrapper"]:has(.st-key-barra_superior) {
+           sticky si funciona aplicado al wrapper mismo, por eso se selecciona con :has().
+           Todo el encabezado (titulo, contador de registros y marca/patologia/usuario) se
+           fija como un solo bloque, para que nunca se pierda de vista al hacer scroll en el
+           contenido de cualquier pestana. El fondo opaco y el ancho completo van en el
+           wrapper (no solo en el div interno) para que nada del contenido que se desliza por
+           detras se asome en los bordes; el z-index alto y el box-shadow inferior lo separan
+           visualmente del contenido, para que se vea como una capa flotando y no como un
+           corte abrupto. */
+        div[data-testid="stLayoutWrapper"]:has(.st-key-encabezado_fijo) {
             position: sticky !important;
             top: 60px !important;
-            z-index: 999 !important;
+            z-index: 9999 !important;
+            width: 100% !important;
+            background-color: #EEF1F5 !important;
+            box-shadow: 0 6px 10px -4px rgba(16, 24, 40, 0.12) !important;
         }
         [data-testid^="stBaseButton-"] {
             border-radius: 8px !important;
@@ -94,20 +113,21 @@ def aplicar_estilos() -> None:
             font-size: 1.05rem !important;
         }
         /* El padre directo de la lista de pestanas (no stLayoutWrapper, ese rompe sticky
-           en sus hijos) se fija debajo de la barra superior; el contenido de cada pestana
-           sigue siendo hermano de este padre, asi que se desplaza con normalidad. */
+           en sus hijos) se fija debajo del encabezado completo; el contenido de cada
+           pestana sigue siendo hermano de este padre, asi que se desplaza con normalidad. */
         div[data-testid="stTabs"] div:has(> div[role="tablist"]) {
             position: sticky !important;
-            top: 128px !important;
-            z-index: 998 !important;
-            background-color: #EEF1F5;
+            top: 227px !important;
+            z-index: 9998 !important;
+            width: 100% !important;
+            background-color: #EEF1F5 !important;
             padding-top: 0.5rem;
+            padding-left: 0.5rem;
+            box-shadow: 0 6px 10px -4px rgba(16, 24, 40, 0.12) !important;
         }
         </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
-    st.session_state[CLAVE_ESTILOS_APLICADOS] = True
 
 
 @st.cache_data(show_spinner=False)

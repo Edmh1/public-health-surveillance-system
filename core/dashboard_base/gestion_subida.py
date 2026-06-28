@@ -13,18 +13,56 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from core.audit.procesamientos import listar_procesamientos
+from core.audit.registro_piezas import obtener_pieza_activa
 from core.ingestion.cola import encolar_procesamiento
 from core.ingestion.nombres_archivo import NombreArchivoInvalido, analizar_nombre_archivo
 from core.storage import rutas
 
 CLAVE_SUBIDAS_PENDIENTES = "subidas_pendientes_por_usuario"
+CLAVE_CONTADOR_UPLOADER = "subida_contador_widget_uploader"
+CLAVE_BANNER_CONFIRMACION = "subida_banner_confirmacion"
+
+
+def _key_uploader(patologia: str) -> str:
+    """Streamlit no tiene un "clear" directo para file_uploader; cambiar su key fuerza
+    un widget nuevo y vacio. El contador se sube cada vez que una subida se confirma,
+    para que la zona de carga no se quede mostrando el archivo ya enviado (eso confunde:
+    parece que no se subio nada).
+    """
+    contador = st.session_state.setdefault(CLAVE_CONTADOR_UPLOADER, {}).get(patologia, 0)
+    return f"subir_{patologia}_{contador}"
+
+
+def _limpiar_zona_subida(patologia: str) -> None:
+    contadores = st.session_state.setdefault(CLAVE_CONTADOR_UPLOADER, {})
+    contadores[patologia] = contadores.get(patologia, 0) + 1
+
+
+def _mostrar_banner_confirmacion(patologia: str) -> None:
+    """Banner persistente de subida exitosa, igual en estilo al de "datos nuevos" (ver
+    banner.py): se queda visible hasta que el usuario lo cierra con la X, en vez de un
+    toast que se va solo en unos segundos y puede pasar desapercibido.
+    """
+    banners = st.session_state.setdefault(CLAVE_BANNER_CONFIRMACION, {})
+    nombre_archivo = banners.get(patologia)
+    if not nombre_archivo:
+        return
+
+    columna_mensaje, columna_cerrar = st.columns([10, 1])
+    with columna_mensaje:
+        st.success(f":material/check_circle: {nombre_archivo} se envio a procesar correctamente.")
+    with columna_cerrar:
+        if st.button("", icon=":material/close:", help="Cerrar este aviso", key=f"cerrar_banner_subida_{patologia}"):
+            banners.pop(patologia, None)
+            st.rerun()
 
 
 def mostrar_formulario_subida(patologia: str, usuario) -> None:
     st.subheader(":material/upload_file: Subir archivo")
+    _mostrar_banner_confirmacion(patologia)
 
     archivo_subido = st.file_uploader(
-        "Archivo SIVIGILA (.xls o .xlsx)", type=["xls", "xlsx"], key=f"subir_{patologia}"
+        "Archivo SIVIGILA (.xls o .xlsx)", type=["xls", "xlsx"], key=_key_uploader(patologia)
     )
     if archivo_subido is None:
         return
@@ -48,18 +86,71 @@ def mostrar_formulario_subida(patologia: str, usuario) -> None:
     if not confirmado:
         return
 
-    encolar_subida(patologia, int(anio), int(codigo), archivo_subido, usuario)
+    pieza_existente = obtener_pieza_activa(patologia, int(anio), int(codigo))
+    if pieza_existente is not None:
+        _dialogo_confirmar_reemplazo(
+            patologia,
+            int(anio),
+            int(codigo),
+            archivo_subido.name,
+            archivo_subido.getvalue(),
+            pieza_existente["archivo_original"],
+            usuario,
+        )
+        return
+
+    encolar_subida(patologia, int(anio), int(codigo), archivo_subido.name, archivo_subido.getvalue(), usuario)
+    _limpiar_zona_subida(patologia)
+    st.rerun()
 
 
-def encolar_subida(patologia: str, anio: int, codigo: int, archivo_subido, usuario) -> None:
+@st.dialog("Ya existe una pieza para ese anio y codigo")
+def _dialogo_confirmar_reemplazo(
+    patologia: str,
+    anio: int,
+    codigo: int,
+    nombre_archivo: str,
+    contenido: bytes,
+    archivo_anterior: str,
+    usuario,
+) -> None:
+    """Pop up de seguridad: si ya hay una pieza activa para ese anio+codigo, subir aqui en
+    Agregar la reemplaza igual que Editar. El usuario pudo haber querido editar y no darse
+    cuenta de que estaba en Agregar, asi que se le pide confirmar antes de encolar.
+    """
+    st.warning(
+        f":material/warning: Ya hay una pieza activa para anio {anio}, codigo {codigo} "
+        f"(archivo {archivo_anterior}). Si confirmas, el sistema reemplaza esa pieza por "
+        f"{nombre_archivo}, igual que si hubieras usado Editar en piezas activas."
+    )
+    st.caption("Si te equivocaste de anio o codigo, cancela y corrige antes de subir de nuevo.")
+
+    columna_cancelar, columna_confirmar = st.columns(2)
+    with columna_cancelar:
+        if st.button("Cancelar", use_container_width=True, key=f"cancelar_reemplazo_{patologia}"):
+            st.rerun()
+    with columna_confirmar:
+        if st.button(
+            "Si, reemplazar",
+            type="primary",
+            icon=":material/check_circle:",
+            use_container_width=True,
+            key=f"confirmar_reemplazo_{patologia}",
+        ):
+            encolar_subida(patologia, anio, codigo, nombre_archivo, contenido, usuario)
+            _limpiar_zona_subida(patologia)
+            st.rerun()
+
+
+def encolar_subida(patologia: str, anio: int, codigo: int, nombre_archivo: str, contenido: bytes, usuario) -> None:
     """Encola un archivo para procesar como agregar o editar (el worker decide segun si ya
     existe una pieza activa con ese anio+codigo). La usan tanto el formulario de subida
     como el flujo de editar desde piezas activas (ver gestion_piezas.py).
     """
     directorio_subidas = rutas.directorio_subidas(patologia)
     directorio_subidas.mkdir(parents=True, exist_ok=True)
-    ruta_archivo = directorio_subidas / f"{anio}_{codigo}_{archivo_subido.name}"
-    ruta_archivo.write_bytes(archivo_subido.getvalue())
+    ruta_archivo = directorio_subidas / f"{anio}_{codigo}_{nombre_archivo}"
+    ruta_archivo.write_bytes(contenido)
 
     momento_envio = datetime.now(timezone.utc).isoformat()
     encolar_procesamiento(
@@ -67,7 +158,7 @@ def encolar_subida(patologia: str, anio: int, codigo: int, archivo_subido, usuar
         anio=anio,
         codigo=codigo,
         ruta_archivo=ruta_archivo,
-        archivo_original=archivo_subido.name,
+        archivo_original=nombre_archivo,
         usuario=usuario.nombre_usuario,
     )
 
@@ -82,7 +173,7 @@ def encolar_subida(patologia: str, anio: int, codigo: int, archivo_subido, usuar
         }
     )
 
-    st.info(f":material/schedule: {archivo_subido.name} encolado. El resultado aparece abajo en unos segundos.")
+    st.session_state.setdefault(CLAVE_BANNER_CONFIRMACION, {})[patologia] = nombre_archivo
 
 
 @st.fragment(run_every="4s")
