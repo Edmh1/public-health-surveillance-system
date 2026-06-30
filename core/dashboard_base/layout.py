@@ -66,8 +66,9 @@ def ejecutar_dashboard() -> None:
         modulo_datos.cargar_si_falta(patologia)
 
         datos_completos = modulo_datos.obtener_datos(patologia)
-        filtros = _mostrar_filtros_en_sidebar(patologia, datos_completos, plugin.columna_anio)
-        datos_filtrados = modulo_filtros.aplicar_filtros(datos_completos, filtros)
+        mapeo_subregion = plugin.obtener_mapeo_subregion()
+        filtros = _mostrar_filtros_en_sidebar(patologia, datos_completos, plugin.columna_anio, mapeo_subregion)
+        datos_filtrados = modulo_filtros.aplicar_filtros(datos_completos, filtros, mapeo_subregion)
 
         with marcador_titulo.container():
             st.title(f"Vigilancia de {plugin.nombre}")
@@ -152,14 +153,16 @@ def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
     return patologia
 
 
-def _mostrar_filtros_en_sidebar(patologia: str, datos_completos, columna_anio: str) -> dict:
+def _mostrar_filtros_en_sidebar(
+    patologia: str, datos_completos, columna_anio: str, mapeo_subregion: dict[int, str]
+) -> dict:
     if st.sidebar.button(
         "Actualizar datos", icon=":material/refresh:", use_container_width=True, key="actualizar_datos_sidebar"
     ):
         modulo_datos.actualizar(patologia)
         st.rerun()
 
-    return modulo_filtros.mostrar_filtros_globales(datos_completos, columna_anio)
+    return modulo_filtros.mostrar_filtros_globales(datos_completos, columna_anio, mapeo_subregion)
 
 
 def _tiene_algo_que_gestionar(usuario) -> bool:

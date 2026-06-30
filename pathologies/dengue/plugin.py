@@ -8,6 +8,7 @@ import yaml
 
 from core.registry import PathologyPlugin
 from pathologies.dengue.clean import limpiar as limpiar_dengue
+from pathologies.dengue.geografia import obtener_mapeo_subregion as obtener_mapeo_subregion_dengue
 from pathologies.dengue.views import obtener_vistas_dengue
 
 RUTA_MANIFEST = Path(__file__).parent / "manifest.yaml"
@@ -57,3 +58,6 @@ class DenguePathologyPlugin(PathologyPlugin):
 
     def obtener_vistas(self) -> list[Any]:
         return obtener_vistas_dengue()
+
+    def obtener_mapeo_subregion(self) -> dict[int, str]:
+        return obtener_mapeo_subregion_dengue()

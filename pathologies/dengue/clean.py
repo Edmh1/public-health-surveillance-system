@@ -105,6 +105,9 @@ COLUMNAS_ENTERAS = [
 # Paso 4: divisores para llevar edad a anios segun el codigo de uni_med.
 DIVISORES_EDAD = {1: 1, 2: 12, 3: 365, 4: 8760, 5: 525600}
 
+# Paso 5b: codigo DIVIPOLA del departamento del Magdalena, alcance fijo del sistema.
+COD_DPTO_MAGDALENA = 47
+
 # Paso 6: correccion de codigos CIE-10 antes del join; los placeholders quedan nulos.
 REEMPLAZOS_CODIGO_CIE10 = {
     "j15x": "j159",
@@ -242,6 +245,24 @@ class ValidarGeografia(BaseEstimator, TransformerMixin):
         datos_con_geografia["mun_valido"] = cod_mun_completo.isin(conjunto_codigos_validos)
 
         return datos_con_geografia
+
+
+class FiltrarDepartamentoMagdalena(BaseEstimator, TransformerMixin):
+    """Paso 5b: recorta el universo al departamento del Magdalena (cod_dpto_o = 47).
+
+    El alcance del sistema es solo Magdalena (ver CLAUDE.md, "Alcance geografico y
+    regla de tasas"); el recorte se aplica aqui de forma automatica, no como filtro
+    manual del dashboard. Toda la geografia del sistema usa el campo de ocurrencia
+    (cod_dpto_o/cod_mun_o); no se distingue residencia vs notificacion.
+    """
+
+    def fit(self, datos, y=None):
+        return self
+
+    def transform(self, datos):
+        es_magdalena = (datos["cod_dpto_o"] == COD_DPTO_MAGDALENA).fillna(False)
+        datos_magdalena = datos[es_magdalena].copy()
+        return datos_magdalena
 
 
 class EnriquecerConReferencias(BaseEstimator, TransformerMixin):
@@ -405,6 +426,7 @@ def construir_pipeline_limpieza(ruta_referencias=DIR_REFERENCIAS):
             ("convertir_tipos", ConvertirTipos()),
             ("construir_edad_anios", ConstruirEdadAnios()),
             ("validar_geografia", ValidarGeografia(ruta_referencias=ruta_referencias)),
+            ("filtrar_departamento_magdalena", FiltrarDepartamentoMagdalena()),
             ("enriquecer_con_referencias", EnriquecerConReferencias(ruta_referencias=ruta_referencias)),
             ("consolidar_grupo_etnico", ConsolidarGrupoEtnico(ruta_referencias=ruta_referencias)),
         ]

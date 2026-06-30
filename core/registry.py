@@ -64,6 +64,14 @@ class PathologyPlugin(ABC):
     def obtener_vistas(self) -> list[Any]:
         """Devuelve las pestanas y graficos que la patologia expone al dashboard."""
 
+    @abstractmethod
+    def obtener_mapeo_subregion(self) -> dict[int, str]:
+        """Mapeo de codigo DIVIPOLA de municipio (cod_mun_completo) a nombre de subregion,
+        leido del archivo de configuracion intercambiable de la patologia (config/subregiones.csv).
+        No es una columna del dato procesado: se deriva en memoria al filtrar, asi que
+        cambiar ese archivo reagrupa todo sin reprocesar ninguna pieza.
+        """
+
 
 _PATOLOGIAS_REGISTRADAS: dict[str, PathologyPlugin] = {}
 

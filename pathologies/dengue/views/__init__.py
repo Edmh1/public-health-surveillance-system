@@ -1,21 +1,17 @@
 """Las 5 pestanas del dashboard de dengue: Tendencia, Situacion, Sociodemografica,
-Morbilidad y Mortalidad. Cada una es por ahora un esqueleto (estado vacio) hasta que
-se construyan sus graficos; ver CLAUDE.md para el detalle de cada pestana.
+Morbilidad y Mortalidad. Tendencia ya esta construida (ver tendencia.py); el resto
+sigue como esqueleto (estado vacio) hasta que se construyan sus graficos; ver
+CLAUDE.md para el detalle de cada pestana.
 """
 
 import pandas as pd
 import streamlit as st
 
+from pathologies.dengue.views.tendencia import mostrar_tendencia
+
 
 def _mostrar_pendiente(mensaje: str) -> None:
     st.info(f":material/construction: {mensaje}")
-
-
-def mostrar_tendencia(datos: pd.DataFrame) -> None:
-    _mostrar_pendiente(
-        "Esta pestana mostrara la serie historica anual, casos semanales, comparacion "
-        "contra el anio anterior y el mapa coropletico por subregion. Se construye pronto."
-    )
 
 
 def mostrar_situacion(datos: pd.DataFrame) -> None:
