@@ -27,7 +27,7 @@ _ETIQUETAS_CLASIFICACION: dict[str, str] = {
     "2": "Probable",
     "3": "Confirmado por laboratorio",
     "4": "Confirmado por clinica",
-    "5": "Confirmado por nexo epidemiologico",
+    "5": "Confirmado por nexo epidemiológico",
     "6": "Descartado",
     "0": "No aplica",
     "7": "Otro",
@@ -160,7 +160,7 @@ def mostrar_filtros_globales(datos: pd.DataFrame, columna_anio: str, mapeo_subre
     if len(anios_disponibles) >= 2:
         _corregir_rango("filtro_anio_rango", anios_disponibles)
         rango_anio = st.sidebar.select_slider(
-            "Anios",
+            "Años",
             options=anios_disponibles,
             value=(anios_disponibles[0], anios_disponibles[-1]),
             key="filtro_anio_rango",
@@ -168,14 +168,14 @@ def mostrar_filtros_globales(datos: pd.DataFrame, columna_anio: str, mapeo_subre
         anios_elegidos = [a for a in anios_disponibles if rango_anio[0] <= a <= rango_anio[1]]
     elif len(anios_disponibles) == 1:
         anios_elegidos = anios_disponibles
-        st.sidebar.caption(f"Anio disponible: {anios_disponibles[0]}")
+        st.sidebar.caption(f"Año disponible: {anios_disponibles[0]}")
     else:
         anios_elegidos = []
 
     if len(semanas_disponibles) >= 2:
         _corregir_rango("filtro_semana_rango", semanas_disponibles)
         rango_semana = st.sidebar.select_slider(
-            "Semana epidemiologica",
+            "Semana epidemiológica",
             options=semanas_disponibles,
             value=(semanas_disponibles[0], semanas_disponibles[-1]),
             format_func=lambda s: f"Sem. {int(s)}",
@@ -188,7 +188,7 @@ def mostrar_filtros_globales(datos: pd.DataFrame, columna_anio: str, mapeo_subre
         semanas_elegidas = []
 
     # ----- Clasificacion del caso -----
-    st.sidebar.caption(":material/assignment: CLASIFICACION DEL CASO")
+    st.sidebar.caption(":material/assignment: CLASIFICACIÓN DEL CASO")
 
     clasificaciones_disponibles = _opciones_de_columna(datos, "estado_final_de_caso")
     if clasificaciones_disponibles:
@@ -205,12 +205,12 @@ def mostrar_filtros_globales(datos: pd.DataFrame, columna_anio: str, mapeo_subre
         clasificaciones_elegidas = []
 
     # ----- Proximamente (colapsado) -----
-    with st.sidebar.expander("Proximamente", icon=":material/schedule:", expanded=False):
+    with st.sidebar.expander("Próximamente", icon=":material/schedule:", expanded=False):
         st.caption(
-            ":material/construction: Estratificacion de riesgo: pendiente del Excel "
-            "externo cruzado por codigo DIVIPOLA."
+            ":material/construction: Estratificación de riesgo: pendiente del Excel "
+            "externo cruzado por código DIVIPOLA."
         )
-        st.caption(":material/construction: Situacion: pendiente del canal endemico.")
+        st.caption(":material/construction: Situación: pendiente del canal endémico.")
 
     filtros = {
         columna_anio: anios_elegidos,

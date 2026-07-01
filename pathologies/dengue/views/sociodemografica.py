@@ -29,13 +29,13 @@ _TIP_SS_MAP = {
     "s": "Subsidiado",
     "c": "Contributivo",
     "n": "No asegurado",
-    "p": "Excepcion",
-    "i": "Indigena",
+    "p": "Excepción",
+    "i": "Indígena",
     "e": "Especial",
 }
 
 _ETN_MAP = {
-    1: "Indigena",
+    1: "Indígena",
     2: "ROM",
     3: "Raizal",
     4: "Palenquero",
@@ -165,7 +165,7 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_piramide(casos: pd.DataFrame) -> None:
-    st.subheader(":material/groups: Piramide por sexo y edad")
+    st.subheader(":material/groups: Pirámide por sexo y edad")
 
     if not {"edad_anios", "sexo"}.issubset(casos.columns):
         st.caption("Sin datos de edad o sexo.")
@@ -243,10 +243,10 @@ _ICONOS_EXPLORADOR = {
 
 
 def _explorador_demografico(casos: pd.DataFrame) -> None:
-    st.subheader(":material/tune: Distribucion demografica")
+    st.subheader(":material/tune: Distribución demográfica")
 
     seleccion = st.segmented_control(
-        "Ver distribucion por",
+        "Ver distribución por",
         _OPCIONES_EXPLORADOR,
         default="Area",
         required=True,
@@ -273,10 +273,13 @@ def _chart_area(casos: pd.DataFrame, height: int = 300) -> None:
         st.caption("Sin datos.")
         return
     total = conteo.sum()
+    # Colores explícitos: 1.ª = azul, 2.ª = naranja, 3.ª = morado discreto.
+    # Sin esto, el tema asigna el 3.ª color (azul cielo) a "Rural disperso".
     fig = px.pie(
         names=conteo.index,
         values=conteo.values,
         hole=0.5,
+        color_discrete_sequence=[AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL, "#6f5499"],
     )
     fig.update_traces(
         texttemplate="%{label}<br>%{value:,} · %{percent:.2%}",
@@ -308,7 +311,7 @@ def _chart_estrato(casos: pd.DataFrame, height: int = 300) -> None:
         df, x="casos", y="estrato", text="etiqueta", orientation="h",
         labels={"casos": "Casos", "estrato": ""},
     )
-    fig.update_traces(textposition="outside")
+    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
     fig.update_layout(height=height, **_LAYOUT, yaxis={"categoryorder": "category ascending"})
     st.plotly_chart(fig, width="stretch")
 
@@ -331,7 +334,7 @@ def _chart_etnia(casos: pd.DataFrame, height: int = 300) -> None:
         df, x="casos", y="etnia", text="etiqueta", orientation="h",
         labels={"casos": "Casos", "etnia": ""},
     )
-    fig.update_traces(textposition="outside")
+    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
     fig.update_layout(height=height, **_LAYOUT, yaxis={"categoryorder": "total ascending"})
     st.plotly_chart(fig, width="stretch")
 
@@ -354,7 +357,7 @@ def _chart_regimen(casos: pd.DataFrame, height: int = 300) -> None:
         df, x="casos", y="regimen", text="etiqueta", orientation="h",
         labels={"casos": "Casos", "regimen": ""},
     )
-    fig.update_traces(textposition="outside")
+    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
     fig.update_layout(height=height, **_LAYOUT, yaxis={"categoryorder": "total ascending"})
     st.plotly_chart(fig, width="stretch")
 
@@ -364,7 +367,7 @@ def _chart_regimen(casos: pd.DataFrame, height: int = 300) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_pueblos_indigenas(casos: pd.DataFrame) -> None:
-    st.subheader(":material/forest: Pueblos indigenas afectados")
+    st.subheader(":material/forest: Pueblos indígenas afectados")
 
     if "nom_grupo" not in casos.columns:
         st.caption("Sin datos de pueblo indigena.")
@@ -391,7 +394,7 @@ def _mostrar_pueblos_indigenas(casos: pd.DataFrame) -> None:
         df, x="casos", y="pueblo", text="etiqueta", orientation="h",
         labels={"casos": "Casos", "pueblo": ""},
     )
-    fig.update_traces(textposition="outside")
+    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
     fig.update_layout(**_LAYOUT, yaxis={"categoryorder": "total ascending"})
     st.plotly_chart(fig, width="stretch")
 
@@ -401,7 +404,7 @@ def _mostrar_pueblos_indigenas(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_eps(casos: pd.DataFrame) -> None:
-    st.subheader(":material/local_hospital: EPS de afiliacion")
+    st.subheader(":material/local_hospital: EPS de afiliación")
     st.caption(f"Top {_TOP_N} por casos notificados")
 
     if "nom_ase" not in casos.columns:
@@ -424,7 +427,7 @@ def _mostrar_eps(casos: pd.DataFrame) -> None:
         labels={"casos": "Casos", "eps_short": ""},
         hover_data={"eps": True, "eps_short": False, "casos": True, "etiqueta": False},
     )
-    fig.update_traces(textposition="outside")
+    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
     fig.update_layout(**_LAYOUT, yaxis={"categoryorder": "total ascending"})
     st.plotly_chart(fig, width="stretch")
 
@@ -453,6 +456,6 @@ def _mostrar_upgd(casos: pd.DataFrame) -> None:
         labels={"casos": "Casos", "upgd_short": ""},
         hover_data={"upgd": True, "upgd_short": False, "casos": True, "etiqueta": False},
     )
-    fig.update_traces(textposition="outside")
+    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
     fig.update_layout(**_LAYOUT, yaxis={"categoryorder": "total ascending"})
     st.plotly_chart(fig, width="stretch")

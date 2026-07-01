@@ -112,6 +112,28 @@ def aplicar_estilos() -> None:
         .st-key-tarjeta_login input {
             font-size: 1.05rem !important;
         }
+        /* Lista de pestanas sticky justo debajo del header SIVIDEM.
+           top: 200px = ~60px toolbar + ~130px encabezado + 10px de margen de seguridad.
+           Los 10px evitan que el tab bar se solape con el borde inferior del header.
+           z-index: 9999 (igual al header): como el tab list aparece despues en el DOM
+           y no se solapa con el header (por los 10px de margen), el z-index no causa
+           problemas y la pestaña permanece visible al hacer scroll. */
+        div[data-testid="stTabs"] div:has(> div[role="tablist"]) {
+            position: sticky !important;
+            top: 225px !important;
+            z-index: 9999 !important;
+            width: 100% !important;
+            background-color: #EEF1F5 !important;
+            padding-top: 0 !important;
+            padding-left: 0.4rem;
+            margin-top: 0 !important;
+            box-shadow: 0 6px 10px -4px rgba(16, 24, 40, 0.12) !important;
+        }
+        /* Padding en el panel de cada pestana para que el primer elemento
+           no quede tapado por la barra de navegacion sticky al hacer scroll. */
+        [role="tabpanel"] > div:first-child {
+            padding-top: 1rem !important;
+        }
         </style>
         """
     )

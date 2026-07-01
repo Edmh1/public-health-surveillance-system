@@ -32,7 +32,7 @@ def mostrar_procesamientos(patologia: str) -> None:
         procesamientos,
         clave="procesamientos",
         campos_busqueda=["archivo_original", "anio", "codigo", "usuario"],
-        placeholder="Buscar por archivo, año, codigo o usuario...",
+        placeholder="Buscar por archivo, año, código o usuario...",
     )
 
     for proc in pagina_items:
@@ -48,7 +48,7 @@ def _mostrar_tarjeta_procesamiento(proc: dict) -> None:
         with col_info:
             st.markdown(f"**{proc['archivo_original']}**")
             st.caption(
-                f"Año {proc['anio']} · Codigo {proc['codigo']} · "
+                f"Año {proc['anio']} · Código {proc['codigo']} · "
                 f"{formatear_fecha_local(proc['fecha'])} · {proc['usuario']}"
             )
             if proc["estado"] == "fallo" and proc.get("motivo_fallo"):

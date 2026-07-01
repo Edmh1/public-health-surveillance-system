@@ -39,7 +39,7 @@ def mostrar_piezas_activas(patologia: str, usuario) -> None:
         piezas_ordenadas,
         clave="piezas_activas",
         campos_busqueda=["archivo_original", "anio", "codigo"],
-        placeholder="Buscar por archivo, año o codigo...",
+        placeholder="Buscar por archivo, año o código...",
     )
 
     for pieza in pagina_items:
@@ -58,7 +58,7 @@ def _mostrar_tarjeta_pieza(patologia: str, pieza: dict, usuario, clave_pieza: st
         with col_info:
             st.markdown(f":material/description: **{pieza['archivo_original']}**")
             fecha = formatear_fecha_local(pieza["fecha_creacion"])
-            st.caption(f"Año {pieza['anio']} · Codigo {pieza['codigo']} · {fecha}")
+            st.caption(f"Año {pieza['anio']} · Código {pieza['codigo']} · {fecha}")
 
         with col_acciones:
             if st.button(
@@ -66,7 +66,7 @@ def _mostrar_tarjeta_pieza(patologia: str, pieza: dict, usuario, clave_pieza: st
                 icon=":material/edit:",
                 key=f"editar_{clave_pieza}",
                 width="stretch",
-                help="Reemplaza el archivo de esta pieza con una version corregida.",
+                help="Reemplaza el archivo de esta pieza con una versión corregida.",
             ):
                 editando = st.session_state.setdefault(CLAVE_EDITANDO, {})
                 editando[clave_pieza] = not editando.get(clave_pieza, False)
@@ -76,7 +76,7 @@ def _mostrar_tarjeta_pieza(patologia: str, pieza: dict, usuario, clave_pieza: st
                 icon=":material/delete:",
                 key=f"eliminar_{clave_pieza}",
                 width="stretch",
-                help="Mueve esta pieza a la papelera. Es recuperable desde la pestana Papelera.",
+                help="Mueve esta pieza a la papelera. Es recuperable desde la pestaña Papelera.",
             ):
                 _eliminar(patologia, pieza["anio"], pieza["codigo"], usuario)
 
@@ -90,8 +90,8 @@ def _mostrar_formulario_editar(patologia: str, pieza: dict, usuario, clave_pieza
 
     with st.container(border=True):
         st.caption(
-            f"Sube la version corregida de **{pieza['archivo_original']}** "
-            f"(Año {anio} · Codigo {codigo}). El historico de otras piezas no se toca."
+            f"Sube la versión corregida de **{pieza['archivo_original']}** "
+            f"(Año {anio} · Código {codigo}). El histórico de otras piezas no se toca."
         )
         with st.form(f"editar_pieza_{clave_pieza}", border=False):
             archivo = st.file_uploader(

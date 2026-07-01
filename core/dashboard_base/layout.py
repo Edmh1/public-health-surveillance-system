@@ -92,11 +92,11 @@ def ejecutar_dashboard() -> None:
 
 ICONOS_PESTANAS = {
     "Tendencia": ":material/trending_up:",
-    "Situacion": ":material/insights:",
-    "Sociodemografica": ":material/groups:",
+    "Situación": ":material/insights:",
+    "Sociodemográfica": ":material/groups:",
     "Morbilidad": ":material/healing:",
     "Mortalidad": ":material/bar_chart:",
-    "Gestion": ":material/admin_panel_settings:",
+    "Gestión": ":material/admin_panel_settings:",
 }
 
 
@@ -109,7 +109,7 @@ def _mostrar_pestanas(patologia: str, usuario, plugin, datos_filtrados) -> None:
 
     mostrar_gestion = _tiene_algo_que_gestionar(usuario)
     if mostrar_gestion:
-        nombres_pestanas = nombres_pestanas + ["Gestion"]
+        nombres_pestanas = nombres_pestanas + ["Gestión"]
 
     etiquetas_pestanas = [f"{ICONOS_PESTANAS.get(nombre, '')} {nombre}".strip() for nombre in nombres_pestanas]
     pestanas = st.tabs(etiquetas_pestanas)
@@ -155,7 +155,7 @@ def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
             with subcolumna_identidad:
                 st.markdown(f"**{usuario.nombre_usuario}** &nbsp;·&nbsp; {usuario.rol}")
             with subcolumna_salir:
-                if st.button("", icon=":material/logout:", help="Cerrar sesion", key="cerrar_sesion_barra"):
+                if st.button("", icon=":material/logout:", help="Cerrar sesión", key="cerrar_sesion_barra"):
                     modulo_sesion.cerrar_sesion()
                     st.rerun()
 
@@ -194,7 +194,7 @@ def _tiene_algo_que_gestionar(usuario) -> bool:
 def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
     col_info, col_btn = st.columns([5, 1], vertical_alignment="center")
     with col_info:
-        st.caption(":material/info: Piezas, papelera e historial no se actualizan automaticamente.")
+        st.caption(":material/info: Piezas, papelera e historial no se actualizan automáticamente.")
     with col_btn:
         if st.button(
             "Actualizar",

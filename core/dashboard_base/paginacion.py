@@ -93,7 +93,7 @@ def mostrar_controles_paginacion(clave: str, pagina: int, total: int) -> None:
             st.rerun()
     with col_info:
         st.caption(
-            f"Pagina {pagina} de {total_paginas}  ·  {total} elementos",
+            f"Página {pagina} de {total_paginas}  ·  {total} elementos",
             text_alignment="center",
         )
     with col_next:

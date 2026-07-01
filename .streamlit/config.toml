@@ -8,3 +8,34 @@ backgroundColor = "#EEF1F5"
 secondaryBackgroundColor = "#F4F6F8"
 textColor = "#1A1A1A"
 font = "sans serif"
+
+# Paleta de graficos (Plotly/Altair/Vega-Lite). Azul y naranja institucional primero,
+# segun DESIGN.md ("azul institucional para series principales, naranja para series
+# secundarias o comparativas"). El resto son tonos neutros de apoyo (azules, morado,
+# tierra, gris) para distinguir mas categorias sin tocar verde/amarillo/rojo, que
+# quedan reservados al canal endemico y los semaforos de riesgo.
+chartCategoricalColors = [
+    "#1b3a6b",
+    "#e8852c",
+    "#6f5499",
+    "#a85c2c",
+    "#374151",
+    "#7a7a7a",
+    "#2c5f8a",
+    "#8a5a3c",
+]
+
+# Gradiente para datos continuos (ej. conteo de casos en el mapa). Va de un gris azulado
+# claro al azul institucional; nunca rojo, que en este sistema significa epidemia.
+chartSequentialColors = [
+    "#EEF1F5",
+    "#DCE3EC",
+    "#C2D1E2",
+    "#A3BAD4",
+    "#85A3C5",
+    "#6789B3",
+    "#4D729F",
+    "#385D87",
+    "#274A6E",
+    "#1b3a6b",
+]

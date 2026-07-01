@@ -71,14 +71,14 @@ def mostrar_formulario_subida(patologia: str, usuario) -> None:
         anio_sugerido, codigo_sugerido = analizar_nombre_archivo(archivo_subido.name)
     except NombreArchivoInvalido:
         st.warning(
-            "El nombre del archivo no sigue el patron Datos_ANIO_CODIGO. "
-            "Completa anio y codigo manualmente antes de confirmar."
+            "El nombre del archivo no sigue el patrón Datos_ANIO_CODIGO. "
+            "Completa año y código manualmente antes de confirmar."
         )
 
     with st.form(f"confirmar_subida_{patologia}"):
-        st.caption("Confirma anio y codigo antes de procesar (red de seguridad contra archivos mal nombrados).")
-        anio = st.number_input("Anio", min_value=2000, max_value=2100, value=anio_sugerido or 2024, step=1)
-        codigo = st.number_input("Codigo", min_value=0, value=codigo_sugerido or 0, step=1)
+        st.caption("Confirma año y código antes de procesar (red de seguridad contra archivos mal nombrados).")
+        anio = st.number_input("Año", min_value=2000, max_value=2100, value=anio_sugerido or 2024, step=1)
+        codigo = st.number_input("Código", min_value=0, value=codigo_sugerido or 0, step=1)
         confirmado = st.form_submit_button("Confirmar y procesar", type="primary", icon=":material/check_circle:")
 
     if not confirmado:
@@ -102,7 +102,7 @@ def mostrar_formulario_subida(patologia: str, usuario) -> None:
     st.rerun()
 
 
-@st.dialog("Ya existe una pieza para ese anio y codigo")
+@st.dialog("Ya existe una pieza para ese año y código")
 def _dialogo_confirmar_reemplazo(
     patologia: str,
     anio: int,
@@ -113,11 +113,11 @@ def _dialogo_confirmar_reemplazo(
     usuario,
 ) -> None:
     st.warning(
-        f":material/warning: Ya hay una pieza activa para anio {anio}, codigo {codigo} "
+        f":material/warning: Ya hay una pieza activa para año {anio}, código {codigo} "
         f"(archivo {archivo_anterior}). Si confirmas, el sistema reemplaza esa pieza por "
         f"{nombre_archivo}, igual que si hubieras usado Editar en piezas activas."
     )
-    st.caption("Si te equivocaste de anio o codigo, cancela y corrige antes de subir de nuevo.")
+    st.caption("Si te equivocaste de año o código, cancela y corrige antes de subir de nuevo.")
 
     columna_cancelar, columna_confirmar = st.columns(2)
     with columna_cancelar:

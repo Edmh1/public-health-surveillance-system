@@ -19,8 +19,8 @@ def _mostrar_pendiente(mensaje: str) -> None:
 
 def mostrar_situacion(datos: pd.DataFrame) -> None:
     _mostrar_pendiente(
-        "Esta pestana mostrara los KPIs (incidencia, mortalidad, letalidad), el canal "
-        "endemico y el pronostico de corto plazo. Se construye pronto."
+        "Esta pestaña mostrará los KPIs (incidencia, mortalidad, letalidad), el canal "
+        "endémico y el pronóstico de corto plazo. Se construye pronto."
     )
 
 
@@ -32,8 +32,8 @@ def obtener_vistas_dengue() -> list[tuple[str, callable]]:
     """Nombre de cada pestana y su funcion de render, en el orden en que se muestran."""
     return [
         ("Tendencia", mostrar_tendencia),
-        ("Situacion", mostrar_situacion),
-        ("Sociodemografica", mostrar_sociodemografica),
+        ("Situación", mostrar_situacion),
+        ("Sociodemográfica", mostrar_sociodemografica),
         ("Morbilidad", mostrar_morbilidad),
         ("Mortalidad", mostrar_mortalidad),
     ]

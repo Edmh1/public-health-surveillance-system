@@ -16,9 +16,9 @@ from core.geografia import obtener_geojson_municipios_magdalena
 
 CODIGOS_CASOS = {210, 220}
 
-_NIVEL_OPCIONES = ["Subregion", "Municipio"]
+_NIVEL_OPCIONES = ["Subregión", "Municipio"]
 _NIVEL_ETIQUETAS = {
-    "Subregion": ":material/map: Subregion",
+    "Subregión": ":material/map: Subregión",
     "Municipio": ":material/location_city: Municipio",
 }
 
@@ -114,7 +114,7 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
     with c3:
         st.metric("Semana pico", semana_label, help=semana_help)
     with c4:
-        st.metric("Municipio mas afectado", top_mun, help=top_help)
+        st.metric("Municipio más afectado", top_mun, help=top_help)
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
                 st.session_state["mapa_subregion_seleccionada"] = None
                 st.rerun()
         with col_titulo:
-            st.caption(f":material/location_on: Subregion {subregion_activa} — municipios por casos")
+            st.caption(f":material/location_on: Subregión {subregion_activa} — municipios por casos")
 
         datos_mapa = conteo[conteo["subregion"] == subregion_activa].copy()
         datos_mapa["casos"] = datos_mapa["casos_mun"]
@@ -218,7 +218,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
                     st.session_state["mapa_subregion_seleccionada"] = str(fila.iloc[0]["subregion"])
                     st.rerun()
 
-    st.caption("Conteo de casos. La incidencia por poblacion en riesgo se incorpora junto a los KPIs.")
+    st.caption("Conteo de casos. La incidencia por población en riesgo se incorpora junto a los KPIs.")
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +226,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/show_chart: Analisis semanal")
+    st.subheader(":material/show_chart: Análisis semanal")
 
     anios = sorted(casos["ano"].dropna().unique().tolist(), reverse=True)
     if not anios:
@@ -236,13 +236,13 @@ def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
     col_sel, col_nota = st.columns([1, 3], vertical_alignment="center")
     with col_sel:
         anio = st.selectbox(
-            "Año de analisis",
+            "Año de análisis",
             options=anios,
             key="tendencia_anio_semanal",
         )
     with col_nota:
         st.caption(
-            ":material/info: El año de analisis es un selector propio de esta seccion "
+            ":material/info: El año de análisis es un selector propio de esta sección "
             "e ignora el filtro temporal global."
         )
 
@@ -267,7 +267,7 @@ def _grafica_semanal_anio(casos: pd.DataFrame, anio: int) -> None:
 
     fig = px.bar(
         semanal, x="semana", y="casos",
-        labels={"semana": "Semana epidemiologica", "casos": "Casos"},
+        labels={"semana": "Semana epidemiológica", "casos": "Casos"},
         title=f"Casos semanales {anio}",
     )
     fig.add_hline(
@@ -318,8 +318,8 @@ def _grafica_comparacion_vs_anterior(casos: pd.DataFrame, anio: int) -> None:
         ))
 
     fig.update_layout(
-        title=f"Comparacion {anio} vs {anio_prev}",
-        xaxis_title="Semana epidemiologica",
+        title=f"Comparación {anio} vs {anio_prev}",
+        xaxis_title="Semana epidemiológica",
         yaxis_title="Casos",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         **_LAYOUT_BASE,
@@ -361,8 +361,8 @@ def _grafica_variacion_porcentual(casos: pd.DataFrame, anio: int) -> None:
 
     fig = px.bar(
         variacion, x="semana", y="variacion",
-        labels={"semana": "Semana epidemiologica", "variacion": "Variacion (%)"},
-        title=f"Variacion porcentual semanal: {anio} vs {anio_prev}",
+        labels={"semana": "Semana epidemiológica", "variacion": "Variación (%)"},
+        title=f"Variación porcentual semanal: {anio} vs {anio_prev}",
     )
     fig.update_traces(marker_color=colores)
     fig.add_hline(y=0, line_color="#9ca3af", line_width=1)
@@ -375,17 +375,17 @@ def _grafica_variacion_porcentual(casos: pd.DataFrame, anio: int) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_evolucion_temporal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/timeline: Evolucion temporal")
+    st.subheader(":material/timeline: Evolución temporal")
 
     nivel = st.segmented_control(
         "Agrupar por",
         _NIVEL_OPCIONES,
-        default="Subregion",
+        default="Subregión",
         required=True,
         format_func=lambda o: _NIVEL_ETIQUETAS[o],
         key="tendencia_evolucion_nivel",
     )
-    col_nivel = "subregion" if nivel == "Subregion" else "nom_mun_o"
+    col_nivel = "subregion" if nivel == "Subregión" else "nom_mun_o"
 
     subset = casos.dropna(subset=[col_nivel])
     if subset.empty:

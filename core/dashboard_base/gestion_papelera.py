@@ -38,7 +38,7 @@ def mostrar_papelera(patologia: str, usuario) -> None:
         piezas,
         clave="papelera",
         campos_busqueda=["archivo_original", "anio", "codigo"],
-        placeholder="Buscar por archivo, año o codigo...",
+        placeholder="Buscar por archivo, año o código...",
     )
     if total > 0:
         st.caption("Todas las piezas aqui son recuperables desde Restaurar.")
@@ -57,7 +57,7 @@ def _mostrar_tarjeta_papelera(patologia: str, pieza: dict, usuario, clave: str) 
         with col_info:
             st.markdown(f":material/description: **{pieza['archivo_original']}**")
             fecha = formatear_fecha_local(pieza["fecha_creacion"])
-            st.caption(f"Año {pieza['anio']} · Codigo {pieza['codigo']} · Eliminada el {fecha}")
+            st.caption(f"Año {pieza['anio']} · Código {pieza['codigo']} · Eliminada el {fecha}")
 
         with col_acciones:
             if st.button(
@@ -98,7 +98,7 @@ def _confirmar_restaurar(patologia: str, pieza: dict, usuario, clave: str) -> No
     with st.container(border=True):
         st.info(
             f":material/restore: Restaurar **{pieza['archivo_original']}** "
-            f"(Año {pieza['anio']} · Codigo {pieza['codigo']}) al consolidado activo.",
+            f"(Año {pieza['anio']} · Código {pieza['codigo']}) al consolidado activo.",
             icon=None,
         )
         col_cancelar, col_confirmar = st.columns(2)
@@ -153,8 +153,8 @@ def _confirmar_eliminar_para_siempre(patologia: str, pieza: dict, usuario, clave
 def _resolver_conflicto(patologia: str, pieza: dict, usuario, clave: str) -> None:
     with st.container(border=True):
         st.warning(
-            ":material/warning: Ya existe una pieza activa con el mismo año y codigo. "
-            "Restaurar la reemplazara."
+            ":material/warning: Ya existe una pieza activa con el mismo año y código. "
+            "Restaurar la reemplazará."
         )
         col_cancelar, col_reemplazar = st.columns(2)
         with col_cancelar:

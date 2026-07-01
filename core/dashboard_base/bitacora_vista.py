@@ -29,15 +29,15 @@ ICONOS_ACCION = {
 
 COLUMNAS_TABLA = {
     "fecha":   "Fecha",
-    "accion":  "Accion",
-    "anio":    "Anio",
-    "codigo":  "Codigo",
+    "accion":  "Acción",
+    "anio":    "Año",
+    "codigo":  "Código",
     "usuario": "Usuario",
 }
 
 
 def mostrar_bitacora(patologia: str) -> None:
-    st.subheader(":material/history: Bitacora de movimientos")
+    st.subheader(":material/history: Bitácora de movimientos")
 
     movimientos = listar_movimientos(patologia=patologia)
     if not movimientos:

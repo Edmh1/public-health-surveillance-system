@@ -246,7 +246,7 @@ def _panel_formulario() -> bool:
 
     with st.form("formulario_login", border=False):
         correo = st.text_input(
-            ":material/alternate_email: Correo electronico",
+            ":material/alternate_email: Correo electrónico",
             placeholder="nombre@unimagdalena.edu.co",
         )
         contrasena = st.text_input(
@@ -301,7 +301,7 @@ def _mostrar_verificando(intento: tuple[str, str]) -> None:
             except KeycloakConnectionError:
                 st.session_state.pop(CLAVE_INTENTO_LOGIN, None)
                 st.session_state["_error_login"] = (
-                    "No se pudo conectar al servidor de autenticacion. "
+                    "No se pudo conectar al servidor de autenticación. "
                     "Intenta de nuevo en un momento."
                 )
                 st.rerun()
@@ -310,7 +310,7 @@ def _mostrar_verificando(intento: tuple[str, str]) -> None:
     st.session_state.pop(CLAVE_INTENTO_LOGIN, None)
     if usuario is None:
         st.session_state["_error_login"] = (
-            "Correo o contrasena invalidos, "
+            "Correo o contraseña inválidos, "
             "o el usuario no tiene un rol asignado en Keycloak."
         )
         st.rerun()

@@ -25,15 +25,15 @@ _TIP_CAS_MAP = {
     "1": "Sospechoso",
     "2": "Probable",
     "3": "Conf. laboratorio",
-    "4": "Conf. clinica",
-    "5": "Conf. nexo epidemiologico",
+    "4": "Conf. clínica",
+    "5": "Conf. nexo epidemiológico",
 }
 
 _ESTADO_FINAL_MAP = {
     "2": "Probable",
     "3": "Conf. laboratorio",
-    "4": "Conf. clinica",
-    "5": "Conf. nexo epidemiologico",
+    "4": "Conf. clínica",
+    "5": "Conf. nexo epidemiológico",
     "6": "Descartado",
     "7": "Otro",
     "0": "Sin ajuste",
@@ -180,9 +180,10 @@ def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
     })
     total = df["casos"].sum()
 
-    # Sin color_discrete_sequence: el tema de Streamlit aplica chartCategoricalColors
-    # (azul institucional primero, naranja segundo) de forma automatica y consistente.
-    fig = px.pie(df, names="tipo", values="casos", hole=0.55)
+    fig = px.pie(
+        df, names="tipo", values="casos", hole=0.55,
+        color_discrete_sequence=[AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL],
+    )
     fig.update_traces(
         texttemplate="%{label}<br>%{value:,}",
         textposition="outside",
@@ -207,11 +208,11 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
 
 
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
-    st.subheader(":material/account_tree: Clasificacion: inicial → final")
+    st.subheader(":material/account_tree: Clasificación: inicial → final")
 
     cols_req = {"tip_cas", "estado_final_de_caso"}
     if not cols_req.issubset(casos.columns):
-        st.caption("Sin datos de clasificacion.")
+        st.caption("Sin datos de clasificación.")
         return
 
     df = casos[["tip_cas", "estado_final_de_caso"]].dropna().copy()
@@ -222,21 +223,21 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     flujo = flujo[flujo["n"] > 0]
 
     if flujo.empty:
-        st.caption("Sin datos de flujo de clasificacion.")
+        st.caption("Sin datos de flujo de clasificación.")
         return
 
     # Colores por estado (no por posicion izq/der): mismo color para un estado
     # independientemente de si aparece como clasificacion inicial o final.
     _PALETA_ESTADOS = {
-        "Probable":                   "#64748b",
-        "Conf. laboratorio":          "#1b3a6b",
-        "Conf. nexo epidemiologico":  "#e8852c",
-        "Conf. clinica":              "#5b88b3",
-        "Descartado":                 "#94a3b8",
-        "Sin ajuste":                 "#d1d5db",
-        "Sospechoso":                 "#475569",
-        "Otro (inicial)":             "#9ca3af",
-        "Otro":                       "#9ca3af",
+        "Probable":                    "#64748b",
+        "Conf. laboratorio":           "#1b3a6b",
+        "Conf. nexo epidemiológico":   "#e8852c",
+        "Conf. clínica":               "#5b88b3",
+        "Descartado":                  "#94a3b8",
+        "Sin ajuste":                  "#d1d5db",
+        "Sospechoso":                  "#475569",
+        "Otro (inicial)":              "#9ca3af",
+        "Otro":                        "#9ca3af",
     }
     todos_estados = sorted(set(flujo["inicial"]) | set(flujo["final"]))
     nodos_izq = sorted(flujo["inicial"].unique())
@@ -280,7 +281,7 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     st.plotly_chart(fig, width="stretch")
     st.caption(
         ":material/info: Los flujos heredan el color del estado inicial. "
-        "Traza cada clasificacion de izquierda a derecha para ver como se ajusto."
+        "Traza cada clasificación de izquierda a derecha para ver cómo se ajustó."
     )
 
 
@@ -319,7 +320,7 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
         orientation="h",
         labels={"casos": "Casos", "fuente": ""},
     )
-    fig.update_traces(textposition="outside")
+    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
     fig.update_layout(
         height=300,
         margin=dict(l=0, r=60, t=40, b=0),
@@ -345,7 +346,7 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
 
     col_sel, col_nota = st.columns([1, 3], vertical_alignment="center")
     with col_sel:
-        anio = st.selectbox("Año de analisis", anios, key="morbilidad_anio_semanal")
+        anio = st.selectbox("Año de análisis", anios, key="morbilidad_anio_semanal")
     with col_nota:
         st.caption(":material/info: Selector propio — ignora el filtro temporal global.")
 
@@ -372,7 +373,7 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
         y="casos",
         color="tipo",
         barmode="group",
-        labels={"semana": "Semana epidemiologica", "casos": "Casos", "tipo": "Tipo"},
+        labels={"semana": "Semana epidemiológica", "casos": "Casos", "tipo": "Tipo"},
         color_discrete_map={
             "Dengue (210)": AZUL_INSTITUCIONAL,
             "Dengue grave (220)": NARANJA_INSTITUCIONAL,
@@ -401,7 +402,7 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/local_hospital: Hospitalizacion por semana")
+    st.subheader(":material/local_hospital: Hospitalización por semana")
 
     if "pac_hos" not in casos.columns or "semana" not in casos.columns:
         st.caption("Sin datos.")
@@ -422,6 +423,9 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
 
     semanal = subset.groupby(["semana", "categoria"]).size().reset_index(name="casos")
 
+    # Colores explícitos: Dengue=azul institucional, Grave=naranja;
+    # Hospitalizado=color sólido, No hospitalizado=versión más suave.
+    # Sin esto, la 3.ª categoria recibiría el azul cielo del tema.
     fig = px.bar(
         semanal,
         x="semana",
@@ -429,6 +433,12 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
         color="categoria",
         barmode="group",
         labels={"semana": "Semana", "casos": "Casos", "categoria": ""},
+        color_discrete_map={
+            "Dengue — Hospitalizado":     AZUL_INSTITUCIONAL,
+            "Dengue — No hospitalizado":  "#8ba5c5",
+            "Grave — Hospitalizado":      NARANJA_INSTITUCIONAL,
+            "Grave — No hospitalizado":   "#d4a87a",
+        },
     )
     fig.update_layout(
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
@@ -442,10 +452,10 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
-    st.subheader(":material/map: Hospitalizacion por territorio")
+    st.subheader(":material/map: Hospitalización por territorio")
 
     if "pac_hos" not in casos.columns:
-        st.caption("Sin datos de hospitalizacion.")
+        st.caption("Sin datos de hospitalización.")
         return
 
     tipo_sel = st.segmented_control(
@@ -474,7 +484,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
         )
         fig_sub.update_traces(textposition="outside", texttemplate="%{text:,}")
         fig_sub.update_layout(
-            title="Por subregion (conteo)",
+            title="Por subregión (conteo)",
             margin=dict(l=0, r=0, t=40, b=0),
         )
         st.plotly_chart(fig_sub, width="stretch")
@@ -506,7 +516,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
-    st.subheader(":material/fact_check: Clasificacion final")
+    st.subheader(":material/fact_check: Clasificación final")
 
     if "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")
@@ -523,10 +533,18 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
         st.caption("Sin datos.")
         return
 
+    # Colores explícitos para evitar que el 3.ª slice reciba azul cielo.
+    _COLORES_ESTADO_DONA = [
+        AZUL_INSTITUCIONAL,   # Conf. laboratorio (el más frecuente → color primario)
+        NARANJA_INSTITUCIONAL, # Conf. nexo
+        "#6f5499",             # Probable (morado discreto)
+        "#374151",             # Descartado / Otro
+    ]
     fig = px.pie(
         names=conteo.index,
         values=conteo.values,
         hole=0.55,
+        color_discrete_sequence=_COLORES_ESTADO_DONA,
     )
     fig.update_traces(
         texttemplate="%{label}<br>%{value:,}",
@@ -545,7 +563,7 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/stacked_bar_chart: Clasificacion final por semana")
+    st.subheader(":material/stacked_bar_chart: Clasificación final por semana")
 
     if "semana" not in casos.columns or "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")
@@ -574,7 +592,7 @@ def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
         y="casos",
         color="clasificacion",
         barmode="stack",
-        labels={"semana": "Semana epidemiologica", "casos": "Casos", "clasificacion": "Clasificacion"},
+        labels={"semana": "Semana epidemiológica", "casos": "Casos", "clasificacion": "Clasificación"},
     )
     fig.update_layout(
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),

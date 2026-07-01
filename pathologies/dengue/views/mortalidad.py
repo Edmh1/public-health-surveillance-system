@@ -29,7 +29,7 @@ _LABS_EDAD  = ["0-4","5-9","10-14","15-19","20-24","25-29","30-34",
 
 _TIP_SS_MAP = {
     "s": "Subsidiado", "c": "Contributivo", "n": "No asegurado",
-    "p": "Excepcion",  "i": "Indigena",      "e": "Especial",
+    "p": "Excepción",  "i": "Indígena",     "e": "Especial",
 }
 
 _LAYOUT = dict(margin=dict(l=0, r=0, t=40, b=0))
@@ -120,11 +120,11 @@ def _mostrar_kpis(muertes: pd.DataFrame, casos: pd.DataFrame, graves: pd.DataFra
         st.metric("Muertes por dengue", f"{n_total:,}")
     with c2:
         st.metric(
-            "Menores de 15 anos",
+            "Menores de 15 años",
             f"{n_men15:,}",
             delta=f"{_pct(n_men15, n_total, 1):.1f}% del total",
             delta_color="off",
-            help="Grupo de atencion prioritaria en mortalidad por dengue",
+            help="Grupo de atención prioritaria en mortalidad por dengue",
         )
     with c3:
         # delta_color="inverse": si letalidad > META_LETALIDAD (0.10%) es una
@@ -171,36 +171,22 @@ def _mostrar_temporal(muertes: pd.DataFrame) -> None:
 
     subset = muertes[muertes["ano"] == anio]
 
-    # Notificadas vs confirmadas por semana
-    semanal_total = subset.groupby("semana").size().reset_index(name="n")
-    semanal_total["tipo"] = "Notificadas"
+    # Serie unica: toda muerte con cod_eve=580 ya es confirmada por definicion,
+    # no tiene sentido distinguir "notificadas" vs "confirmadas" en este codigo.
+    semanal = subset.groupby("semana").size().reset_index(name="n")
 
-    if "confirmados" in subset.columns:
-        semanal_conf = (
-            subset[subset["confirmados"] == 1]
-            .groupby("semana")
-            .size()
-            .reset_index(name="n")
-        )
-        semanal_conf["tipo"] = "Confirmadas"
-        df_plot = pd.concat([semanal_total, semanal_conf], ignore_index=True)
-    else:
-        df_plot = semanal_total
+    if semanal.empty:
+        st.caption(f"Sin muertes registradas para {anio}.")
+        return
 
     fig = px.bar(
-        df_plot,
+        semanal,
         x="semana",
         y="n",
-        color="tipo",
-        barmode="group",
         text="n",
-        labels={"semana": "Semana epidemiologica", "n": "Muertes", "tipo": ""},
-        color_discrete_map={
-            "Notificadas":  AZUL_INSTITUCIONAL,
-            "Confirmadas":  NARANJA_INSTITUCIONAL,
-        },
+        labels={"semana": "Semana epidemiológica", "n": "Muertes"},
     )
-    fig.update_traces(textposition="outside")
+    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
     fig.update_layout(**_LAYOUT)
     st.plotly_chart(fig, width="stretch")
 
@@ -263,7 +249,7 @@ def _mostrar_edad_sexo(muertes: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_regimen(muertes: pd.DataFrame) -> None:
-    st.subheader(":material/health_and_safety: Regimen SGSSS")
+    st.subheader(":material/health_and_safety: Régimen SGSSS")
 
     if "tip_ss" not in muertes.columns:
         st.caption("Sin datos.")
@@ -295,7 +281,7 @@ def _mostrar_regimen(muertes: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_eps(muertes: pd.DataFrame) -> None:
-    st.subheader(":material/local_hospital: EPS de afiliacion")
+    st.subheader(":material/local_hospital: EPS de afiliación")
 
     if "nom_ase" not in muertes.columns:
         st.caption("Sin datos.")
@@ -335,9 +321,9 @@ def _mostrar_tabla_territorial(
     )
 
     nivel = st.segmented_control(
-        "Nivel de agregacion",
-        ["Magdalena", "Subregion", "Municipio"],
-        default="Subregion",
+        "Nivel de agregación",
+        ["Magdalena", "Subregión", "Municipio"],
+        default="Subregión",
         required=True,
         key="mort_nivel_tabla",
     )
@@ -353,7 +339,7 @@ def _mostrar_tabla_territorial(
                 "Letalidad grave (%)": round(_pct(len(m_df), len(g_df), 2), 2),
             }])
 
-        col = "subregion" if key == "Subregion" else "nom_mun_o"
+        col = "subregion" if key == "Subregión" else "nom_mun_o"
         if col not in m_df.columns:
             return pd.DataFrame()
 
@@ -401,11 +387,11 @@ def _mostrar_tabla_territorial(
 def _mostrar_tasas_subregion(
     muertes: pd.DataFrame, casos: pd.DataFrame, graves: pd.DataFrame
 ) -> None:
-    st.subheader(":material/bar_chart: Indicadores por subregion")
+    st.subheader(":material/bar_chart: Indicadores por subregión")
 
     col_sub = "subregion"
     if col_sub not in muertes.columns or col_sub not in casos.columns:
-        st.caption("Sin datos de subregion (se deriva del mapeo DIVIPOLA en los filtros).")
+        st.caption("Sin datos de subregión (se deriva del mapeo DIVIPOLA en los filtros).")
         return
 
     indicador = st.segmented_control(
