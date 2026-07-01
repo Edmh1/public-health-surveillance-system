@@ -53,7 +53,7 @@ def _mostrar_acciones(patologia: str, pieza: dict, usuario) -> None:
 
     columna_restaurar, columna_eliminar = st.columns(2)
     with columna_restaurar:
-        if st.button("Restaurar", icon=":material/restore:", key=f"restaurar_{clave}", use_container_width=True):
+        if st.button("Restaurar", icon=":material/restore:", key=f"restaurar_{clave}", width="stretch"):
             _restaurar(patologia, anio, codigo, usuario, clave, forzar=False)
 
     with columna_eliminar:
@@ -62,7 +62,7 @@ def _mostrar_acciones(patologia: str, pieza: dict, usuario) -> None:
                 "Eliminar para siempre",
                 icon=":material/delete_forever:",
                 key=f"eliminar_siempre_{clave}",
-                use_container_width=True,
+                width="stretch",
             ):
                 st.session_state.setdefault(CLAVE_CONFIRMAR_ELIMINAR, {})[clave] = True
 
@@ -82,11 +82,11 @@ def _mostrar_confirmacion_restaurar(patologia: str, anio: int, codigo: int, usua
             type="primary",
             icon=":material/published_with_changes:",
             key=f"confirmar_restaurar_si_{clave}",
-            use_container_width=True,
+            width="stretch",
         ):
             _restaurar(patologia, anio, codigo, usuario, clave, forzar=True)
     with columna_no:
-        if st.button("Cancelar", key=f"confirmar_restaurar_no_{clave}", use_container_width=True):
+        if st.button("Cancelar", key=f"confirmar_restaurar_no_{clave}", width="stretch"):
             st.session_state[CLAVE_CONFLICTO_RESTAURAR][clave] = False
             st.rerun()
 
@@ -100,7 +100,7 @@ def _mostrar_confirmacion_eliminar(patologia: str, anio: int, codigo: int, usuar
             type="primary",
             icon=":material/delete_forever:",
             key=f"confirmar_eliminar_si_{clave}",
-            use_container_width=True,
+            width="stretch",
         ):
             eliminar_para_siempre(
                 patologia,
@@ -114,7 +114,7 @@ def _mostrar_confirmacion_eliminar(patologia: str, anio: int, codigo: int, usuar
             st.session_state[CLAVE_CONFIRMAR_ELIMINAR][clave] = False
             st.rerun()
     with columna_no:
-        if st.button("Cancelar", key=f"confirmar_eliminar_no_{clave}", use_container_width=True):
+        if st.button("Cancelar", key=f"confirmar_eliminar_no_{clave}", width="stretch"):
             st.session_state[CLAVE_CONFIRMAR_ELIMINAR][clave] = False
             st.rerun()
 

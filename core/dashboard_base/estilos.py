@@ -15,7 +15,7 @@ from pathlib import Path
 import streamlit as st
 
 RUTA_ASSETS = Path(__file__).resolve().parents[2] / "assets"
-RUTA_ESCUDO_UNIMAGDALENA = RUTA_ASSETS / "unimagdalena.svg"
+RUTA_ESCUDO_UNIMAGDALENA = RUTA_ASSETS / "unimagdalena.png"
 RUTA_ICONO_SIVIDEM = RUTA_ASSETS / "icono_sividem.svg"
 RUTA_ICONO_SIVIDEM_PNG = RUTA_ASSETS / "icono_sividem.png"
 RUTA_LOGO_SIVIDEM = RUTA_ASSETS / "logo_sividem.svg"
@@ -111,19 +111,6 @@ def aplicar_estilos() -> None:
         }
         .st-key-tarjeta_login input {
             font-size: 1.05rem !important;
-        }
-        /* El padre directo de la lista de pestanas (no stLayoutWrapper, ese rompe sticky
-           en sus hijos) se fija debajo del encabezado completo; el contenido de cada
-           pestana sigue siendo hermano de este padre, asi que se desplaza con normalidad. */
-        div[data-testid="stTabs"] div:has(> div[role="tablist"]) {
-            position: sticky !important;
-            top: 227px !important;
-            z-index: 9998 !important;
-            width: 100% !important;
-            background-color: #EEF1F5 !important;
-            padding-top: 0.5rem;
-            padding-left: 0.5rem;
-            box-shadow: 0 6px 10px -4px rgba(16, 24, 40, 0.12) !important;
         }
         </style>
         """

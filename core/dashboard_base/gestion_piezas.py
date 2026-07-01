@@ -54,7 +54,7 @@ def mostrar_piezas_activas(patologia: str, usuario) -> None:
             "Editar (reemplazar archivo)",
             icon=":material/edit:",
             key=f"editar_{clave_pieza}",
-            use_container_width=True,
+            width="stretch",
         ):
             st.session_state.setdefault(CLAVE_EDITANDO, {})[clave_pieza] = True
 
@@ -63,7 +63,7 @@ def mostrar_piezas_activas(patologia: str, usuario) -> None:
             "Eliminar",
             icon=":material/delete:",
             key=f"eliminar_{clave_pieza}",
-            use_container_width=True,
+            width="stretch",
         ):
             _eliminar(patologia, pieza["anio"], pieza["codigo"], usuario)
 

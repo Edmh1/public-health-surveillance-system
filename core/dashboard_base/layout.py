@@ -31,7 +31,11 @@ from core.dashboard_base.estilos import (
 )
 from core.dashboard_base.gestion_papelera import mostrar_papelera
 from core.dashboard_base.gestion_piezas import mostrar_piezas_activas
-from core.dashboard_base.gestion_subida import fragmento_subidas_pendientes, mostrar_formulario_subida
+from core.dashboard_base.gestion_subida import (
+    fragmento_avisos_subida,
+    mostrar_banner_confirmacion,
+    mostrar_formulario_subida,
+)
 from core.dashboard_base.procesamientos_vista import mostrar_procesamientos
 from core.registry import listar_patologias, obtener_patologia
 
@@ -76,7 +80,12 @@ def ejecutar_dashboard() -> None:
                 f"{len(datos_filtrados):,} registros tras los filtros, de {len(datos_completos):,} en el consolidado."
             )
 
-    fragmento_banner_datos_nuevos(patologia)
+        # Los fragmentos de avisos van DENTRO del encabezado_fijo para que no existan
+        # elementos DOM entre el header sticky y las pestanas. Si se colocan fuera,
+        # sus contenedores desplazan las pestanas fuera del viewport y el CSS de
+        # posicion fija (top: 227px) deja de cuadrar con la altura real del header.
+        fragmento_banner_datos_nuevos(patologia)
+        fragmento_avisos_subida(usuario.nombre_usuario)
 
     _mostrar_pestanas(patologia, usuario, plugin, datos_filtrados)
 
@@ -157,7 +166,7 @@ def _mostrar_filtros_en_sidebar(
     patologia: str, datos_completos, columna_anio: str, mapeo_subregion: dict[int, str]
 ) -> dict:
     if st.sidebar.button(
-        "Actualizar datos", icon=":material/refresh:", use_container_width=True, key="actualizar_datos_sidebar"
+        "Actualizar datos", icon=":material/refresh:", width="stretch", key="actualizar_datos_sidebar"
     ):
         modulo_datos.actualizar(patologia)
         st.rerun()
@@ -184,13 +193,13 @@ def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
         st.caption("Piezas, papelera, bitacora y procesamientos no se autoactualizan; usa este boton para refrescarlos.")
     with columna_actualizar:
         if st.button(
-            "Actualizar", icon=":material/refresh:", use_container_width=True, key=f"actualizar_gestion_{patologia}",
+            "Actualizar", icon=":material/refresh:", width="stretch", key=f"actualizar_gestion_{patologia}",
         ):
             st.rerun()
 
     if tiene_permiso(usuario.rol, PERMISO_SUBIR_PIEZA):
+        mostrar_banner_confirmacion(patologia)
         mostrar_formulario_subida(patologia, usuario)
-        fragmento_subidas_pendientes(usuario.nombre_usuario)
 
     if tiene_permiso(usuario.rol, PERMISO_ELIMINAR_PIEZA):
         mostrar_piezas_activas(patologia, usuario)

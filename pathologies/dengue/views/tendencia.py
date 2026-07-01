@@ -18,6 +18,12 @@ from core.geografia import obtener_geojson_municipios_magdalena
 
 CODIGOS_CASOS = {210, 220}
 
+OPCIONES_NIVEL_GEOGRAFICO = ["Subregion", "Municipio"]
+ETIQUETAS_NIVEL_GEOGRAFICO = {
+    "Subregion": ":material/map: Subregion",
+    "Municipio": ":material/location_city: Municipio",
+}
+
 
 def mostrar_tendencia(datos: pd.DataFrame) -> None:
     casos = datos[datos["cod_eve"].isin(CODIGOS_CASOS)]
@@ -28,23 +34,30 @@ def mostrar_tendencia(datos: pd.DataFrame) -> None:
 
     columna_anio, columna_variacion = st.columns([3, 1])
     with columna_anio:
-        _mostrar_casos_por_anio(casos)
+        with st.container(border=True, height="stretch"):
+            _mostrar_casos_por_anio(casos)
     with columna_variacion:
-        _mostrar_variacion_porcentual(casos)
+        with st.container(border=True, height="stretch"):
+            _mostrar_variacion_porcentual(casos)
 
-    _mostrar_casos_semanales(casos)
-    _mostrar_evolucion_temporal(casos)
-    _mostrar_mapa(casos)
+    with st.container(border=True):
+        _mostrar_casos_semanales(casos)
+
+    with st.container(border=True):
+        _mostrar_evolucion_temporal(casos)
+
+    with st.container(border=True):
+        _mostrar_mapa(casos)
 
 
 def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
-    st.subheader("Casos por anio")
+    st.subheader(":material/bar_chart: Casos por anio")
     casos_por_anio = casos.groupby("ano").size().reset_index(name="casos")
 
     figura = px.bar(casos_por_anio, x="ano", y="casos", text="casos")
     figura.update_xaxes(type="category", title="Anio")
     figura.update_yaxes(title="Casos")
-    st.plotly_chart(figura, use_container_width=True)
+    st.plotly_chart(figura, width="stretch")
 
 
 def _mostrar_variacion_porcentual(casos: pd.DataFrame) -> None:
@@ -68,7 +81,7 @@ def _mostrar_variacion_porcentual(casos: pd.DataFrame) -> None:
 
 
 def _mostrar_casos_semanales(casos: pd.DataFrame) -> None:
-    st.subheader("Casos semanales por anio")
+    st.subheader(":material/show_chart: Casos semanales por anio")
     casos_semanales = casos.groupby(["ano", "semana"]).size().reset_index(name="casos")
     casos_semanales["ano"] = casos_semanales["ano"].astype(str)
 
@@ -80,13 +93,18 @@ def _mostrar_casos_semanales(casos: pd.DataFrame) -> None:
         markers=True,
         labels={"semana": "Semana epidemiologica", "casos": "Casos", "ano": "Anio"},
     )
-    st.plotly_chart(figura, use_container_width=True)
+    st.plotly_chart(figura, width="stretch")
 
 
 def _mostrar_evolucion_temporal(casos: pd.DataFrame) -> None:
-    st.subheader("Evolucion temporal")
-    nivel = st.radio(
-        "Agrupar por", ["Subregion", "Municipio"], horizontal=True, key="tendencia_evolucion_nivel"
+    st.subheader(":material/timeline: Evolucion temporal")
+    nivel = st.segmented_control(
+        "Agrupar por",
+        OPCIONES_NIVEL_GEOGRAFICO,
+        default="Subregion",
+        required=True,
+        format_func=lambda opcion: ETIQUETAS_NIVEL_GEOGRAFICO[opcion],
+        key="tendencia_evolucion_nivel",
     )
     columna_nivel = "subregion" if nivel == "Subregion" else "nom_mun_o"
 
@@ -106,12 +124,19 @@ def _mostrar_evolucion_temporal(casos: pd.DataFrame) -> None:
         markers=True,
         labels={"ano": "Anio", "casos": "Casos", columna_nivel: nivel},
     )
-    st.plotly_chart(figura, use_container_width=True)
+    st.plotly_chart(figura, width="stretch")
 
 
 def _mostrar_mapa(casos: pd.DataFrame) -> None:
-    st.subheader("Mapa del Magdalena")
-    nivel = st.radio("Ver por", ["Subregion", "Municipio"], horizontal=True, key="tendencia_mapa_nivel")
+    st.subheader(":material/map: Mapa del Magdalena")
+    nivel = st.segmented_control(
+        "Ver por",
+        OPCIONES_NIVEL_GEOGRAFICO,
+        default="Subregion",
+        required=True,
+        format_func=lambda opcion: ETIQUETAS_NIVEL_GEOGRAFICO[opcion],
+        key="tendencia_mapa_nivel",
+    )
 
     casos_con_geografia = casos[casos["mun_valido"]].dropna(subset=["cod_mun_completo", "subregion"])
     if casos_con_geografia.empty:
@@ -141,12 +166,11 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
         locations="cod_mun_completo_str",
         featureidkey="properties.mpio_cdpmp",
         color="casos",
-        color_continuous_scale="Reds",
         labels={"casos": etiqueta_color},
     )
     figura.update_geos(fitbounds="locations", visible=False)
     figura.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
-    st.plotly_chart(figura, use_container_width=True)
+    st.plotly_chart(figura, width="stretch")
     st.caption(
         "Mapa por conteo de casos. La incidencia (tasa por poblacion en riesgo) se "
         "incorpora cuando se construya poblacion en riesgo, junto a los KPIs."

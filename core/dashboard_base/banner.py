@@ -40,7 +40,7 @@ def _mostrar_banner(patologia: str, hay_datos_nuevos: bool) -> None:
     with columna_actualizar:
         if st.button(
             "Actualizar", type="primary", icon=":material/refresh:",
-            key=f"actualizar_banner_{patologia}", use_container_width=True,
+            key=f"actualizar_banner_{patologia}", width="stretch",
         ):
             modulo_datos.actualizar(patologia)
             st.rerun()
