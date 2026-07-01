@@ -166,7 +166,11 @@ def _mostrar_filtros_en_sidebar(
     patologia: str, datos_completos, columna_anio: str, mapeo_subregion: dict[int, str]
 ) -> dict:
     if st.sidebar.button(
-        "Actualizar datos", icon=":material/refresh:", width="stretch", key="actualizar_datos_sidebar"
+        "Actualizar datos",
+        icon=":material/sync:",
+        width="stretch",
+        key="actualizar_datos_sidebar",
+        type="primary",
     ):
         modulo_datos.actualizar(patologia)
         st.rerun()
@@ -188,27 +192,59 @@ def _tiene_algo_que_gestionar(usuario) -> bool:
 
 
 def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
-    columna_titulo, columna_actualizar = st.columns([6, 1])
-    with columna_titulo:
-        st.caption("Piezas, papelera, bitacora y procesamientos no se autoactualizan; usa este boton para refrescarlos.")
-    with columna_actualizar:
+    col_info, col_btn = st.columns([5, 1], vertical_alignment="center")
+    with col_info:
+        st.caption(":material/info: Piezas, papelera e historial no se actualizan automaticamente.")
+    with col_btn:
         if st.button(
-            "Actualizar", icon=":material/refresh:", width="stretch", key=f"actualizar_gestion_{patologia}",
+            "Actualizar",
+            icon=":material/refresh:",
+            width="stretch",
+            key=f"actualizar_gestion_{patologia}",
         ):
             st.rerun()
 
-    if tiene_permiso(usuario.rol, PERMISO_SUBIR_PIEZA):
-        mostrar_banner_confirmacion(patologia)
-        mostrar_formulario_subida(patologia, usuario)
+    tiene_subir     = tiene_permiso(usuario.rol, PERMISO_SUBIR_PIEZA)
+    tiene_piezas    = tiene_permiso(usuario.rol, PERMISO_ELIMINAR_PIEZA)
+    tiene_papelera  = tiene_permiso(usuario.rol, PERMISO_VER_PAPELERA)
+    tiene_historial = (
+        tiene_permiso(usuario.rol, PERMISO_VER_PROCESAMIENTOS)
+        or tiene_permiso(usuario.rol, PERMISO_VER_BITACORA)
+    )
 
-    if tiene_permiso(usuario.rol, PERMISO_ELIMINAR_PIEZA):
-        mostrar_piezas_activas(patologia, usuario)
+    entradas = []
+    if tiene_subir:     entradas.append(":material/upload_file: Subir")
+    if tiene_piezas:    entradas.append(":material/folder_open: Piezas activas")
+    if tiene_papelera:  entradas.append(":material/delete: Papelera")
+    if tiene_historial: entradas.append(":material/history: Historial")
 
-    if tiene_permiso(usuario.rol, PERMISO_VER_PAPELERA):
-        mostrar_papelera(patologia, usuario)
+    if not entradas:
+        return
 
-    if tiene_permiso(usuario.rol, PERMISO_VER_BITACORA):
-        mostrar_bitacora(patologia)
+    tabs = st.tabs(entradas)
+    i = 0
 
-    if tiene_permiso(usuario.rol, PERMISO_VER_PROCESAMIENTOS):
-        mostrar_procesamientos(patologia)
+    if tiene_subir:
+        with tabs[i]:
+            mostrar_banner_confirmacion(patologia)
+            mostrar_formulario_subida(patologia, usuario)
+        i += 1
+
+    if tiene_piezas:
+        with tabs[i]:
+            mostrar_piezas_activas(patologia, usuario)
+        i += 1
+
+    if tiene_papelera:
+        with tabs[i]:
+            mostrar_papelera(patologia, usuario)
+        i += 1
+
+    if tiene_historial:
+        with tabs[i]:
+            if tiene_permiso(usuario.rol, PERMISO_VER_PROCESAMIENTOS):
+                mostrar_procesamientos(patologia)
+            if tiene_permiso(usuario.rol, PERMISO_VER_BITACORA):
+                if tiene_permiso(usuario.rol, PERMISO_VER_PROCESAMIENTOS):
+                    st.divider()
+                mostrar_bitacora(patologia)

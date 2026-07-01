@@ -154,7 +154,7 @@ def _panel_contexto() -> None:
                 margin: 0 0 36px;
             ">
                 Herramienta de análisis epidemiológico departamental para la toma
-                de decisiones en salud publica. Monitoreo de tendencias, situación
+                de decisiones en salud pública. Monitoreo de tendencias, situación
                 territorial e indicadores de alerta temprana.
             </p>
 
@@ -197,7 +197,7 @@ def _panel_contexto() -> None:
             <img src="{icono_uri}" style="height: 56px; opacity: 0.85;">
             <div>
                 <div style="color: rgba(255,255,255,0.88); font-size: 13px; font-weight: 600;">
-                    CITES &mdash; Centro de Innovacion y Transferencia en Salud
+                    CITES &mdash; Centro de Innovación y Transferencia en Salud
                 </div>
                 <div style="color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 1px;">
                     Universidad del Magdalena &middot; Santa Marta, Colombia
@@ -250,9 +250,9 @@ def _panel_formulario() -> bool:
             placeholder="nombre@unimagdalena.edu.co",
         )
         contrasena = st.text_input(
-            ":material/lock: Contrasena",
+            ":material/lock: Contraseña",
             type="password",
-            placeholder="Tu contrasena institucional",
+            placeholder="Tu contraseña institucional",
         )
         st.space("small")
         enviado = st.form_submit_button(

@@ -1,105 +1,129 @@
-"""Piezas activas de la patologia: eliminarlas (soft delete a papelera) o editarlas.
+"""Piezas activas de la patologia: editarlas o moverlas a la papelera.
 
-Editar no tiene formulario propio con campos de anio/codigo: selecciona la pieza
-en la tabla y sube el archivo corregido para ese mismo anio+codigo. El worker
-decide solo que ya existe una pieza activa y la reemplaza (ver gestion_subida.py).
+Rediseñado con tarjetas en lugar de tabla+seleccion de fila: las acciones
+estan siempre visibles junto a cada pieza sin requerir que el usuario
+seleccione primero una fila y despues encuentre los botones debajo.
 """
 
-import pandas as pd
 import streamlit as st
 
 from core.audit.registro_piezas import listar_piezas_activas
+from core.audit.zona_horaria import formatear_fecha_local
 from core.dashboard_base import datos as modulo_datos
 from core.dashboard_base.gestion_subida import encolar_subida
+from core.dashboard_base.paginacion import buscar_y_paginar, mostrar_controles_paginacion
 from core.ingestion.papelera import mover_a_papelera
 from core.registry import obtener_patologia
 from core.storage import rutas
-
-COLUMNAS_TABLA = {"anio": "Anio", "codigo": "Codigo", "archivo_original": "Archivo"}
 
 CLAVE_EDITANDO = "piezas_editando"
 CLAVE_CONTADOR_UPLOADER_EDITAR = "piezas_contador_widget_uploader_editar"
 
 
 def mostrar_piezas_activas(patologia: str, usuario) -> None:
-    st.subheader(":material/folder_open: Piezas activas")
-
     piezas = listar_piezas_activas(patologia)
+
     if not piezas:
-        st.caption(f"Aun no hay piezas activas. Sube el primer archivo de {patologia} para empezar.")
+        with st.container(border=True):
+            st.info(
+                f":material/folder_open: Aun no hay piezas activas para {patologia}. "
+                "Usa la pestana Subir para agregar la primera.",
+                icon=":material/info:",
+            )
         return
 
-    tabla = pd.DataFrame(piezas)[list(COLUMNAS_TABLA.keys())].rename(columns=COLUMNAS_TABLA)
-    seleccion = st.dataframe(
-        tabla,
-        hide_index=True,
-        width="stretch",
-        height=280,
-        on_select="rerun",
-        selection_mode="single-row",
-        key=f"tabla_piezas_activas_{patologia}",
+    # Primero el año mas reciente; dentro de cada año, orden por codigo
+    piezas_ordenadas = sorted(piezas, key=lambda p: (-p["anio"], p["codigo"]))
+
+    pagina_items, pagina, total = buscar_y_paginar(
+        piezas_ordenadas,
+        clave="piezas_activas",
+        campos_busqueda=["archivo_original", "anio", "codigo"],
+        placeholder="Buscar por archivo, año o codigo...",
     )
 
-    filas_seleccionadas = seleccion.selection.rows
-    if not filas_seleccionadas:
-        st.caption("Selecciona una fila de la tabla para editarla o eliminarla.")
-        return
+    for pieza in pagina_items:
+        clave_pieza = f"{patologia}_{pieza['anio']}_{pieza['codigo']}"
+        _mostrar_tarjeta_pieza(patologia, pieza, usuario, clave_pieza)
+        if st.session_state.get(CLAVE_EDITANDO, {}).get(clave_pieza):
+            _mostrar_formulario_editar(patologia, pieza, usuario, clave_pieza)
 
-    pieza = piezas[filas_seleccionadas[0]]
-    clave_pieza = f"{patologia}_{pieza['anio']}_{pieza['codigo']}"
+    mostrar_controles_paginacion("piezas_activas", pagina, total)
 
-    columna_editar, columna_eliminar = st.columns(2)
-    with columna_editar:
-        if st.button(
-            "Editar (reemplazar archivo)",
-            icon=":material/edit:",
-            key=f"editar_{clave_pieza}",
-            width="stretch",
-        ):
-            st.session_state.setdefault(CLAVE_EDITANDO, {})[clave_pieza] = True
 
-    with columna_eliminar:
-        if st.button(
-            "Eliminar",
-            icon=":material/delete:",
-            key=f"eliminar_{clave_pieza}",
-            width="stretch",
-        ):
-            _eliminar(patologia, pieza["anio"], pieza["codigo"], usuario)
+def _mostrar_tarjeta_pieza(patologia: str, pieza: dict, usuario, clave_pieza: str) -> None:
+    with st.container(border=True):
+        col_info, col_acciones = st.columns([3, 1], vertical_alignment="center")
 
-    if st.session_state.get(CLAVE_EDITANDO, {}).get(clave_pieza):
-        _mostrar_formulario_editar(patologia, pieza, usuario, clave_pieza)
+        with col_info:
+            st.markdown(f":material/description: **{pieza['archivo_original']}**")
+            fecha = formatear_fecha_local(pieza["fecha_creacion"])
+            st.caption(f"Año {pieza['anio']} · Codigo {pieza['codigo']} · {fecha}")
+
+        with col_acciones:
+            if st.button(
+                "Editar",
+                icon=":material/edit:",
+                key=f"editar_{clave_pieza}",
+                width="stretch",
+                help="Reemplaza el archivo de esta pieza con una version corregida.",
+            ):
+                editando = st.session_state.setdefault(CLAVE_EDITANDO, {})
+                editando[clave_pieza] = not editando.get(clave_pieza, False)
+
+            if st.button(
+                "Eliminar",
+                icon=":material/delete:",
+                key=f"eliminar_{clave_pieza}",
+                width="stretch",
+                help="Mueve esta pieza a la papelera. Es recuperable desde la pestana Papelera.",
+            ):
+                _eliminar(patologia, pieza["anio"], pieza["codigo"], usuario)
 
 
 def _mostrar_formulario_editar(patologia: str, pieza: dict, usuario, clave_pieza: str) -> None:
     anio = pieza["anio"]
     codigo = pieza["codigo"]
 
-    contadores_uploader = st.session_state.setdefault(CLAVE_CONTADOR_UPLOADER_EDITAR, {})
-    contador = contadores_uploader.get(clave_pieza, 0)
+    contadores = st.session_state.setdefault(CLAVE_CONTADOR_UPLOADER_EDITAR, {})
+    contador = contadores.get(clave_pieza, 0)
 
-    with st.form(f"editar_pieza_{clave_pieza}"):
+    with st.container(border=True):
         st.caption(
-            f"Subir version corregida de anio {anio}, codigo {codigo}. "
-            f"Reemplaza por completo a {pieza['archivo_original']}; el historico de otros anios no se toca."
+            f"Sube la version corregida de **{pieza['archivo_original']}** "
+            f"(Año {anio} · Codigo {codigo}). El historico de otras piezas no se toca."
         )
-        archivo_corregido = st.file_uploader(
-            "Archivo SIVIGILA (.xls o .xlsx)", type=["xls", "xlsx"], key=f"archivo_editar_{clave_pieza}_{contador}"
-        )
-        confirmado = st.form_submit_button("Confirmar y procesar", type="primary", icon=":material/check_circle:")
+        with st.form(f"editar_pieza_{clave_pieza}", border=False):
+            archivo = st.file_uploader(
+                "Archivo SIVIGILA (.xls o .xlsx)",
+                type=["xls", "xlsx"],
+                key=f"archivo_editar_{clave_pieza}_{contador}",
+            )
+            col_cancelar, col_confirmar = st.columns(2)
+            with col_cancelar:
+                cancelar = st.form_submit_button("Cancelar", width="stretch")
+            with col_confirmar:
+                confirmar = st.form_submit_button(
+                    "Confirmar y procesar",
+                    type="primary",
+                    icon=":material/check_circle:",
+                    width="stretch",
+                )
 
-    if not confirmado:
+    if cancelar:
+        st.session_state.setdefault(CLAVE_EDITANDO, {})[clave_pieza] = False
+        st.rerun()
+
+    if not confirmar:
         return
 
-    if archivo_corregido is None:
+    if archivo is None:
         st.warning("Selecciona un archivo antes de confirmar.")
         return
 
-    encolar_subida(patologia, anio, codigo, archivo_corregido.name, archivo_corregido.getvalue(), usuario)
-    st.session_state[CLAVE_EDITANDO][clave_pieza] = False
-    # Rota la key del uploader: la prox vez que se abra este formulario de editar (esta
-    # misma pieza), el widget nace vacio en vez de seguir mostrando el archivo ya enviado.
-    contadores_uploader[clave_pieza] = contador + 1
+    encolar_subida(patologia, anio, codigo, archivo.name, archivo.getvalue(), usuario)
+    st.session_state.setdefault(CLAVE_EDITANDO, {})[clave_pieza] = False
+    contadores[clave_pieza] = contador + 1
 
 
 def _eliminar(patologia: str, anio: int, codigo: int, usuario) -> None:
