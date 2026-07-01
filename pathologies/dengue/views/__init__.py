@@ -7,6 +7,8 @@ CLAUDE.md para el detalle de cada pestana.
 import pandas as pd
 import streamlit as st
 
+from pathologies.dengue.views.morbilidad import mostrar_morbilidad
+from pathologies.dengue.views.sociodemografica import mostrar_sociodemografica
 from pathologies.dengue.views.tendencia import mostrar_tendencia
 
 
@@ -18,13 +20,6 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
     _mostrar_pendiente(
         "Esta pestana mostrara los KPIs (incidencia, mortalidad, letalidad), el canal "
         "endemico y el pronostico de corto plazo. Se construye pronto."
-    )
-
-
-def mostrar_sociodemografica(datos: pd.DataFrame) -> None:
-    _mostrar_pendiente(
-        "Esta pestana mostrara las distribuciones por sexo, edad, etnia, regimen, EPS, "
-        "UPGD, estrato, area y ocupacion. Se construye pronto."
     )
 
 
