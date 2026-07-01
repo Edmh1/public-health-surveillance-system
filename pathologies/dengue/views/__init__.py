@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from pathologies.dengue.views.morbilidad import mostrar_morbilidad
+from pathologies.dengue.views.mortalidad import mostrar_mortalidad
 from pathologies.dengue.views.sociodemografica import mostrar_sociodemografica
 from pathologies.dengue.views.tendencia import mostrar_tendencia
 
@@ -23,18 +24,8 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
     )
 
 
-def mostrar_morbilidad(datos: pd.DataFrame) -> None:
-    _mostrar_pendiente(
-        "Esta pestana mostrara la fuente de notificacion, clasificacion del caso y las "
-        "tasas de hospitalizacion e incidencia por subregion. Se construye pronto."
-    )
 
 
-def mostrar_mortalidad(datos: pd.DataFrame) -> None:
-    _mostrar_pendiente(
-        "Esta pestana mostrara las muertes por semana, sexo, edad, EPS y las tasas de "
-        "mortalidad y letalidad por subregion, con causas CIE-10. Se construye pronto."
-    )
 
 
 def obtener_vistas_dengue() -> list[tuple[str, callable]]:
