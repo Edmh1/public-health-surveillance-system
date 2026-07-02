@@ -1,38 +1,22 @@
-"""Las 5 pestanas del dashboard de dengue: Tendencia, Situacion, Sociodemografica,
-Morbilidad y Mortalidad. Tendencia ya esta construida (ver tendencia.py); el resto
-sigue como esqueleto (estado vacio) hasta que se construyan sus graficos; ver
-CLAUDE.md para el detalle de cada pestana.
+"""Las 5 pestanas del dashboard de dengue: Situacion, Tendencia, Sociodemografica,
+Morbilidad y Mortalidad; ver CLAUDE.md para el detalle de cada pestana. Situacion va
+primero (KPIs + mapa de situacion + canal endemico): es el resumen ejecutivo de
+"como estamos ahora", antes de entrar al detalle historico de Tendencia. Solo el
+pronostico (2.3) queda pendiente en Situacion, ver PROGRESO.md.
 """
-
-import pandas as pd
-import streamlit as st
 
 from pathologies.dengue.views.morbilidad import mostrar_morbilidad
 from pathologies.dengue.views.mortalidad import mostrar_mortalidad
+from pathologies.dengue.views.situacion import mostrar_situacion
 from pathologies.dengue.views.sociodemografica import mostrar_sociodemografica
 from pathologies.dengue.views.tendencia import mostrar_tendencia
-
-
-def _mostrar_pendiente(mensaje: str) -> None:
-    st.info(f":material/construction: {mensaje}")
-
-
-def mostrar_situacion(datos: pd.DataFrame) -> None:
-    _mostrar_pendiente(
-        "Esta pestaña mostrará los KPIs (incidencia, mortalidad, letalidad), el canal "
-        "endémico y el pronóstico de corto plazo. Se construye pronto."
-    )
-
-
-
-
 
 
 def obtener_vistas_dengue() -> list[tuple[str, callable]]:
     """Nombre de cada pestana y su funcion de render, en el orden en que se muestran."""
     return [
-        ("Tendencia", mostrar_tendencia),
         ("Situación", mostrar_situacion),
+        ("Tendencia", mostrar_tendencia),
         ("Sociodemográfica", mostrar_sociodemografica),
         ("Morbilidad", mostrar_morbilidad),
         ("Mortalidad", mostrar_mortalidad),

@@ -47,6 +47,7 @@ CLAVES_REINICIABLES = (
     "filtro_municipio",
     "filtro_anio_rango",
     "filtro_semana_rango",
+    "filtro_nivel_riesgo",
     "filtro_clasificacion",
 )
 
@@ -64,6 +65,18 @@ def _agregar_columna_subregion(datos: pd.DataFrame, mapeo_subregion: dict[int, s
     datos_con_subregion = datos.copy()
     datos_con_subregion["subregion"] = datos_con_subregion["cod_mun_completo"].map(mapeo_subregion)
     return datos_con_subregion
+
+
+def _agregar_columna_nivel_riesgo(datos: pd.DataFrame, mapeo_estratificacion_riesgo: dict[int, str]) -> pd.DataFrame:
+    """Deriva nivel_riesgo en memoria desde cod_mun_completo, igual que subregion.
+    Si la patologia no tiene mapeo de estratificacion (mapeo vacio), la columna
+    queda toda nula y el filtro simplemente no ofrece opciones.
+    """
+    if "cod_mun_completo" not in datos.columns:
+        return datos.assign(nivel_riesgo=pd.NA)
+    datos_con_nivel_riesgo = datos.copy()
+    datos_con_nivel_riesgo["nivel_riesgo"] = datos_con_nivel_riesgo["cod_mun_completo"].map(mapeo_estratificacion_riesgo)
+    return datos_con_nivel_riesgo
 
 
 def _corregir_rango(clave: str, opciones: list) -> None:
@@ -96,12 +109,19 @@ def _contar_activos(anios_disponibles: list, semanas_disponibles: list) -> int:
     if semanas_disponibles and len(semanas_disponibles) >= 2 and rango_semana:
         if rango_semana != (semanas_disponibles[0], semanas_disponibles[-1]):
             n += 1
+    if st.session_state.get("filtro_nivel_riesgo"):
+        n += 1
     if st.session_state.get("filtro_clasificacion"):
         n += 1
     return n
 
 
-def mostrar_filtros_globales(datos: pd.DataFrame, columna_anio: str, mapeo_subregion: dict[int, str]) -> dict:
+def mostrar_filtros_globales(
+    datos: pd.DataFrame,
+    columna_anio: str,
+    mapeo_subregion: dict[int, str],
+    mapeo_estratificacion_riesgo: dict[int, str],
+) -> dict:
     """Dibuja los filtros globales en la barra lateral y devuelve los valores elegidos."""
     datos_con_subregion = _agregar_columna_subregion(datos, mapeo_subregion)
     anios_disponibles = _opciones_de_columna(datos, columna_anio)
@@ -187,6 +207,26 @@ def mostrar_filtros_globales(datos: pd.DataFrame, columna_anio: str, mapeo_subre
     else:
         semanas_elegidas = []
 
+    # ----- Estratificacion de riesgo -----
+    # Si la patologia no tiene mapeo (dict vacio, ver PathologyPlugin.obtener_mapeo_
+    # estratificacion_riesgo), esta seccion no se dibuja: no tiene sentido un filtro
+    # sin opciones.
+    if mapeo_estratificacion_riesgo:
+        st.sidebar.caption(":material/warning: ESTRATIFICACIÓN DE RIESGO")
+
+        datos_con_nivel_riesgo = _agregar_columna_nivel_riesgo(datos, mapeo_estratificacion_riesgo)
+        niveles_disponibles = _opciones_de_columna(datos_con_nivel_riesgo, "nivel_riesgo")
+        niveles_elegidos = st.sidebar.pills(
+            "Estratificación de riesgo",
+            niveles_disponibles,
+            selection_mode="multi",
+            default=[],
+            key="filtro_nivel_riesgo",
+            label_visibility="collapsed",
+        )
+    else:
+        niveles_elegidos = []
+
     # ----- Clasificacion del caso -----
     st.sidebar.caption(":material/assignment: CLASIFICACIÓN DEL CASO")
 
@@ -204,28 +244,27 @@ def mostrar_filtros_globales(datos: pd.DataFrame, columna_anio: str, mapeo_subre
     else:
         clasificaciones_elegidas = []
 
-    # ----- Proximamente (colapsado) -----
-    with st.sidebar.expander("Próximamente", icon=":material/schedule:", expanded=False):
-        st.caption(
-            ":material/construction: Estratificación de riesgo: pendiente del Excel "
-            "externo cruzado por código DIVIPOLA."
-        )
-        st.caption(":material/construction: Situación: pendiente del canal endémico.")
-
     filtros = {
         columna_anio: anios_elegidos,
         "semana": semanas_elegidas,
         "subregion": subregiones_elegidas,
         "nom_mun_o": municipios_elegidos,
+        "nivel_riesgo": niveles_elegidos,
         "estado_final_de_caso": clasificaciones_elegidas,
     }
     st.session_state[CLAVE_FILTROS] = filtros
     return filtros
 
 
-def aplicar_filtros(datos: pd.DataFrame, filtros: dict, mapeo_subregion: dict[int, str]) -> pd.DataFrame:
+def aplicar_filtros(
+    datos: pd.DataFrame,
+    filtros: dict,
+    mapeo_subregion: dict[int, str],
+    mapeo_estratificacion_riesgo: dict[int, str],
+) -> pd.DataFrame:
     """Filtra el dataframe en memoria segun los filtros elegidos. No toca el disco."""
     datos_filtrados = _agregar_columna_subregion(datos, mapeo_subregion)
+    datos_filtrados = _agregar_columna_nivel_riesgo(datos_filtrados, mapeo_estratificacion_riesgo)
     for columna, valores_elegidos in filtros.items():
         if not valores_elegidos:
             continue

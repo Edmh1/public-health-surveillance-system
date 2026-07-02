@@ -134,6 +134,16 @@ def aplicar_estilos() -> None:
         [role="tabpanel"] > div:first-child {
             padding-top: 1rem !important;
         }
+        /* Las pestanas dentro de un dialogo (ej. metodologia del canal endemico) no
+           necesitan sticky: el top:225px se calculo para el header fijo de la pagina
+           principal, no tiene sentido dentro de un modal. Selector mas especifico que
+           el de arriba para ganar sobre el !important. */
+        div[data-testid="stDialog"] div[data-testid="stTabs"] div:has(> div[role="tablist"]) {
+            position: static !important;
+            top: auto !important;
+            z-index: auto !important;
+            box-shadow: none !important;
+        }
         </style>
         """
     )

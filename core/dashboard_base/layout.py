@@ -71,8 +71,13 @@ def ejecutar_dashboard() -> None:
 
         datos_completos = modulo_datos.obtener_datos(patologia)
         mapeo_subregion = plugin.obtener_mapeo_subregion()
-        filtros = _mostrar_filtros_en_sidebar(patologia, datos_completos, plugin.columna_anio, mapeo_subregion)
-        datos_filtrados = modulo_filtros.aplicar_filtros(datos_completos, filtros, mapeo_subregion)
+        mapeo_estratificacion_riesgo = plugin.obtener_mapeo_estratificacion_riesgo()
+        filtros = _mostrar_filtros_en_sidebar(
+            patologia, datos_completos, plugin.columna_anio, mapeo_subregion, mapeo_estratificacion_riesgo
+        )
+        datos_filtrados = modulo_filtros.aplicar_filtros(
+            datos_completos, filtros, mapeo_subregion, mapeo_estratificacion_riesgo
+        )
 
         with marcador_titulo.container():
             st.title(f"Vigilancia de {plugin.nombre}")
@@ -163,7 +168,11 @@ def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
 
 
 def _mostrar_filtros_en_sidebar(
-    patologia: str, datos_completos, columna_anio: str, mapeo_subregion: dict[int, str]
+    patologia: str,
+    datos_completos,
+    columna_anio: str,
+    mapeo_subregion: dict[int, str],
+    mapeo_estratificacion_riesgo: dict[int, str],
 ) -> dict:
     if st.sidebar.button(
         "Actualizar datos",
@@ -175,7 +184,9 @@ def _mostrar_filtros_en_sidebar(
         modulo_datos.actualizar(patologia)
         st.rerun()
 
-    return modulo_filtros.mostrar_filtros_globales(datos_completos, columna_anio, mapeo_subregion)
+    return modulo_filtros.mostrar_filtros_globales(
+        datos_completos, columna_anio, mapeo_subregion, mapeo_estratificacion_riesgo
+    )
 
 
 def _tiene_algo_que_gestionar(usuario) -> bool:
