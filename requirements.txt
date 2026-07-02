@@ -3,6 +3,7 @@ plotly
 python-dotenv
 pandas>=2.0
 pyarrow
+shapely
 scikit-learn>=1.2
 openpyxl
 xlrd

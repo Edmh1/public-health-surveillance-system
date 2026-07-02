@@ -130,3 +130,70 @@ def obtener_poblacion_por_municipio_anio() -> pd.DataFrame:
     poblacion = poblacion[poblacion["cod_mun_completo"].isin(municipios_con_transmision)]
 
     return poblacion[["cod_mun_completo", "ano", "poblacion"]].reset_index(drop=True)
+
+
+def obtener_poblacion_departamental(anios_en_alcance: list[int]) -> float | None:
+    """Poblacion en riesgo del Magdalena completo (suma de los 30 municipios) para
+    los anios dados. Util para la linea de referencia departamental en graficas
+    por subregion (ej. 5.7 en mortalidad.py). None si falta poblacion para alguno
+    de esos anios, nunca un numero incompleto.
+    """
+    if not anios_en_alcance:
+        return None
+    poblacion_municipio = obtener_poblacion_por_municipio_anio()
+    poblacion_periodo = poblacion_municipio[poblacion_municipio["ano"].isin(anios_en_alcance)]
+    anios_con_poblacion = set(poblacion_periodo["ano"].unique())
+    if not set(anios_en_alcance).issubset(anios_con_poblacion):
+        return None
+    return float(poblacion_periodo["poblacion"].sum())
+
+
+def obtener_poblacion_por_subregion_anio(mapeo_subregion: dict[int, str]) -> pd.DataFrame:
+    """Poblacion en riesgo agregada a nivel subregion (suma de sus municipios) por
+    anio. Reutiliza obtener_poblacion_por_municipio_anio(); es la base de las tasas
+    por subregion en las vistas (tendencia, morbilidad, mortalidad).
+
+    Devuelve columnas: subregion, ano, poblacion.
+    """
+    poblacion_municipio = obtener_poblacion_por_municipio_anio().copy()
+    poblacion_municipio["subregion"] = poblacion_municipio["cod_mun_completo"].map(mapeo_subregion)
+    poblacion_municipio = poblacion_municipio.dropna(subset=["subregion"])
+    return poblacion_municipio.groupby(["subregion", "ano"], as_index=False)["poblacion"].sum()
+
+
+def calcular_tasa_por_subregion(
+    eventos: pd.DataFrame,
+    anios_en_alcance: list[int],
+    mapeo_subregion: dict[int, str],
+) -> dict[str, float | None]:
+    """Tasa por 100.000 hab. de cada subregion del Magdalena para el conjunto de
+    eventos dado (casos o muertes, ya filtrados, con columna "subregion").
+
+    anios_en_alcance son los anios cuya poblacion se suma como denominador
+    (persona-anios si son varios, misma logica que indicators.py._poblacion_en_
+    riesgo: no se usa un solo anio de referencia si el filtro cubre un rango).
+    Si falta poblacion para alguno de los anios pedidos en una subregion, esa
+    subregion queda en None (no disponible), nunca en cero: el sistema no
+    publica numeros falsos.
+
+    Devuelve un dict {subregion: tasa_o_None}, con TODAS las subregiones del
+    mapeo (incluidas las que no tuvieron ningun evento: tasa 0.0, no None).
+    """
+    poblacion_subregion = obtener_poblacion_por_subregion_anio(mapeo_subregion)
+    poblacion_periodo = poblacion_subregion[poblacion_subregion["ano"].isin(anios_en_alcance)]
+
+    resultado: dict[str, float | None] = {}
+    for subregion in sorted(set(mapeo_subregion.values())):
+        if not anios_en_alcance:
+            resultado[subregion] = None
+            continue
+        poblacion_sub = poblacion_periodo[poblacion_periodo["subregion"] == subregion]
+        anios_con_poblacion = set(poblacion_sub["ano"].unique())
+        if not set(anios_en_alcance).issubset(anios_con_poblacion):
+            resultado[subregion] = None
+            continue
+        poblacion_total = poblacion_sub["poblacion"].sum()
+        n_eventos = int((eventos["subregion"] == subregion).sum())
+        resultado[subregion] = n_eventos / poblacion_total * 100_000
+
+    return resultado

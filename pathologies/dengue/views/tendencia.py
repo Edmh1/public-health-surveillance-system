@@ -12,9 +12,17 @@ import pandas as pd
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
-from core.geografia import obtener_geojson_municipios_magdalena
+from core.geografia import obtener_geojson_municipios_magdalena, obtener_geojson_subregiones
+from pathologies.dengue.geografia import obtener_mapeo_subregion
+from pathologies.dengue.poblacion import calcular_tasa_por_subregion
 
 CODIGOS_CASOS = {210, 220}
+
+# Escala azul para los mapas de coropletas. NO arranca en blanco: la escala
+# "Blues" de Plotly llega casi a blanco en su extremo bajo, y la subregion de
+# menor valor se perdia contra el fondo blanco de la pagina. El piso es un azul
+# claro pero visible; el techo, el azul institucional oscuro.
+ESCALA_INCIDENCIA = ["#9ecae1", "#5ba3d0", "#2a6db0", "#1b3a6b"]
 
 _NIVEL_OPCIONES = ["Subregión", "Municipio"]
 _NIVEL_ETIQUETAS = {
@@ -66,11 +74,13 @@ def mostrar_tendencia(datos: pd.DataFrame) -> None:
 def _mostrar_kpis(casos: pd.DataFrame) -> None:
     total = len(casos)
 
-    # Variacion vs anio anterior
     por_anio = casos.groupby("ano").size().sort_index()
+    anios_ordenados = [int(a) for a in por_anio.index]
+    anio_actual = anios_ordenados[-1] if anios_ordenados else None
+
+    # Variacion vs anio anterior
     if len(por_anio) >= 2:
-        anio_actual   = int(por_anio.index[-1])
-        anio_anterior = int(por_anio.index[-2])
+        anio_anterior = anios_ordenados[-2]
         n_actual   = int(por_anio.iloc[-1])
         n_anterior = int(por_anio.iloc[-2])
         pct = (n_actual - n_anterior) / n_anterior * 100 if n_anterior else 0
@@ -79,42 +89,57 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
         valor_anio = f"{n_actual:,}"
         delta_anio = f"{pct:+.1f}% vs {anio_anterior}"
     elif len(por_anio) == 1:
-        label_anio = f"Casos {int(por_anio.index[-1])}"
+        label_anio = f"Casos {anio_actual}"
         valor_anio = f"{int(por_anio.iloc[-1]):,}"
         delta_anio = None
     else:
         label_anio, valor_anio, delta_anio = "Casos (año)", "—", None
 
-    # Semana pico
-    if "semana" in casos.columns and not casos["semana"].dropna().empty:
-        sem = casos.groupby("semana").size()
+    # Semana pico y municipio mas afectado se calculan SOBRE EL ANIO MAS RECIENTE
+    # (no sobre todos los anios combinados, que daria una semana/municipio "pico"
+    # sumando anios distintos, poco interpretable). El periodo queda explicito en
+    # el label y en la leyenda de arriba de las tarjetas.
+    casos_anio = casos[casos["ano"] == anio_actual] if anio_actual is not None else casos
+
+    if "semana" in casos_anio.columns and not casos_anio["semana"].dropna().empty:
+        sem = casos_anio.groupby("semana").size()
         semana_pico  = int(sem.idxmax())
         casos_pico   = int(sem.max())
         semana_label = f"Sem. {semana_pico}"
-        semana_help  = f"{casos_pico:,} casos en esa semana"
+        semana_help  = f"{casos_pico:,} casos en la semana {semana_pico} de {anio_actual}"
     else:
         semana_label, semana_help = "—", None
 
-    # Municipio con mayor carga (mas util que subregion cuando se filtra por subregion)
-    if "nom_mun_o" in casos.columns:
-        mun = casos["nom_mun_o"].dropna().value_counts()
+    if "nom_mun_o" in casos_anio.columns:
+        mun = casos_anio["nom_mun_o"].dropna().value_counts()
         if not mun.empty:
             top_mun  = str(mun.index[0])
-            top_help = f"{int(mun.iloc[0]):,} casos notificados"
+            top_help = f"{int(mun.iloc[0]):,} casos en {anio_actual}"
         else:
             top_mun, top_help = "—", None
     else:
         top_mun, top_help = "—", None
 
+    if anio_actual is not None:
+        st.caption(
+            f":material/calendar_today: **Casos totales** cubren todo el período filtrado; "
+            f"**semana pico** y **municipio más afectado** corresponden a {anio_actual} "
+            "(el año más reciente)."
+        )
+
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Casos totales", f"{total:,}")
+        st.metric("Casos totales", f"{total:,}", help="Total en todos los años filtrados.", border=True)
     with c2:
-        st.metric(label_anio, valor_anio, delta=delta_anio)
+        # delta con flecha SI es legitimo aqui: compara contra el año anterior
+        # (una variacion real que subio o bajo), a diferencia de los KPI de "% del
+        # total" del resto del dashboard.
+        st.metric(label_anio, valor_anio, delta=delta_anio, border=True)
     with c3:
-        st.metric("Semana pico", semana_label, help=semana_help)
+        etiqueta_semana = f"Semana pico {anio_actual}" if anio_actual is not None else "Semana pico"
+        st.metric(etiqueta_semana, semana_label, help=semana_help, border=True)
     with c4:
-        st.metric("Municipio más afectado", top_mun, help=top_help)
+        st.metric("Municipio más afectado", top_mun, help=top_help, border=True)
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +155,16 @@ def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
                  labels={"ano": "Año", "casos": "Casos"})
     fig.update_xaxes(type="category")
     fig.update_traces(texttemplate="%{text:,}", textposition="outside")
+
+    # Linea de promedio anual: da una referencia de "año alto vs año bajo".
+    promedio = float(por_anio["casos"].mean())
+    fig.add_hline(
+        y=promedio,
+        line_dash="dot",
+        line_color=NARANJA_INSTITUCIONAL,
+        annotation_text=f"Promedio {promedio:,.0f}",
+        annotation_position="top left",
+    )
     fig.update_layout(**_LAYOUT_BASE)
     st.plotly_chart(fig, width="stretch")
 
@@ -139,7 +174,10 @@ def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_mapa(casos: pd.DataFrame) -> None:
-    """Click-to-drill: vista general de subregiones → clic → zoom a municipios."""
+    """Vista general por subregion (incidencia); al pasar el mouse se resalta la
+    subregion completa (un poligono por subregion). Clic -> zoom a los municipios
+    de esa subregion (conteo), donde el hover ya es por municipio.
+    """
     st.subheader(":material/map: Mapa del Magdalena")
 
     subregion_activa = st.session_state.get("mapa_subregion_seleccionada")
@@ -152,37 +190,82 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
     con_geo = con_geo.copy()
     con_geo["cod_mun_completo"] = con_geo["cod_mun_completo"].astype(int)
 
+    if subregion_activa:
+        _mostrar_mapa_drilldown(con_geo, subregion_activa)
+    else:
+        _mostrar_mapa_overview(con_geo)
+
+
+def _mostrar_mapa_overview(con_geo: pd.DataFrame) -> None:
+    st.caption(":material/touch_app: Haz clic en una subregión para ver el detalle por municipio.")
+
+    anios_en_alcance = sorted(int(a) for a in con_geo["ano"].dropna().unique())
+    mapeo_subregion = obtener_mapeo_subregion()
+    incidencia_por_subregion = calcular_tasa_por_subregion(con_geo, anios_en_alcance, mapeo_subregion)
+    casos_por_subregion = con_geo["subregion"].value_counts().to_dict()
+
+    todas_subregiones = sorted(set(mapeo_subregion.values()))
+    datos_mapa = pd.DataFrame({"subregion": todas_subregiones})
+    datos_mapa["incidencia"] = datos_mapa["subregion"].map(incidencia_por_subregion)
+    datos_mapa["casos"] = datos_mapa["subregion"].map(casos_por_subregion).fillna(0).astype(int)
+
+    geojson = obtener_geojson_subregiones(mapeo_subregion)
+
+    fig = px.choropleth(
+        datos_mapa,
+        geojson=geojson,
+        locations="subregion",
+        featureidkey="properties.subregion",
+        color="incidencia",
+        color_continuous_scale=ESCALA_INCIDENCIA,
+        labels={"casos": "Casos", "incidencia": "Incidencia (x100.000 hab.)", "subregion": "Subregión"},
+        hover_data={"subregion": True, "casos": True, "incidencia": ":.1f"},
+    )
+    fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
+    fig.update_geos(fitbounds="locations", visible=False)
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=360)
+
+    resultado = st.plotly_chart(
+        fig, width="stretch", on_select="rerun", selection_mode="points", key="mapa_overview",
+    )
+
+    try:
+        puntos = resultado.selection.points
+    except AttributeError:
+        puntos = []
+    if puntos:
+        # locations="subregion" -> el click devuelve el nombre de la subregion directo.
+        subregion_clickeada = puntos[0].get("location")
+        if subregion_clickeada:
+            st.session_state["mapa_subregion_seleccionada"] = str(subregion_clickeada)
+            st.rerun()
+
+    st.caption(
+        "Incidencia = casos (210+220) / población en riesgo x 100.000. "
+        "Subregiones en gris no tienen población DANE para el período filtrado."
+    )
+
+
+def _mostrar_mapa_drilldown(con_geo: pd.DataFrame, subregion_activa: str) -> None:
+    col_volver, col_titulo = st.columns([1, 4], vertical_alignment="center")
+    with col_volver:
+        if st.button("Volver", icon=":material/arrow_back:", key="mapa_volver", width="stretch"):
+            st.session_state["mapa_subregion_seleccionada"] = None
+            st.rerun()
+    with col_titulo:
+        st.caption(f":material/location_on: Subregión {subregion_activa} — municipios por casos")
+
     tiene_nom_mun = "nom_mun_o" in con_geo.columns
     cols_grupo = ["cod_mun_completo", "subregion"] + (["nom_mun_o"] if tiene_nom_mun else [])
-    conteo = con_geo.groupby(cols_grupo).size().reset_index(name="casos_mun")
+    conteo = con_geo.groupby(cols_grupo).size().reset_index(name="casos")
     conteo["cod_str"] = conteo["cod_mun_completo"].apply(lambda x: f"{x:05d}")
 
+    datos_mapa = conteo[conteo["subregion"] == subregion_activa].copy()
+    hover = {"cod_str": False, "subregion": False, "casos": True}
+    if tiene_nom_mun:
+        hover["nom_mun_o"] = True
+
     geojson = obtener_geojson_municipios_magdalena()
-
-    if subregion_activa:
-        # DRILL-DOWN: solo los municipios de la subregion clicada
-        col_volver, col_titulo = st.columns([1, 4], vertical_alignment="center")
-        with col_volver:
-            if st.button("Volver", icon=":material/arrow_back:", key="mapa_volver", width="stretch"):
-                st.session_state["mapa_subregion_seleccionada"] = None
-                st.rerun()
-        with col_titulo:
-            st.caption(f":material/location_on: Subregión {subregion_activa} — municipios por casos")
-
-        datos_mapa = conteo[conteo["subregion"] == subregion_activa].copy()
-        datos_mapa["casos"] = datos_mapa["casos_mun"]
-        hover = {"cod_str": False, "subregion": False, "casos": True}
-        if tiene_nom_mun:
-            hover["nom_mun_o"] = True
-        chart_key = "mapa_drill"
-
-    else:
-        # VISTA GENERAL: subregiones (cada municipio hereda el total de su subregion)
-        st.caption(":material/touch_app: Haz clic en cualquier zona para ver el detalle por municipio.")
-        datos_mapa = conteo.copy()
-        datos_mapa["casos"] = datos_mapa.groupby("subregion")["casos_mun"].transform("sum")
-        hover = {"cod_str": False, "subregion": True, "casos": True}
-        chart_key = "mapa_overview"
 
     fig = px.choropleth(
         datos_mapa,
@@ -190,35 +273,16 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
         locations="cod_str",
         featureidkey="properties.mpio_cdpmp",
         color="casos",
-        labels={"casos": "Casos"},
+        color_continuous_scale=ESCALA_INCIDENCIA,
+        labels={"casos": "Casos", "nom_mun_o": "Municipio"},
         hover_data=hover,
     )
+    fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
     fig.update_geos(fitbounds="locations", visible=False)
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=360)
+    st.plotly_chart(fig, width="stretch", key="mapa_drill")
 
-    resultado = st.plotly_chart(
-        fig,
-        width="stretch",
-        on_select="rerun",
-        selection_mode="points",
-        key=chart_key,
-    )
-
-    # Manejo del click de drill-down (solo desde la vista general)
-    if not subregion_activa:
-        try:
-            puntos = resultado.selection.points
-        except AttributeError:
-            puntos = []
-        if puntos:
-            cod_clickeado = puntos[0].get("location")
-            if cod_clickeado:
-                fila = conteo[conteo["cod_str"] == cod_clickeado]
-                if not fila.empty:
-                    st.session_state["mapa_subregion_seleccionada"] = str(fila.iloc[0]["subregion"])
-                    st.rerun()
-
-    st.caption("Conteo de casos. La incidencia por población en riesgo se incorpora junto a los KPIs.")
+    st.caption("Conteo de casos por municipio. Las tasas solo se calculan a escala subregión.")
 
 
 # ---------------------------------------------------------------------------
@@ -300,12 +364,14 @@ def _grafica_comparacion_vs_anterior(casos: pd.DataFrame, anio: int) -> None:
 
     fig = go.Figure()
 
+    # Hover propio "Semana X · Y casos (año)" en vez de la coordenada (x, y) cruda.
     if not df_prev.empty:
         fig.add_trace(go.Bar(
             x=df_prev["semana"], y=df_prev["casos"],
             name=str(anio_prev),
             marker_color=NARANJA_INSTITUCIONAL,
             opacity=0.65,
+            hovertemplate=f"Semana %{{x}} · %{{y:,}} casos ({anio_prev})<extra></extra>",
         ))
 
     if not df_act.empty:
@@ -315,6 +381,7 @@ def _grafica_comparacion_vs_anterior(casos: pd.DataFrame, anio: int) -> None:
             name=str(anio),
             line=dict(color=AZUL_INSTITUCIONAL, width=2),
             marker=dict(size=4),
+            hovertemplate=f"Semana %{{x}} · %{{y:,}} casos ({anio})<extra></extra>",
         ))
 
     fig.update_layout(

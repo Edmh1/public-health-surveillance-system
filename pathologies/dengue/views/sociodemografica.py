@@ -136,13 +136,16 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Casos totales", f"{total:,}")
+        st.metric("Casos totales", f"{total:,}", border=True)
     with c2:
         st.metric(
             "Gestantes",
             f"{n_gest:,}",
             delta=_pct(n_gest, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
     with c3:
         st.metric(
@@ -150,6 +153,9 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
             f"{n_men5:,}",
             delta=_pct(n_men5, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
     with c4:
         st.metric(
@@ -157,6 +163,9 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
             f"{n_may65:,}",
             delta=_pct(n_may65, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
 
 

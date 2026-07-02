@@ -5,9 +5,8 @@ Historia que cuenta:
   2. Panorama general: tipo de caso / flujo clasificacion (Sankey) / fuente
   3. Evolucion semanal: casos por tipo + % graves (selector anio local)
   4. Hospitalizacion: temporal + territorial (selector tipo de caso)
-  5. Clasificacion final: dona + distribucion semanal
-
-4.10 (incidencia por subregion) requiere poblacion DANE: pendiente.
+  5. Incidencia por subregion (4.10)
+  6. Clasificacion final: dona + distribucion semanal
 """
 
 import pandas as pd
@@ -16,6 +15,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
+from core.dashboard_base.filtros import CLAVE_FILTROS
+from pathologies.dengue.geografia import obtener_mapeo_subregion
+from pathologies.dengue.indicators import calcular_indicadores
+from pathologies.dengue.poblacion import calcular_tasa_por_subregion
 
 CODIGOS_CASOS = {210, 220}
 COD_DENGUE       = 210
@@ -80,7 +83,22 @@ def mostrar_morbilidad(datos: pd.DataFrame) -> None:
         st.info("No hay casos de dengue para los filtros actuales.", icon=":material/info:")
         return
 
-    _mostrar_kpis(casos)
+    # Incidencia (tasa poblacional) vive aca ademas de en Situacion: en Situacion
+    # es de un solo anio; aca sigue el filtro global, asi que se puede ver por
+    # rangos de anios. Respeta la regla de "no disponible" (municipio / sin DANE)
+    # porque sale del mismo calcular_indicadores.
+    filtros_actuales = st.session_state.get(CLAVE_FILTROS, {})
+    resultado_indicadores = calcular_indicadores(datos, filtros_actuales)
+
+    anios = sorted(int(a) for a in casos["ano"].dropna().unique())
+    if anios:
+        periodo = str(anios[0]) if len(anios) == 1 else f"{anios[0]}-{anios[-1]}"
+        st.caption(
+            f":material/calendar_today: Indicadores del período filtrado ({periodo}). "
+            "La incidencia es una tasa anual por 100.000 habitantes."
+        )
+
+    _mostrar_kpis(casos, resultado_indicadores["incidencia"])
     st.space("small")
 
     # Panorama: tipo / flujo clasificacion / fuente comparativa (3 columnas)
@@ -121,12 +139,18 @@ def mostrar_morbilidad(datos: pd.DataFrame) -> None:
         with st.container(border=True, height="stretch"):
             _mostrar_hospitalizacion_territorial(casos)
 
+    st.space("small")
+
+    # Incidencia por subregion (4.10) — FULL WIDTH
+    with st.container(border=True):
+        _mostrar_incidencia_subregion(casos)
+
 
 # ---------------------------------------------------------------------------
 # KPIs
 # ---------------------------------------------------------------------------
 
-def _mostrar_kpis(casos: pd.DataFrame) -> None:
+def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
     total = len(casos)
     graves = int((casos["cod_eve"] == COD_DENGUE_GRAVE).sum())
 
@@ -138,30 +162,52 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
             ((casos["cod_eve"] == COD_DENGUE_GRAVE) & (casos["pac_hos"] == 1)).sum()
         )
 
-    c1, c2, c3, c4 = st.columns(4)
+    incidencia_txt = f"{incidencia:,.1f}" if incidencia is not None else "No disponible"
+
+    c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        st.metric("Casos totales", f"{total:,}")
+        st.metric("Casos totales", f"{total:,}", border=True)
     with c2:
+        st.metric(
+            "Incidencia",
+            incidencia_txt,
+            help=(
+                "Casos (210+220) / población en riesgo x 100.000. No disponible si el "
+                "filtro está en un municipio o falta población DANE (las tasas solo son "
+                "confiables a escala subregión o departamento)."
+            ),
+            border=True,
+        )
+    with c3:
         st.metric(
             "Hospitalizados",
             f"{hosp:,}",
             delta=_pct(hosp, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
-    with c3:
+    with c4:
         st.metric(
             "Dengue grave (220)",
             f"{graves:,}",
             delta=_pct(graves, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
-    with c4:
+    with c5:
         st.metric(
             "Hospitalizados graves",
             f"{hosp_graves:,}",
             delta=_pct(hosp_graves, graves),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="de los graves",
             help="Hospitalizados de dengue grave sobre el total de casos graves",
+            border=True,
         )
 
 
@@ -379,7 +425,8 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
             "Dengue grave (220)": NARANJA_INSTITUCIONAL,
         },
     )
-    # Linea de % graves sobre eje secundario
+    # Linea de % graves sobre eje secundario. Hover propio: "Semana X · Y%" en
+    # vez de la coordenada (x, y) cruda que muestra Plotly por defecto.
     fig.add_trace(go.Scatter(
         x=pct_df["semana"],
         y=pct_df["pct_grave"],
@@ -388,6 +435,7 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
         marker=dict(size=5),
         line=dict(dash="dot", width=1.5, color="#555555"),
         yaxis="y2",
+        hovertemplate="Semana %{x} · %{y:.1f}% graves<extra></extra>",
     ))
     fig.update_layout(
         yaxis2=dict(overlaying="y", side="right", title="% Graves", showgrid=False),
@@ -448,7 +496,7 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4.6 + 4.7  Hospitalizacion territorial (subregion + municipio)
+# 4.6 + 4.7  Hospitalizacion territorial (subregion: tasa; municipio: conteo)
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
@@ -472,24 +520,30 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
         st.caption("Sin hospitalizados para ese filtro.")
         return
 
-    # Subregion
+    # Subregion: TASA por 100.000 hab. (nunca conteo, ver CLAUDE.md).
     if "subregion" in subset.columns:
-        sub = subset["subregion"].dropna().value_counts().reset_index()
-        sub.columns = ["territorio", "hospitalizados"]
-        sub = sub.sort_values("hospitalizados")
-        fig_sub = px.bar(
-            sub, x="hospitalizados", y="territorio", text="hospitalizados",
-            orientation="h",
-            labels={"hospitalizados": "Hospitalizados", "territorio": ""},
-        )
-        fig_sub.update_traces(textposition="outside", texttemplate="%{text:,}")
-        fig_sub.update_layout(
-            title="Por subregión (conteo)",
-            margin=dict(l=0, r=0, t=40, b=0),
-        )
-        st.plotly_chart(fig_sub, width="stretch")
+        anios_en_alcance = sorted(int(a) for a in casos["ano"].dropna().unique())
+        mapeo_subregion = obtener_mapeo_subregion()
+        tasas = calcular_tasa_por_subregion(subset, anios_en_alcance, mapeo_subregion)
 
-    # Municipio — top 15
+        sub = pd.DataFrame({"territorio": list(tasas.keys()), "tasa": list(tasas.values())})
+        sub = sub.dropna(subset=["tasa"]).sort_values("tasa")
+        if sub.empty:
+            st.caption("Sin población DANE disponible para el período filtrado.")
+        else:
+            fig_sub = px.bar(
+                sub, x="tasa", y="territorio", text="tasa",
+                orientation="h",
+                labels={"tasa": "Hospitalizados x100.000 hab.", "territorio": ""},
+            )
+            fig_sub.update_traces(textposition="outside", texttemplate="%{text:.1f}")
+            fig_sub.update_layout(
+                title="Por subregión (tasa x100.000 hab.)",
+                margin=dict(l=0, r=0, t=40, b=0),
+            )
+            st.plotly_chart(fig_sub, width="stretch")
+
+    # Municipio — top 15, conteo (las tasas nunca son confiables a esta escala).
     if "nom_mun_o" in subset.columns:
         mun = subset["nom_mun_o"].dropna().value_counts().head(15).reset_index()
         mun.columns = ["municipio", "hospitalizados"]
@@ -507,8 +561,41 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
         st.plotly_chart(fig_mun, width="stretch")
 
     st.caption(
-        ":material/construction: Tasa por 100.000 hab. pendiente de datos poblacionales DANE."
+        "Tasa = hospitalizados / población en riesgo x 100.000. A nivel municipio se "
+        "muestra conteo, nunca tasa (denominador poblacional no confiable a esa escala)."
     )
+
+
+# ---------------------------------------------------------------------------
+# 4.10  Incidencia por subregion
+# ---------------------------------------------------------------------------
+
+def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
+    st.subheader(":material/bar_chart: Incidencia por subregión")
+
+    if "subregion" not in casos.columns:
+        st.caption("Sin datos de subregión.")
+        return
+
+    anios_en_alcance = sorted(int(a) for a in casos["ano"].dropna().unique())
+    mapeo_subregion = obtener_mapeo_subregion()
+    tasas = calcular_tasa_por_subregion(casos, anios_en_alcance, mapeo_subregion)
+
+    df = pd.DataFrame({"subregion": list(tasas.keys()), "incidencia": list(tasas.values())})
+    df = df.dropna(subset=["incidencia"]).sort_values("incidencia")
+    if df.empty:
+        st.caption("Sin población DANE disponible para el período filtrado.")
+        return
+
+    fig = px.bar(
+        df, x="incidencia", y="subregion", text="incidencia",
+        orientation="h",
+        labels={"incidencia": "Incidencia x100.000 hab.", "subregion": ""},
+    )
+    fig.update_traces(textposition="outside", texttemplate="%{text:.1f}")
+    fig.update_layout(**_LAYOUT)
+    st.plotly_chart(fig, width="stretch")
+    st.caption("Incidencia = casos (210+220) / población en riesgo x 100.000, por subregión.")
 
 
 # ---------------------------------------------------------------------------
