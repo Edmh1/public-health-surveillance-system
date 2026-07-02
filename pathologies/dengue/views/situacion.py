@@ -58,9 +58,35 @@ _ZONA_COLOR = {
 }
 
 
+# canal_endemico.py es calculo puro (sin Streamlit, ver su docstring); el cache
+# vive aqui, en la vista, para no ensuciar ese modulo con una dependencia de
+# Streamlit. Evita recalcular cuando un widget SIN relacion (ej. un filtro
+# global, u otro control de esta misma pestana) dispara un rerun completo pero
+# los argumentos de esta llamada puntual no cambiaron.
+@st.cache_data(show_spinner=False)
+def _calcular_canal_endemico_cacheado(
+    datos_procesados: pd.DataFrame, metodo: str, anio_vigilancia: int, anios_base: list[int]
+) -> dict:
+    return calcular_canal_endemico(datos_procesados, metodo=metodo, anio_vigilancia=anio_vigilancia, anios_base=anios_base)
+
+
+@st.cache_data(show_spinner=False)
+def _calcular_situacion_cacheada(
+    datos_con_subregion: pd.DataFrame, anio_vigilancia: int, anios_base: list[int]
+) -> pd.DataFrame:
+    return calcular_situacion_actual_por_subregion(
+        datos_con_subregion, anio_vigilancia=anio_vigilancia, anios_base=anios_base
+    )
+
+
 def mostrar_situacion(datos: pd.DataFrame) -> None:
     filtros_actuales = st.session_state.get(CLAVE_FILTROS, {})
-    resultado_indicadores = calcular_indicadores(datos, filtros_actuales)
+    # Spinner solo aqui: es el primer calculo de la pestana, bloquea antes de que
+    # se vea cualquier cosa (KPIs, mapa, canal endemico van despues). Sin esto,
+    # la pantalla se queda en blanco unos segundos sin ninguna senal de que algo
+    # esta pasando, sobre todo la primera vez que se carga poblacion DANE.
+    with st.spinner("Calculando indicadores...", show_time=True):
+        resultado_indicadores = calcular_indicadores(datos, filtros_actuales)
 
     with st.container(border=True):
         _mostrar_kpis(resultado_indicadores)
@@ -82,7 +108,7 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
 
     st.caption(
         ":material/construction: El pronóstico de corto plazo (modelo predictivo a "
-        "nivel departamental) se construye más adelante."
+        "nivel departamental) en construcción :)."
     )
 
 
@@ -209,7 +235,7 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
         return
     anio_vigilancia, anios_base_seleccionados = resultado_seleccion
 
-    situacion = calcular_situacion_actual_por_subregion(
+    situacion = _calcular_situacion_cacheada(
         casos, anio_vigilancia=anio_vigilancia, anios_base=anios_base_seleccionados
     )
     if situacion.empty:
@@ -348,7 +374,7 @@ def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
 
     col_cuartiles, col_bortman = st.columns(2)
     for columna, (metodo, etiqueta) in zip((col_cuartiles, col_bortman), _METODOS):
-        resultado = calcular_canal_endemico(
+        resultado = _calcular_canal_endemico_cacheado(
             datos_territorio,
             metodo=metodo,
             anio_vigilancia=anio_vigilancia,

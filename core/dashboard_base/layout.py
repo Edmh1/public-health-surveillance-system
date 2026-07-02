@@ -105,6 +105,36 @@ ICONOS_PESTANAS = {
 }
 
 
+@st.fragment
+def _fragmento_pestana(funcion_render, datos_filtrados) -> None:
+    """Aisla el rerun de cada pestana. Sin esto, cualquier interaccion (un filtro
+    global, un selector local de una grafica) hace que Streamlit vuelva a
+    ejecutar el codigo de las 5 pestanas completas y reenvie sus graficos al
+    navegador, aunque solo una este visible.
+
+    El fragment_id de Streamlit se calcula incluyendo la posicion en el arbol de
+    layout (dentro de que tab esta, no solo que funcion es), asi que llamar esta
+    MISMA funcion una vez por pestana ya las distingue solas; no hace falta una
+    funcion separada por pestana.
+
+    Cuidado con el bug historico de "pantalla blanca a los 4 segundos" (ver
+    seccion "Arquitectura de fragmentos" en PROGRESO.md): paso porque un
+    fragment con run_every tenia su posicion desplazada por un elemento
+    condicional (el banner) que aparecia ANTES de el entre reruns. Las pestanas
+    siempre se renderizan en el mismo orden fijo (sin nada condicional antes del
+    st.tabs()), asi que esa posicion no deberia desplazarse. Si se llega a
+    agregar contenido condicional ANTES del bloque st.tabs() en
+    _mostrar_pestanas, revisar este comentario primero.
+    """
+    funcion_render(datos_filtrados)
+
+
+@st.fragment
+def _fragmento_gestion(patologia: str, usuario) -> None:
+    """Mismo aislamiento que _fragmento_pestana, para la pestana de Gestion."""
+    _mostrar_seccion_gestion(patologia, usuario)
+
+
 def _mostrar_pestanas(patologia: str, usuario, plugin, datos_filtrados) -> None:
     """Las 5 pestanas que expone la patologia, mas la pestana de Gestion al final
     (solo si el rol del usuario habilita algo que gestionar).
@@ -121,11 +151,11 @@ def _mostrar_pestanas(patologia: str, usuario, plugin, datos_filtrados) -> None:
 
     for pestana, (_, funcion_render) in zip(pestanas, vistas):
         with pestana:
-            funcion_render(datos_filtrados)
+            _fragmento_pestana(funcion_render, datos_filtrados)
 
     if mostrar_gestion:
         with pestanas[-1]:
-            _mostrar_seccion_gestion(patologia, usuario)
+            _fragmento_gestion(patologia, usuario)
 
 
 def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
