@@ -11,9 +11,17 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
-from pathologies.tuberculosis.views.utils import aplicar_filtro_tipo_tb
 
-CODIGOS_TB = {810, 820, 825}
+COD_PULMONAR = 820
+COD_EXTRAPULMONAR = 810
+COD_RESISTENTE = 825
+
+
+def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    codigos = set(datos["cod_eve"].unique())
+    if codigos == {COD_RESISTENTE}:
+        return datos
+    return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
 
 _LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
 
@@ -35,8 +43,7 @@ def mostrar_sociodemografica(datos: pd.DataFrame) -> None:
         st.info("No hay datos de tuberculosis cargados. Sube archivos SIVIGILA en la pestaña de Gestión.", icon=":material/info:")
         return
 
-    datos = aplicar_filtro_tipo_tb(datos)
-    casos = datos[datos["cod_eve"].isin(CODIGOS_TB)]
+    casos = _casos_total(datos)
 
     if casos.empty:
         st.info("No hay casos de tuberculosis para los filtros actuales.", icon=":material/info:")

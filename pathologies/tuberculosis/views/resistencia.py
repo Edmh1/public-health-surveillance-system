@@ -14,13 +14,17 @@ import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
 from core.geografia import obtener_geojson_municipios_magdalena
-from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
-from pathologies.tuberculosis.views.utils import aplicar_filtro_tipo_tb
 
 COD_TB_PULMONAR = 820
 COD_TB_EXTRAPULMONAR = 810
 COD_TB_RESISTENTE = 825
-CODIGOS_TB = {810, 820, 825}
+
+
+def _casos_base(datos: pd.DataFrame) -> pd.DataFrame:
+    codigos = set(datos["cod_eve"].unique())
+    if codigos == {COD_TB_RESISTENTE}:
+        return datos
+    return datos[datos["cod_eve"].isin({COD_TB_PULMONAR, COD_TB_EXTRAPULMONAR})]
 
 _LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
 
@@ -30,8 +34,7 @@ def mostrar_resistencia(datos: pd.DataFrame) -> None:
         st.info("No hay datos de tuberculosis cargados. Sube archivos SIVIGILA en la pestaña de Gestión.", icon=":material/info:")
         return
 
-    datos = aplicar_filtro_tipo_tb(datos)
-    casos = datos[datos["cod_eve"].isin(CODIGOS_TB)]
+    casos = _casos_base(datos)
     resistentes = datos[datos["cod_eve"] == COD_TB_RESISTENTE]
 
     if casos.empty:
@@ -45,7 +48,7 @@ def mostrar_resistencia(datos: pd.DataFrame) -> None:
     col_tendencia, col_tipo = st.columns(2)
     with col_tendencia:
         with st.container(border=True):
-            _mostrar_tendencia_resistencia(casos)
+            _mostrar_tendencia_resistencia(datos)
     with col_tipo:
         with st.container(border=True):
             _mostrar_composicion_resistencia(casos, resistentes)
@@ -53,7 +56,7 @@ def mostrar_resistencia(datos: pd.DataFrame) -> None:
     st.space("small")
 
     with st.container(border=True):
-        _mostrar_mapa_resistencia(casos)
+        _mostrar_mapa_resistencia(datos)
 
 
 def _mostrar_kpis(casos: pd.DataFrame, resistentes: pd.DataFrame) -> None:
@@ -74,8 +77,8 @@ def _mostrar_kpis(casos: pd.DataFrame, resistentes: pd.DataFrame) -> None:
     cols[3].metric("TB Extrapulmonar", f"{extrapulmonar:,}")
 
 
-def _mostrar_tendencia_resistencia(casos: pd.DataFrame) -> None:
-    copia = casos.copy()
+def _mostrar_tendencia_resistencia(datos: pd.DataFrame) -> None:
+    copia = datos.copy()
     copia["es_resistente"] = copia["cod_eve"] == COD_TB_RESISTENTE
 
     por_anio = copia.groupby("ano").agg(
@@ -116,10 +119,9 @@ def _mostrar_composicion_resistencia(casos: pd.DataFrame, resistentes: pd.DataFr
     copia = casos.copy()
     copia["tipo"] = "Pulmonar"
     copia.loc[copia["cod_eve"] == COD_TB_EXTRAPULMONAR, "tipo"] = "Extrapulmonar"
-    copia.loc[copia["cod_eve"] == COD_TB_RESISTENTE, "tipo"] = "Farmacorresistente"
 
     por_tipo = copia.groupby("tipo").size().reset_index(name="casos")
-    colores = {"Pulmonar": AZUL_INSTITUCIONAL, "Extrapulmonar": NARANJA_INSTITUCIONAL, "Farmacorresistente": "#c0392b"}
+    colores = {"Pulmonar": AZUL_INSTITUCIONAL, "Extrapulmonar": NARANJA_INSTITUCIONAL}
 
     fig = px.bar(
         por_tipo, x="tipo", y="casos", color="tipo",
@@ -138,8 +140,8 @@ def _mostrar_composicion_resistencia(casos: pd.DataFrame, resistentes: pd.DataFr
                    f"F: {por_sexo[por_sexo['sexo'].isin(['f', 'F'])]['casos'].sum()}")
 
 
-def _mostrar_mapa_resistencia(casos: pd.DataFrame) -> None:
-    copia = casos.copy()
+def _mostrar_mapa_resistencia(datos: pd.DataFrame) -> None:
+    copia = datos.copy()
     copia["es_resistente"] = copia["cod_eve"] == COD_TB_RESISTENTE
 
     por_mun = copia.groupby("cod_mun_completo").agg(
