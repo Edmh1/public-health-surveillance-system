@@ -1,7 +1,6 @@
 """Pestana 2 Situacion: KPIs, canal endemico, mapa de situacion y tabla de priorizacion.
 
-Incluye los 5 KPIs principales: incidencia, mortalidad, letalidad,
-% confirmacion bacteriologica y % TB resistente.
+Incluye 4 KPIs: incidencia, mortalidad, letalidad y % TB resistente.
 """
 
 import pandas as pd
@@ -21,11 +20,18 @@ from pathologies.tuberculosis.canal_endemico import (
     ZONAS_ORDEN,
     calcular_canal_endemico,
 )
-from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
 from pathologies.tuberculosis.indicators import calcular_indicadores
-from pathologies.tuberculosis.views.utils import aplicar_filtro_tipo_tb
 
-CODIGOS_TB = {810, 820, 825}
+COD_PULMONAR = 820
+COD_EXTRAPULMONAR = 810
+COD_RESISTENTE = 825
+
+
+def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    codigos = set(datos["cod_eve"].unique())
+    if codigos == {COD_RESISTENTE}:
+        return datos
+    return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
 
 COLORES_ZONA = {
     ZONA_EXITO: "#28a745",
@@ -42,8 +48,7 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
         st.info("No hay datos de tuberculosis cargados. Sube archivos SIVIGILA en la pestaña de Gestión.", icon=":material/info:")
         return
 
-    datos = aplicar_filtro_tipo_tb(datos)
-    casos = datos[datos["cod_eve"].isin(CODIGOS_TB)]
+    casos = _casos_total(datos)
 
     if casos.empty:
         st.info("No hay casos de tuberculosis para los filtros actuales.", icon=":material/info:")
@@ -70,7 +75,7 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
 def _mostrar_kpis(datos: pd.DataFrame) -> None:
     indicadores = calcular_indicadores(datos, st.session_state.get("filtros_globales", {}))
 
-    cols = st.columns(5)
+    cols = st.columns(4)
     cols[0].metric(
         "Incidencia TB",
         f"{indicadores['incidencia']:.2f}" if indicadores.get("incidencia") is not None else "N/D",
@@ -86,10 +91,6 @@ def _mostrar_kpis(datos: pd.DataFrame) -> None:
         f"{indicadores['letalidad']:.2f}%" if indicadores.get("letalidad") is not None else "N/D",
     )
     cols[3].metric(
-        "% Conf. bacteriológica",
-        f"{indicadores['pct_confirmados']:.1f}%" if indicadores.get("pct_confirmados") is not None else "N/D",
-    )
-    cols[4].metric(
         "% TB resistente",
         f"{indicadores['pct_resistentes']:.2f}%" if indicadores.get("pct_resistentes") is not None else "N/D",
     )
@@ -131,34 +132,36 @@ def _mostrar_mapa_situacion(casos: pd.DataFrame) -> None:
 
 
 def _mostrar_tabla_priorizacion(casos: pd.DataFrame) -> None:
-    mapeo_subregion = obtener_mapeo_subregion()
-    casos_copia = casos.copy()
-    casos_copia["subregion"] = casos_copia["cod_mun_completo"].map(mapeo_subregion)
-    casos_copia = casos_copia.dropna(subset=["subregion"])
+    ultimas_8_semanas = sorted(casos["semana"].dropna().unique())[-8:] if "semana" in casos.columns else []
+    casos_recientes = casos[casos["semana"].isin(ultimas_8_semanas)] if ultimas_8_semanas else casos
 
-    ultimas_8_semanas = sorted(casos_copia["semana"].dropna().unique())[-8:] if "semana" in casos_copia.columns else []
-    casos_recientes = casos_copia[casos_copia["semana"].isin(ultimas_8_semanas)] if ultimas_8_semanas else casos_copia
-
-    por_subregion = casos_copia.groupby("subregion").agg(
+    por_municipio = casos.groupby("cod_mun_completo").agg(
         casos=("cod_eve", "count"),
         muertes=("fec_def", lambda x: x.notna().sum()),
     ).reset_index()
 
-    recientes_por_sub = casos_recientes.groupby("subregion").size().reset_index(name="casos_recientes")
-    por_subregion = por_subregion.merge(recientes_por_sub, on="subregion", how="left")
-    por_subregion["casos_recientes"] = por_subregion["casos_recientes"].fillna(0).astype(int)
+    recientes_por_mun = casos_recientes.groupby("cod_mun_completo").size().reset_index(name="casos_recientes")
+    por_municipio = por_municipio.merge(recientes_por_mun, on="cod_mun_completo", how="left")
+    por_municipio["casos_recientes"] = por_municipio["casos_recientes"].fillna(0).astype(int)
 
-    por_subregion["tendencia"] = "Estable"
-    por_subregion = por_subregion.sort_values("casos", ascending=False)
+    if "nom_mun_o" in casos.columns:
+        nombres = casos[["cod_mun_completo", "nom_mun_o"]].drop_duplicates("cod_mun_completo")
+        por_municipio = por_municipio.merge(nombres, on="cod_mun_completo", how="left")
+
+    por_municipio = por_municipio.sort_values("casos", ascending=False)
+
+    columnas_mostrar = {
+        "cod_mun_completo": "Cód. municipio",
+        "casos": "Casos totales",
+        "muertes": "Muertes",
+        "casos_recientes": "Últimas 8 sem.",
+    }
+    if "nom_mun_o" in por_municipio.columns:
+        columnas_mostrar["nom_mun_o"] = "Municipio"
+        columnas_mostrar.pop("cod_mun_completo")
 
     st.dataframe(
-        por_subregion.rename(columns={
-            "subregion": "Subregión",
-            "casos": "Casos totales",
-            "muertes": "Muertes",
-            "casos_recientes": "Últimas 8 sem.",
-            "tendencia": "Tendencia reciente",
-        }),
+        por_municipio[list(columnas_mostrar.keys())].rename(columns=columnas_mostrar),
         use_container_width=True,
         hide_index=True,
     )

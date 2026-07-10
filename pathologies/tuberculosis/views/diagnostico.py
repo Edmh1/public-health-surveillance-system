@@ -11,9 +11,17 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
-from pathologies.tuberculosis.views.utils import aplicar_filtro_tipo_tb
 
-CODIGOS_TB = {810, 820, 825}
+COD_PULMONAR = 820
+COD_EXTRAPULMONAR = 810
+COD_RESISTENTE = 825
+
+
+def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    codigos = set(datos["cod_eve"].unique())
+    if codigos == {COD_RESISTENTE}:
+        return datos
+    return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
 
 _LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
 
@@ -28,8 +36,7 @@ def mostrar_diagnostico(datos: pd.DataFrame) -> None:
         st.info("No hay datos de tuberculosis cargados. Sube archivos SIVIGILA en la pestaña de Gestión.", icon=":material/info:")
         return
 
-    datos = aplicar_filtro_tipo_tb(datos)
-    casos = datos[datos["cod_eve"].isin(CODIGOS_TB)]
+    casos = _casos_total(datos)
 
     if casos.empty:
         st.info("No hay casos de tuberculosis para los filtros actuales.", icon=":material/info:")
@@ -65,8 +72,6 @@ def mostrar_diagnostico(datos: pd.DataFrame) -> None:
 
 def _mostrar_kpis(casos: pd.DataFrame) -> None:
     total = len(casos)
-    confirmados = int((casos["confirmados"] == 1).sum()) if "confirmados" in casos.columns else 0
-    pct_conf = confirmados / total * 100 if total else None
 
     oportunidad_mediana = None
     if "ini_sin" in casos.columns and "fec_not" in casos.columns:
@@ -75,13 +80,9 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
             dias = (con_fechas["fec_not"] - con_fechas["ini_sin"]).dt.days
             oportunidad_mediana = int(dias.median())
 
-    cols = st.columns(3)
+    cols = st.columns(2)
     cols[0].metric("Casos totales", f"{total:,}")
     cols[1].metric(
-        "% Confirmados",
-        f"{pct_conf:.1f}%" if pct_conf is not None else "N/D",
-    )
-    cols[2].metric(
         "Mediana días inicio → notificación",
         f"{oportunidad_mediana}" if oportunidad_mediana is not None else "N/D",
     )
@@ -112,7 +113,6 @@ def _mostrar_clasificacion(casos: pd.DataFrame) -> None:
 
     copia["tipo_tb"] = "Pulmonar"
     copia.loc[copia["cod_eve"] == 810, "tipo_tb"] = "Extrapulmonar"
-    copia.loc[copia["cod_eve"] == 825, "tipo_tb"] = "Farmacorresistente"
 
     por_anio = copia.groupby(["ano", "tipo_tb"]).size().reset_index(name="casos")
     por_anio["ano"] = por_anio["ano"].astype(int)
@@ -120,7 +120,7 @@ def _mostrar_clasificacion(casos: pd.DataFrame) -> None:
     fig = px.bar(
         por_anio, x="ano", y="casos", color="tipo_tb",
         title="Clasificación por tipo de TB (anual)",
-        color_discrete_sequence=[AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL, "#c0392b"],
+        color_discrete_sequence=[AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL],
     )
     fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title=None)
     st.plotly_chart(fig, use_container_width=True)
@@ -130,17 +130,16 @@ def _mostrar_tipo_tb(casos: pd.DataFrame) -> None:
     copia = casos.copy()
     copia["tipo"] = "Pulmonar"
     copia.loc[copia["cod_eve"] == 810, "tipo"] = "Extrapulmonar"
-    copia.loc[copia["cod_eve"] == 825, "tipo"] = "Farmacorresistente"
 
     por_tipo = copia.groupby("tipo").size().reset_index(name="casos")
     total = por_tipo["casos"].sum()
     por_tipo["pct"] = (por_tipo["casos"] / total * 100).round(1)
 
-    colores_map = {"Pulmonar": AZUL_INSTITUCIONAL, "Extrapulmonar": NARANJA_INSTITUCIONAL, "Farmacorresistente": "#c0392b"}
+    colores_map = {"Pulmonar": AZUL_INSTITUCIONAL, "Extrapulmonar": NARANJA_INSTITUCIONAL}
 
     fig = px.pie(
         por_tipo, values="casos", names="tipo",
-        title="TB pulmonar vs extrapulmonar vs farmacorresistente",
+        title="TB pulmonar vs extrapulmonar",
         color="tipo", color_discrete_map=colores_map,
     )
     fig.update_traces(textposition="inside", textinfo="percent+label")

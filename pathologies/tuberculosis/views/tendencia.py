@@ -13,9 +13,17 @@ from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONA
 from core.geografia import obtener_geojson_municipios_magdalena, obtener_geojson_subregiones
 from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
 from pathologies.tuberculosis.poblacion import calcular_tasa_por_subregion
-from pathologies.tuberculosis.views.utils import aplicar_filtro_tipo_tb
 
-CODIGOS_TB = {810, 820, 825}
+COD_PULMONAR = 820
+COD_EXTRAPULMONAR = 810
+COD_RESISTENTE = 825
+
+
+def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    codigos = set(datos["cod_eve"].unique())
+    if codigos == {COD_RESISTENTE}:
+        return datos
+    return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
 
 ESCALA_INCIDENCIA = ["#9ecae1", "#5ba3d0", "#2a6db0", "#1b3a6b"]
 
@@ -27,8 +35,7 @@ def mostrar_tendencia(datos: pd.DataFrame) -> None:
         st.info("No hay datos de tuberculosis cargados. Sube archivos SIVIGILA en la pestaña de Gestión.", icon=":material/info:")
         return
 
-    datos = aplicar_filtro_tipo_tb(datos)
-    casos = datos[datos["cod_eve"].isin(CODIGOS_TB)]
+    casos = _casos_total(datos)
 
     if casos.empty:
         st.info("No hay casos de tuberculosis para los filtros actuales.", icon=":material/info:")
@@ -61,7 +68,6 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
     total = len(casos)
     pulmonar = int((casos["cod_eve"] == 820).sum())
     extrapulmonar = int((casos["cod_eve"] == 810).sum())
-    resistente = int((casos["cod_eve"] == 825).sum())
 
     por_anio = casos.groupby("ano").size()
     anios_ordenados = sorted(por_anio.index)
@@ -72,14 +78,13 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
     casos_anterior = int(por_anio[anio_anterior]) if anio_anterior else 0
     variacion = ((casos_actual - casos_anterior) / casos_anterior * 100) if casos_anterior else None
 
-    cols = st.columns(6)
+    cols = st.columns(5)
     cols[0].metric("Casos totales", f"{total:,}")
     cols[1].metric("Pulmonar", f"{pulmonar:,}", f"{pulmonar / total * 100:.1f}%" if total else None)
     cols[2].metric("Extrapulmonar", f"{extrapulmonar:,}", f"{extrapulmonar / total * 100:.1f}%" if total else None)
-    cols[3].metric("Resistente", f"{resistente:,}", f"{resistente / total * 100:.1f}%" if total else None)
-    cols[4].metric(f"Casos {anio_actual}", f"{casos_actual:,}")
+    cols[3].metric(f"Casos {anio_actual}", f"{casos_actual:,}")
     if variacion is not None and anio_anterior:
-        cols[5].metric(f"vs {anio_anterior}", f"{variacion:+.1f}%")
+        cols[4].metric(f"vs {anio_anterior}", f"{variacion:+.1f}%")
 
 
 def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
