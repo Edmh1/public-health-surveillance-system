@@ -10,3 +10,7 @@ rutas:
   consolidado: data/tuberculosis/consolidado/tuberculosis_consolidado.parquet
   papelera: data/tuberculosis/papelera
 columnas_esperadas:
+etiquetas_cod_eve:
+  820: Pulmonar
+  810: Extrapulmonar
+  825: Farmacorresistente
