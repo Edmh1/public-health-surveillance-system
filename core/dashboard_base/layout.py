@@ -7,6 +7,7 @@ Las primeras pestanas las expone cada patologia via obtener_vistas(); la ultima
 gestionar (ver core/auth/permisos.py).
 """
 
+import pandas as pd
 import streamlit as st
 
 from core.auth.permisos import (
@@ -96,7 +97,34 @@ def ejecutar_dashboard() -> None:
         fragmento_banner_datos_nuevos(patologia)
         fragmento_avisos_subida(usuario.nombre_usuario)
 
+    datos_filtrados = _aplicar_filtro_cod_eve(plugin, datos_filtrados)
     _mostrar_pestanas(patologia, usuario, plugin, datos_filtrados)
+
+
+def _aplicar_filtro_cod_eve(plugin, datos: pd.DataFrame) -> pd.DataFrame:
+    etiquetas = plugin.manifest.get("etiquetas_cod_eve")
+    if not etiquetas or "cod_eve" not in datos.columns:
+        return datos
+
+    pares = sorted(etiquetas.items(), key=lambda x: x[0])
+    codigos_legibles = [f"{label} ({cod})" for cod, label in pares]
+
+    seleccionadas = st.pills(
+        "Tipo de evento",
+        options=codigos_legibles,
+        selection_mode="multi",
+        default=[],
+        key="filtro_cod_eve_patologia",
+    )
+
+    if not seleccionadas:
+        return datos
+
+    codigos_seleccionados = [
+        cod for cod, label in pares if f"{label} ({cod})" in seleccionadas
+    ]
+
+    return datos[datos["cod_eve"].isin(codigos_seleccionados)]
 
 
 ICONOS_PESTANAS = {
