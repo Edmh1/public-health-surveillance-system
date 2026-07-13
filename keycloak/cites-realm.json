@@ -65,8 +65,8 @@
       "credentials": [
         {
           "type": "password",
-          "value": "sividem2024",
-          "temporary": false
+          "value": "cambiar-en-primer-login",
+          "temporary": true
         }
       ],
       "realmRoles": [

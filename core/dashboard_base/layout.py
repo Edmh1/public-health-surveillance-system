@@ -33,7 +33,6 @@ from core.dashboard_base.estilos import (
 from core.dashboard_base.gestion_papelera import mostrar_papelera
 from core.dashboard_base.gestion_piezas import mostrar_piezas_activas
 from core.dashboard_base.gestion_subida import (
-    fragmento_avisos_subida,
     mostrar_banner_confirmacion,
     mostrar_formulario_subida,
 )
@@ -91,7 +90,6 @@ def ejecutar_dashboard() -> None:
         # sus contenedores desplazan las pestanas fuera del viewport y el CSS de
         # posicion fija (top: 227px) deja de cuadrar con la altura real del header.
         fragmento_banner_datos_nuevos(patologia)
-        fragmento_avisos_subida(usuario.nombre_usuario)
 
     datos_filtrados = _aplicar_filtro_cod_eve(plugin, datos_filtrados)
     _mostrar_pestanas(patologia, usuario, plugin, datos_filtrados)
