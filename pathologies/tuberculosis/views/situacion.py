@@ -11,13 +11,11 @@ import streamlit as st
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
 from core.geografia import obtener_geojson_municipios_magdalena
 from pathologies.tuberculosis.canal_endemico import (
-    SEMANA_MAX,
     METODOS_DISPONIBLES,
     ZONA_EXITO,
     ZONA_SEGURIDAD,
     ZONA_ALERTA,
     ZONA_EPIDEMIA,
-    ZONAS_ORDEN,
     calcular_canal_endemico,
 )
 from pathologies.tuberculosis.indicators import calcular_indicadores
@@ -202,51 +200,82 @@ def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
         st.info("Selecciona al menos un año para la línea base.", icon=":material/info:")
         return
 
-    canal = calcular_canal_endemico(casos, metodo, anio_vigilancia, anios_base)
+    try:
+        resultado = calcular_canal_endemico(casos, metodo, anio_vigilancia, anios_base)
+    except Exception as e:
+        st.warning(f"No se pudo calcular el canal endémico: {e}", icon=":material/error:")
+        return
 
-    semanas = range(1, SEMANA_MAX + 1)
-    inferior = canal.get("inferior", [])
-    central = canal.get("central", [])
-    superior = canal.get("superior", [])
-    observado = canal.get("observado", [])
-    zonas = canal.get("zonas", [])
+    bandas = resultado["bandas"]
+    serie_actual = resultado["serie_actual"]
+    semanas = bandas["semana"].tolist()
 
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
-        x=list(semanas), y=superior,
-        fill=None, mode="lines", line=dict(width=0), showlegend=False,
+        x=semanas + semanas[::-1],
+        y=bandas["superior"].tolist() + bandas["central"].tolist()[::-1],
+        fill="toself",
+        fillcolor="rgba(232, 133, 44, 0.20)",
+        line=dict(color="rgba(0,0,0,0)"),
+        name=ZONA_ALERTA,
+        hoverinfo="skip",
     ))
     fig.add_trace(go.Scatter(
-        x=list(semanas), y=inferior,
-        fill="tonexty", mode="lines", line=dict(width=0),
-        fillcolor="rgba(27, 58, 107, 0.15)", name="Banda esperada",
+        x=semanas + semanas[::-1],
+        y=bandas["central"].tolist() + bandas["inferior"].tolist()[::-1],
+        fill="toself",
+        fillcolor="rgba(27, 58, 107, 0.38)",
+        line=dict(color="rgba(0,0,0,0)"),
+        name=ZONA_SEGURIDAD,
+        hoverinfo="skip",
     ))
     fig.add_trace(go.Scatter(
-        x=list(semanas), y=central,
-        mode="lines", line=dict(color=AZUL_INSTITUCIONAL, dash="dash"),
+        x=semanas + semanas[::-1],
+        y=bandas["inferior"].tolist() + [0] * len(semanas),
+        fill="toself",
+        fillcolor="rgba(40, 167, 69, 0.10)",
+        line=dict(color="rgba(0,0,0,0)"),
+        name=ZONA_EXITO,
+        hoverinfo="skip",
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=semanas, y=bandas["inferior"],
+        mode="lines", line=dict(color=COLORES_ZONA[ZONA_EXITO], width=1.5, dash="dot"),
+        name="Límite inferior",
+    ))
+    fig.add_trace(go.Scatter(
+        x=semanas, y=bandas["central"],
+        mode="lines", line=dict(color=COLORES_ZONA[ZONA_SEGURIDAD], width=2),
         name="Mediana histórica",
     ))
-
-    colores_observado = [COLORES_ZONA.get(z, "#666") for z in zonas] if len(zonas) == len(observado) else AZUL_INSTITUCIONAL
     fig.add_trace(go.Scatter(
-        x=list(semanas), y=observado,
-        mode="lines+markers", line=dict(color=NARANJA_INSTITUCIONAL, width=2.5),
-        marker=dict(color=colores_observado, size=6),
-        name=f"Observado {anio_vigilancia}",
+        x=semanas, y=bandas["superior"],
+        mode="lines", line=dict(color=COLORES_ZONA[ZONA_EPIDEMIA], width=1.5, dash="dash"),
+        name="Límite superior",
     ))
 
+    if not serie_actual.empty:
+        colores_puntos = [COLORES_ZONA.get(z, "#666") for z in serie_actual["zona"]]
+        fig.add_trace(go.Scatter(
+            x=serie_actual["semana"], y=serie_actual["casos"],
+            mode="markers",
+            marker=dict(color=colores_puntos, size=7, line=dict(width=1, color="#fff")),
+            name=f"Año {anio_vigilancia}",
+        ))
+
     fig.update_layout(
-        title=f"Canal endémico — {anio_vigilancia} (método {metodo})",
-        xaxis_title="Semana epidemiológica",
-        yaxis_title="Casos",
-        **_LAYOUT_BASE,
+        title=f"Canal endémico — {anio_vigilancia} ({metodo})",
+        xaxis=dict(title="Semana epidemiológica", tickmode="linear", tick0=1, dtick=4),
+        yaxis=dict(title="Casos"),
+        margin=dict(l=0, r=0, t=40, b=0),
     )
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("Metodología del canal endémico"):
         st.markdown(f"""
-        **Método seleccionado**: {'Bortman (paramétrico, IC 95%)' if metodo == 'bortman' else 'Cuartiles (INS Colombia)'}
+        **Método**: {'Bortman (paramétrico, IC 95%)' if metodo == 'bortman' else 'Cuartiles (INS Colombia)'}
 
         **Leyenda de zonas**:
         - {ZONA_EXITO}: por debajo del límite inferior
