@@ -13,6 +13,7 @@ import base64
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as componentes_v1
 
 RUTA_ASSETS = Path(__file__).resolve().parents[2] / "assets"
 RUTA_ESCUDO_UNIMAGDALENA = RUTA_ASSETS / "unimagdalena.png"
@@ -23,6 +24,44 @@ RUTA_LOGO_SIVIDEM = RUTA_ASSETS / "logo_sividem.svg"
 AZUL_INSTITUCIONAL = "#1b3a6b"
 NARANJA_INSTITUCIONAL = "#e8852c"
 VERDE_INSTITUCIONAL = "#3f9b46"
+
+# Leyenda horizontal encima del area de dibujo: toda grafica debe declarar que
+# esta mostrando (tipo/serie) con la leyenda en la parte superior.
+LEYENDA_SUPERIOR = dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+
+
+def eje_semanal(ultima_semana: int) -> dict:
+    """Configuracion del eje X para graficas por semana epidemiologica.
+
+    Todas las semanas quedan etiquetadas (1 a la ultima con datos), con el numero
+    horizontal para que se lea claro. minallowed/maxallowed impiden que al hacer
+    pan o zoom aparezcan semanas negativas o mayores a las que existen.
+    Aplicar con fig.update_xaxes(**eje_semanal(n)) o dentro del dict xaxis del layout.
+    """
+    return dict(
+        tickmode="linear",
+        tick0=1,
+        dtick=1,
+        tickangle=0,
+        tickfont=dict(size=9),
+        minallowed=0.5,
+        maxallowed=ultima_semana + 0.5,
+    )
+
+def rango_con_margen(valor_maximo: float, factor: float = 1.2) -> list[float]:
+    """Rango de eje con espacio extra para el texto "outside" de una barra.
+
+    Sin esto, la etiqueta de la barra mas alta (barras verticales) o mas larga
+    (barras horizontales) queda cortada contra el borde del area de dibujo,
+    porque el autorange de Plotly llega justo hasta el valor de la barra, no
+    hasta donde termina su texto. Aplicar con fig.update_yaxes(range=...) en
+    barras verticales o fig.update_xaxes(range=...) en barras horizontales,
+    usando el maximo del valor graficado (no el eje de categorias).
+    """
+    if valor_maximo is None or valor_maximo <= 0:
+        return [0, 1]
+    return [0, valor_maximo * factor]
+
 
 COLOR_EXITO_EPIDEMIOLOGICO = "#3f9b46"
 COLOR_SEGURIDAD_EPIDEMIOLOGICO = "#6fb574"
@@ -81,7 +120,12 @@ def aplicar_estilos() -> None:
            detras se asome en los bordes; el z-index alto y el box-shadow inferior lo separan
            visualmente del contenido, para que se vea como una capa flotando y no como un
            corte abrupto. */
-        div[data-testid="stLayoutWrapper"]:has(.st-key-encabezado_fijo) {
+        /* El selector :has() aplica al instante en navegadores modernos; la
+           clase .sividem-header-fijo la agrega via JS el script de
+           aplicar_estilos() y cubre navegadores sin :has() (ej. Firefox
+           viejo), donde de lo contrario el header no se fijaria nunca. */
+        div[data-testid="stLayoutWrapper"]:has(.st-key-encabezado_fijo),
+        .sividem-header-fijo {
             position: sticky !important;
             top: 60px !important;
             z-index: 9999 !important;
@@ -113,14 +157,16 @@ def aplicar_estilos() -> None:
             font-size: 1.05rem !important;
         }
         /* Lista de pestanas sticky justo debajo del header SIVIDEM.
-           top: 200px = ~60px toolbar + ~130px encabezado + 10px de margen de seguridad.
-           Los 10px evitan que el tab bar se solape con el borde inferior del header.
-           z-index: 9999 (igual al header): como el tab list aparece despues en el DOM
-           y no se solapa con el header (por los 10px de margen), el z-index no causa
-           problemas y la pestaña permanece visible al hacer scroll. */
-        div[data-testid="stTabs"] div:has(> div[role="tablist"]) {
+           El top exacto depende de la altura real del header (que varia con
+           banners y titulos): un script en aplicar_estilos() lo mide en vivo y
+           lo publica en la variable --sividem-tabs-top; 225px es solo el
+           respaldo si el script aun no corrio. z-index 9999 (igual al header):
+           el tab list aparece despues en el DOM asi que pinta encima si llegan
+           a rozarse. */
+        div[data-testid="stTabs"] div:has(> div[role="tablist"]),
+        .sividem-tabs-fijas {
             position: sticky !important;
-            top: 225px !important;
+            top: var(--sividem-tabs-top, 225px) !important;
             z-index: 9999 !important;
             width: 100% !important;
             background-color: #EEF1F5 !important;
@@ -138,7 +184,8 @@ def aplicar_estilos() -> None:
            necesitan sticky: el top:225px se calculo para el header fijo de la pagina
            principal, no tiene sentido dentro de un modal. Selector mas especifico que
            el de arriba para ganar sobre el !important. */
-        div[data-testid="stDialog"] div[data-testid="stTabs"] div:has(> div[role="tablist"]) {
+        div[data-testid="stDialog"] div[data-testid="stTabs"] div:has(> div[role="tablist"]),
+        div[data-testid="stDialog"] div[data-testid="stTabs"] div[role="tablist"] {
             position: static !important;
             top: auto !important;
             z-index: auto !important;
@@ -146,6 +193,48 @@ def aplicar_estilos() -> None:
         }
         </style>
         """
+    )
+    _publicar_altura_header()
+
+
+def _publicar_altura_header() -> None:
+    """Script de apoyo del encabezado y el tab bar fijos. Hace dos cosas:
+
+    1. Mide la altura real del header y publica el top del tab bar como
+       variable CSS --sividem-tabs-top (60px del toolbar + altura del header +
+       10px de margen). Asi el tab bar queda SIEMPRE justo debajo del header
+       aunque este crezca (banners, titulo largo).
+    2. Marca con clases propias (.sividem-header-fijo, .sividem-tabs-fijas)
+       los elementos que deben fijarse: es el respaldo de los selectores
+       :has() del CSS para navegadores que no los soportan.
+
+    Corre en un iframe de componente porque st.html no ejecuta <script>. El
+    intervalo re-consulta el DOM en cada tick porque Streamlit reemplaza nodos
+    entre reruns (y React puede pisar las clases agregadas). El iframe mide
+    0px y no agrega nada visible.
+    """
+    componentes_v1.html(
+        """
+        <script>
+        const doc = window.parent.document;
+        function actualizar() {
+            const marcador = doc.querySelector('.st-key-encabezado_fijo');
+            if (!marcador) { return; }
+            const header = marcador.closest('[data-testid="stLayoutWrapper"]') || marcador;
+            header.classList.add('sividem-header-fijo');
+            const topTabs = 60 + header.offsetHeight + 10;
+            doc.documentElement.style.setProperty('--sividem-tabs-top', topTabs + 'px');
+            doc.querySelectorAll('div[role="tablist"]').forEach(function (lista) {
+                if (lista.closest('[data-testid="stDialog"]')) { return; }
+                const barra = lista.parentElement;
+                if (barra) { barra.classList.add('sividem-tabs-fijas'); }
+            });
+        }
+        actualizar();
+        setInterval(actualizar, 1000);
+        </script>
+        """,
+        height=0,
     )
 
 

@@ -13,7 +13,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
+from core.dashboard_base.estilos import (
+    AZUL_INSTITUCIONAL,
+    LEYENDA_SUPERIOR,
+    NARANJA_INSTITUCIONAL,
+    rango_con_margen,
+)
 
 CODIGOS_CASOS = {210, 220}
 _TOP_N = 10
@@ -136,13 +141,16 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Casos totales", f"{total:,}")
+        st.metric("Casos totales", f"{total:,}", border=True)
     with c2:
         st.metric(
             "Gestantes",
             f"{n_gest:,}",
             delta=_pct(n_gest, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
     with c3:
         st.metric(
@@ -150,6 +158,9 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
             f"{n_men5:,}",
             delta=_pct(n_men5, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
     with c4:
         st.metric(
@@ -157,6 +168,9 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
             f"{n_may65:,}",
             delta=_pct(n_may65, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
 
 
@@ -222,7 +236,7 @@ def _mostrar_piramide(casos: pd.DataFrame) -> None:
             title="Casos",
         ),
         yaxis_title="Grupo etario",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=LEYENDA_SUPERIOR,
         height=420,
         **_LAYOUT,
     )
@@ -273,22 +287,23 @@ def _chart_area(casos: pd.DataFrame, height: int = 300) -> None:
         st.caption("Sin datos.")
         return
     total = conteo.sum()
-    # Colores explícitos: 1.ª = azul, 2.ª = naranja, 3.ª = morado discreto.
+    # Colores explícitos: 1.ª = azul, 2.ª = naranja, 3.ª = violeta (el del Sankey).
     # Sin esto, el tema asigna el 3.ª color (azul cielo) a "Rural disperso".
     fig = px.pie(
         names=conteo.index,
         values=conteo.values,
         hole=0.5,
-        color_discrete_sequence=[AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL, "#6f5499"],
+        color_discrete_sequence=[AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL, "#7c3aed"],
     )
     fig.update_traces(
-        texttemplate="%{label}<br>%{value:,} · %{percent:.2%}",
+        texttemplate="%{value:,} · %{percent:.2%}",
         textposition="outside",
     )
     fig.update_layout(
         margin=dict(l=20, r=20, t=30, b=20),
         height=height,
-        showlegend=False,
+        showlegend=True,
+        legend=LEYENDA_SUPERIOR,
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -311,8 +326,19 @@ def _chart_estrato(casos: pd.DataFrame, height: int = 300) -> None:
         df, x="casos", y="estrato", text="etiqueta", orientation="h",
         labels={"casos": "Casos", "estrato": ""},
     )
-    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
-    fig.update_layout(height=height, **_LAYOUT, yaxis={"categoryorder": "category ascending"})
+    fig.update_traces(
+        marker_color=AZUL_INSTITUCIONAL,
+        textposition="outside",
+        name="Casos",
+        showlegend=True,
+    )
+    fig.update_layout(
+        height=height,
+        **_LAYOUT,
+        xaxis={"range": rango_con_margen(df["casos"].max())},
+        yaxis={"categoryorder": "category ascending"},
+        legend=LEYENDA_SUPERIOR,
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -334,8 +360,19 @@ def _chart_etnia(casos: pd.DataFrame, height: int = 300) -> None:
         df, x="casos", y="etnia", text="etiqueta", orientation="h",
         labels={"casos": "Casos", "etnia": ""},
     )
-    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
-    fig.update_layout(height=height, **_LAYOUT, yaxis={"categoryorder": "total ascending"})
+    fig.update_traces(
+        marker_color=AZUL_INSTITUCIONAL,
+        textposition="outside",
+        name="Casos",
+        showlegend=True,
+    )
+    fig.update_layout(
+        height=height,
+        **_LAYOUT,
+        xaxis={"range": rango_con_margen(df["casos"].max())},
+        yaxis={"categoryorder": "total ascending"},
+        legend=LEYENDA_SUPERIOR,
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -357,8 +394,19 @@ def _chart_regimen(casos: pd.DataFrame, height: int = 300) -> None:
         df, x="casos", y="regimen", text="etiqueta", orientation="h",
         labels={"casos": "Casos", "regimen": ""},
     )
-    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
-    fig.update_layout(height=height, **_LAYOUT, yaxis={"categoryorder": "total ascending"})
+    fig.update_traces(
+        marker_color=AZUL_INSTITUCIONAL,
+        textposition="outside",
+        name="Casos",
+        showlegend=True,
+    )
+    fig.update_layout(
+        height=height,
+        **_LAYOUT,
+        xaxis={"range": rango_con_margen(df["casos"].max())},
+        yaxis={"categoryorder": "total ascending"},
+        legend=LEYENDA_SUPERIOR,
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -394,8 +442,18 @@ def _mostrar_pueblos_indigenas(casos: pd.DataFrame) -> None:
         df, x="casos", y="pueblo", text="etiqueta", orientation="h",
         labels={"casos": "Casos", "pueblo": ""},
     )
-    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
-    fig.update_layout(**_LAYOUT, yaxis={"categoryorder": "total ascending"})
+    fig.update_traces(
+        marker_color=AZUL_INSTITUCIONAL,
+        textposition="outside",
+        name="Casos",
+        showlegend=True,
+    )
+    fig.update_layout(
+        **_LAYOUT,
+        xaxis={"range": rango_con_margen(df["casos"].max())},
+        yaxis={"categoryorder": "total ascending"},
+        legend=LEYENDA_SUPERIOR,
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -427,8 +485,18 @@ def _mostrar_eps(casos: pd.DataFrame) -> None:
         labels={"casos": "Casos", "eps_short": ""},
         hover_data={"eps": True, "eps_short": False, "casos": True, "etiqueta": False},
     )
-    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
-    fig.update_layout(**_LAYOUT, yaxis={"categoryorder": "total ascending"})
+    fig.update_traces(
+        marker_color=AZUL_INSTITUCIONAL,
+        textposition="outside",
+        name="Casos",
+        showlegend=True,
+    )
+    fig.update_layout(
+        **_LAYOUT,
+        xaxis={"range": rango_con_margen(df["casos"].max())},
+        yaxis={"categoryorder": "total ascending"},
+        legend=LEYENDA_SUPERIOR,
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -456,6 +524,16 @@ def _mostrar_upgd(casos: pd.DataFrame) -> None:
         labels={"casos": "Casos", "upgd_short": ""},
         hover_data={"upgd": True, "upgd_short": False, "casos": True, "etiqueta": False},
     )
-    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
-    fig.update_layout(**_LAYOUT, yaxis={"categoryorder": "total ascending"})
+    fig.update_traces(
+        marker_color=AZUL_INSTITUCIONAL,
+        textposition="outside",
+        name="Casos",
+        showlegend=True,
+    )
+    fig.update_layout(
+        **_LAYOUT,
+        xaxis={"range": rango_con_margen(df["casos"].max())},
+        yaxis={"categoryorder": "total ascending"},
+        legend=LEYENDA_SUPERIOR,
+    )
     st.plotly_chart(fig, width="stretch")

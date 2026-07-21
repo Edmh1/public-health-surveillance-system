@@ -2,12 +2,11 @@
 
 Historia que cuenta:
   1. KPIs: casos totales, hospitalizados, graves, hospitalizados graves
-  2. Panorama general: tipo de caso / flujo clasificacion (Sankey) / fuente
-  3. Evolucion semanal: casos por tipo + % graves (selector anio local)
-  4. Hospitalizacion: temporal + territorial (selector tipo de caso)
-  5. Clasificacion final: dona + distribucion semanal
-
-4.10 (incidencia por subregion) requiere poblacion DANE: pendiente.
+  2. Panorama general: tipo de caso / flujo clasificacion (Sankey)
+  3. Incidencia por subregion (4.10) / fuente
+  4. Evolucion semanal: casos por tipo + % graves (selector anio local)
+  5. Clasificacion final: dona + distribucion semanal / hospitalizacion territorial
+  6. Hospitalizacion por semana (selector tipo de caso)
 """
 
 import pandas as pd
@@ -15,7 +14,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
+from core.dashboard_base.estilos import (
+    AZUL_INSTITUCIONAL,
+    LEYENDA_SUPERIOR,
+    NARANJA_INSTITUCIONAL,
+    eje_semanal,
+    rango_con_margen,
+)
+from core.dashboard_base.filtros import CLAVE_FILTROS
+from pathologies.dengue.geografia import obtener_mapeo_subregion
+from pathologies.dengue.indicators import calcular_indicadores
+from pathologies.dengue.poblacion import calcular_tasa_por_municipio, calcular_tasa_por_subregion
 
 CODIGOS_CASOS = {210, 220}
 COD_DENGUE       = 210
@@ -80,32 +89,50 @@ def mostrar_morbilidad(datos: pd.DataFrame) -> None:
         st.info("No hay casos de dengue para los filtros actuales.", icon=":material/info:")
         return
 
-    _mostrar_kpis(casos)
+    # Incidencia (tasa poblacional) vive aca ademas de en Situacion: en Situacion
+    # es de un solo anio; aca sigue el filtro global, asi que se puede ver por
+    # rangos de anios. Respeta la regla de "no disponible" (municipio / sin DANE)
+    # porque sale del mismo calcular_indicadores.
+    filtros_actuales = st.session_state.get(CLAVE_FILTROS, {})
+    resultado_indicadores = calcular_indicadores(datos, filtros_actuales)
+
+    anios = sorted(int(a) for a in casos["ano"].dropna().unique())
+    if anios:
+        periodo = str(anios[0]) if len(anios) == 1 else f"{anios[0]}-{anios[-1]}"
+        st.caption(
+            f":material/calendar_today: Indicadores del período filtrado ({periodo}). "
+            "La incidencia es una tasa anual por 100.000 habitantes."
+        )
+
+    _mostrar_kpis(casos, resultado_indicadores["incidencia"])
     st.space("small")
 
-    # Panorama: tipo / flujo clasificacion / fuente comparativa (3 columnas)
-    c1, c2, c3 = st.columns([1, 1.7, 1])
+    # Panorama: tipo de caso | Sankey (el Sankey ocupa tambien el ancho que
+    # antes tenia Fuente)
+    c1, c2 = st.columns([1, 2.7])
     with c1:
         with st.container(border=True, height="stretch"):
             _mostrar_tipo_caso(casos)
     with c2:
         with st.container(border=True, height="stretch"):
             _mostrar_sankey_clasificacion(casos)
-    with c3:
+
+    st.space("small")
+
+    # Incidencia por subregion (4.10) | Fuente (50/50)
+    c_inc, c_fuente = st.columns([1, 1])
+    with c_inc:
+        with st.container(border=True, height="stretch"):
+            _mostrar_incidencia_subregion(casos)
+    with c_fuente:
         with st.container(border=True, height="stretch"):
             _mostrar_fuente(casos)
 
     st.space("small")
 
-    # Evolucion semanal (selector anio local) — full width
+    # Evolucion semanal (selector anio local) — FULL WIDTH
     with st.container(border=True):
         _mostrar_evolucion_semanal(casos)
-
-    st.space("small")
-
-    # Hospitalizacion temporal — FULL WIDTH
-    with st.container(border=True):
-        _mostrar_hospitalizacion_semanal(casos)
 
     st.space("small")
 
@@ -121,12 +148,18 @@ def mostrar_morbilidad(datos: pd.DataFrame) -> None:
         with st.container(border=True, height="stretch"):
             _mostrar_hospitalizacion_territorial(casos)
 
+    st.space("small")
+
+    # Hospitalizacion por semana — FULL WIDTH
+    with st.container(border=True):
+        _mostrar_hospitalizacion_semanal(casos)
+
 
 # ---------------------------------------------------------------------------
 # KPIs
 # ---------------------------------------------------------------------------
 
-def _mostrar_kpis(casos: pd.DataFrame) -> None:
+def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
     total = len(casos)
     graves = int((casos["cod_eve"] == COD_DENGUE_GRAVE).sum())
 
@@ -138,30 +171,52 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
             ((casos["cod_eve"] == COD_DENGUE_GRAVE) & (casos["pac_hos"] == 1)).sum()
         )
 
-    c1, c2, c3, c4 = st.columns(4)
+    incidencia_txt = f"{incidencia:,.1f}" if incidencia is not None else "No disponible"
+
+    c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        st.metric("Casos totales", f"{total:,}")
+        st.metric("Casos totales", f"{total:,}", border=True)
     with c2:
+        st.metric(
+            "Incidencia",
+            incidencia_txt,
+            help=(
+                "Casos (210+220) / población en riesgo x 100.000. No disponible si el "
+                "filtro está en un municipio o falta población DANE (las tasas solo son "
+                "confiables a escala subregión o departamento)."
+            ),
+            border=True,
+        )
+    with c3:
         st.metric(
             "Hospitalizados",
             f"{hosp:,}",
             delta=_pct(hosp, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
-    with c3:
+    with c4:
         st.metric(
             "Dengue grave (220)",
             f"{graves:,}",
             delta=_pct(graves, total),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="del total",
+            border=True,
         )
-    with c4:
+    with c5:
         st.metric(
             "Hospitalizados graves",
             f"{hosp_graves:,}",
             delta=_pct(hosp_graves, graves),
             delta_color="off",
+            delta_arrow="off",
+            delta_description="de los graves",
             help="Hospitalizados de dengue grave sobre el total de casos graves",
+            border=True,
         )
 
 
@@ -185,12 +240,15 @@ def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
         color_discrete_sequence=[AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL],
     )
     fig.update_traces(
-        texttemplate="%{label}<br>%{value:,}",
+        texttemplate="%{value:,} (%{percent})",
         textposition="outside",
     )
+    # Altura pareja con el Sankey vecino: la tarjeta se estira con la fila y con
+    # la altura anterior la dona quedaba pegada arriba con un vacio debajo.
     fig.update_layout(
-        showlegend=False,
-        height=300,
+        showlegend=True,
+        legend=LEYENDA_SUPERIOR,
+        height=520,
         margin=dict(l=20, r=20, t=40, b=20),
     )
     st.plotly_chart(fig, width="stretch")
@@ -208,7 +266,7 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
 
 
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
-    st.subheader(":material/account_tree: Clasificación: inicial → final")
+    st.subheader(":material/account_tree: Gráfico de Sankey")
 
     cols_req = {"tip_cas", "estado_final_de_caso"}
     if not cols_req.issubset(casos.columns):
@@ -219,70 +277,184 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     df["inicial"] = df["tip_cas"].astype(str).map(_TIP_CAS_MAP).fillna("Otro (inicial)")
     df["final"]   = df["estado_final_de_caso"].astype(str).map(_ESTADO_FINAL_MAP).fillna("Otro (final)")
 
-    flujo = df.groupby(["inicial", "final"]).size().reset_index(name="n")
-    flujo = flujo[flujo["n"] > 0]
-
-    if flujo.empty:
+    if df.empty:
         st.caption("Sin datos de flujo de clasificación.")
         return
 
+    conteo_inicial = df.groupby("inicial").size().reset_index(name="n")
+
+    # Solo interesan los cambios de clasificacion: un caso que empieza y termina
+    # en el mismo estado no aporta flujo que leer, y ademas dibujaria un lazo
+    # circular sobre su propio nodo.
+    transiciones = df.groupby(["inicial", "final"]).size().reset_index(name="n")
+    transiciones = transiciones[transiciones["inicial"] != transiciones["final"]]
+
     # Colores por estado (no por posicion izq/der): mismo color para un estado
     # independientemente de si aparece como clasificacion inicial o final.
+    # Paleta viva y distinguible; verde/amarillo/rojo quedan reservados para el
+    # canal endemico segun DESIGN.md.
     _PALETA_ESTADOS = {
-        "Probable":                    "#64748b",
-        "Conf. laboratorio":           "#1b3a6b",
-        "Conf. nexo epidemiológico":   "#e8852c",
-        "Conf. clínica":               "#5b88b3",
-        "Descartado":                  "#94a3b8",
-        "Sin ajuste":                  "#d1d5db",
-        "Sospechoso":                  "#475569",
-        "Otro (inicial)":              "#9ca3af",
-        "Otro":                        "#9ca3af",
+        "Probable":                    "#7c3aed",
+        "Conf. laboratorio":           "#2563eb",
+        "Conf. nexo epidemiológico":   "#f97316",
+        "Conf. clínica":               "#0891b2",
+        "Sospechoso":                  "#c026d3",
+        "Descartado":                  "#475569",
+        "Sin ajuste":                  "#a8a29e",
+        "Otro (inicial)":              "#795548",
+        "Otro (final)":                "#795548",
+        "Otro":                        "#795548",
     }
-    todos_estados = sorted(set(flujo["inicial"]) | set(flujo["final"]))
-    nodos_izq = sorted(flujo["inicial"].unique())
-    nodos_der = [n for n in todos_estados if n not in nodos_izq]
-    nodos = nodos_izq + nodos_der
-    idx = {n: i for i, n in enumerate(nodos)}
+    # Tres columnas de nodos: casos totales | clasificacion inicial | clasificacion
+    # final. Inicial y final llevan nodos SEPARADOS aunque compartan etiqueta: si
+    # "Probable" fuera un solo nodo, la transicion sin cambio se dibujaria como un
+    # lazo circular sobre si misma.
+    NODO_TOTAL = "Casos totales"
+    nodos_iniciales = (
+        conteo_inicial.sort_values("n", ascending=False)["inicial"].tolist()
+    )
 
-    colores_nodos = [_PALETA_ESTADOS.get(n, "#6b7280") for n in nodos]
+    # Orden vertical de la columna final: cada estado se coloca a la altura
+    # promedio (ponderada por casos) de las clasificaciones iniciales que lo
+    # alimentan, para minimizar el cruce de enlaces.
+    posicion_inicial = {nombre: i for i, nombre in enumerate(nodos_iniciales)}
+    altura_promedio_final = {}
+    for nombre_final, grupo in transiciones.groupby("final"):
+        peso = grupo["n"].sum()
+        suma_ponderada = sum(
+            posicion_inicial[fila["inicial"]] * fila["n"] for _, fila in grupo.iterrows()
+        )
+        altura_promedio_final[nombre_final] = suma_ponderada / peso
+    nodos_finales = sorted(altura_promedio_final, key=altura_promedio_final.get)
 
-    # Flujos coloreados por nodo de ORIGEN con transparencia:
+    etiquetas = [NODO_TOTAL] + nodos_iniciales + nodos_finales
+    idx_inicial = {nombre: 1 + i for i, nombre in enumerate(nodos_iniciales)}
+    idx_final = {
+        nombre: 1 + len(nodos_iniciales) + i for i, nombre in enumerate(nodos_finales)
+    }
+
+    # Posicion fija por columna: sin la x, un nodo inicial sin casos que cambien
+    # de clasificacion (sin flujo de salida) se iria a la columna derecha por el
+    # acomodo automatico de Plotly. La y fija el orden vertical calculado arriba,
+    # apilando cada columna de arriba hacia abajo con altura proporcional.
+    total_casos = int(conteo_inicial["n"].sum())
+
+    def _centros_verticales(valores_columna: list[int]) -> list[float]:
+        # La pila de cada columna se centra verticalmente: una columna con poco
+        # flujo (la final solo lleva los casos que cambiaron) queda alineada al
+        # medio del diagrama en vez de amontonada arriba.
+        separacion = 0.04
+        margen = 0.02
+        cantidad = len(valores_columna)
+        util = 1.0 - 2 * margen - separacion * max(cantidad - 1, 0)
+        altos = [util * valor / total_casos for valor in valores_columna]
+        alto_pila = sum(altos) + separacion * max(cantidad - 1, 0)
+        cursor = max((1.0 - alto_pila) / 2, margen)
+        centros = []
+        for alto in altos:
+            centros.append(min(max(cursor + alto / 2, 0.01), 0.99))
+            cursor += alto + separacion
+        return centros
+
+    casos_por_inicial = conteo_inicial.set_index("inicial")["n"]
+    casos_por_final = transiciones.groupby("final")["n"].sum()
+
+    posiciones_x = (
+        [0.01] + [0.5] * len(nodos_iniciales) + [0.99] * len(nodos_finales)
+    )
+    posiciones_y = (
+        [0.5]
+        + _centros_verticales([int(casos_por_inicial[n]) for n in nodos_iniciales])
+        + _centros_verticales([int(casos_por_final[n]) for n in nodos_finales])
+    )
+
+    colores_nodos = (
+        [AZUL_INSTITUCIONAL]
+        + [_PALETA_ESTADOS.get(n, "#6b7280") for n in nodos_iniciales]
+        + [_PALETA_ESTADOS.get(n, "#6b7280") for n in nodos_finales]
+    )
+
+    # Flujos coloreados por la clasificacion inicial con transparencia:
     # el ojo puede seguir "que le paso a cada clasificacion inicial" por color.
-    colores_links = [
-        _hex_rgba(_PALETA_ESTADOS.get(row["inicial"], "#6b7280"), 0.45)
-        for _, row in flujo.iterrows()
-    ]
+    fuentes, destinos, valores, colores_links = [], [], [], []
+
+    for _, fila in conteo_inicial.iterrows():
+        fuentes.append(0)
+        destinos.append(idx_inicial[fila["inicial"]])
+        valores.append(int(fila["n"]))
+        colores_links.append(_hex_rgba(_PALETA_ESTADOS.get(fila["inicial"], "#6b7280"), 0.45))
+
+    for _, fila in transiciones.iterrows():
+        fuentes.append(idx_inicial[fila["inicial"]])
+        destinos.append(idx_final[fila["final"]])
+        valores.append(int(fila["n"]))
+        colores_links.append(_hex_rgba(_PALETA_ESTADOS.get(fila["inicial"], "#6b7280"), 0.45))
 
     fig = go.Figure(go.Sankey(
         arrangement="snap",
         node=dict(
-            label=nodos,
+            label=etiquetas,
+            x=posiciones_x,
+            y=posiciones_y,
             color=colores_nodos,
             pad=24,
             thickness=22,
             line=dict(color="white", width=0.8),
         ),
         link=dict(
-            source=[idx[r["inicial"]] for _, r in flujo.iterrows()],
-            target=[idx[r["final"]]   for _, r in flujo.iterrows()],
-            value=flujo["n"].tolist(),
+            source=fuentes,
+            target=destinos,
+            value=valores,
             color=colores_links,
             hovertemplate="%{source.label} → %{target.label}: %{value:,} casos<extra></extra>",
         ),
         textfont=dict(size=12, color="#1a1a1a", family="sans-serif"),
     ))
+
+    # Encabezados de etapa sobre cada columna, para leer el diagrama sin adivinar.
+    encabezados = [
+        (0.01, "left", "Total"),
+        (0.5, "center", "Clasificación inicial"),
+        (0.99, "right", "Clasificación final"),
+    ]
+    for pos_x, ancla, texto in encabezados:
+        fig.add_annotation(
+            x=pos_x, y=1.05, xref="paper", yref="paper",
+            text=f"<b>{texto}</b>", showarrow=False,
+            xanchor=ancla, font=dict(size=12, color="#374151"),
+        )
+
+    # Leyenda de colores por estado. El trazo Sankey no genera leyenda propia,
+    # asi que se agregan puntos invisibles (sin datos) solo por su entrada de
+    # leyenda; los ejes cartesianos que introducen se ocultan.
+    estados_en_leyenda = set()
+    for nombre in nodos_iniciales + nodos_finales:
+        canonico = nombre.replace(" (inicial)", "").replace(" (final)", "")
+        if canonico in estados_en_leyenda:
+            continue
+        estados_en_leyenda.add(canonico)
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode="markers",
+            marker=dict(size=10, symbol="square", color=_PALETA_ESTADOS.get(nombre, "#6b7280")),
+            name=canonico,
+            hoverinfo="skip",
+        ))
+
     fig.update_layout(
-        height=340,
-        margin=dict(l=10, r=10, t=44, b=10),
+        height=540,
+        margin=dict(l=10, r=10, t=100, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        showlegend=True,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.14,
+            xanchor="center", x=0.5, font=dict(size=10),
+        ),
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption(
-        ":material/info: Los flujos heredan el color del estado inicial. "
-        "Traza cada clasificación de izquierda a derecha para ver cómo se ajustó."
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -312,19 +484,35 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
         "etiqueta": [f"{v:,}  ({_pct(v, total)})" for v in conteo.values],
     })
 
+    # Cada fuente con su color y el nombre en la leyenda: los nombres largos
+    # ("Busqueda activa institucional") como etiquetas del eje se comian el
+    # ancho de la grafica en esta tarjeta angosta.
+    colores_fuente = {
+        "Rutinaria":                     AZUL_INSTITUCIONAL,
+        "Busqueda activa institucional": "#f97316",
+        "Vigilancia intensificada":      "#7c3aed",
+        "Busqueda activa comunitaria":   "#0891b2",
+        "Investigacion":                 "#c026d3",
+    }
     fig = px.bar(
         df,
         x="casos",
         y="fuente",
+        color="fuente",
         text="etiqueta",
         orientation="h",
         labels={"casos": "Casos", "fuente": ""},
+        color_discrete_map=colores_fuente,
     )
-    fig.update_traces(marker_color=AZUL_INSTITUCIONAL, textposition="outside")
+    fig.update_traces(textposition="outside")
+    # Leyenda anclada a la izquierda: a la derecha se solapa con la barra de
+    # herramientas de Plotly.
     fig.update_layout(
-        height=300,
-        margin=dict(l=0, r=60, t=40, b=0),
-        yaxis={"categoryorder": "total ascending"},
+        height=480,
+        margin=dict(l=0, r=60, t=70, b=0),
+        xaxis={"range": rango_con_margen(df["casos"].max())},
+        yaxis={"categoryorder": "total ascending", "showticklabels": False},
+        legend={**LEYENDA_SUPERIOR, "xanchor": "left", "x": 0, "font": {"size": 10}},
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -360,6 +548,9 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
         COD_DENGUE_GRAVE: "Dengue grave (220)",
     })
     semanal = subset.groupby(["semana", "tipo"]).size().reset_index(name="casos")
+    if semanal.empty:
+        st.caption(f"Sin datos para {anio}.")
+        return
 
     # Total por semana para calcular % graves
     total_sem = subset.groupby("semana").size().rename("total")
@@ -379,7 +570,8 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
             "Dengue grave (220)": NARANJA_INSTITUCIONAL,
         },
     )
-    # Linea de % graves sobre eje secundario
+    # Linea de % graves sobre eje secundario. Hover propio: "Semana X · Y%" en
+    # vez de la coordenada (x, y) cruda que muestra Plotly por defecto.
     fig.add_trace(go.Scatter(
         x=pct_df["semana"],
         y=pct_df["pct_grave"],
@@ -388,12 +580,14 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
         marker=dict(size=5),
         line=dict(dash="dot", width=1.5, color="#555555"),
         yaxis="y2",
+        hovertemplate="Semana %{x} · %{y:.1f}% graves<extra></extra>",
     ))
     fig.update_layout(
         yaxis2=dict(overlaying="y", side="right", title="% Graves", showgrid=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=LEYENDA_SUPERIOR,
         **_LAYOUT,
     )
+    fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
     st.plotly_chart(fig, width="stretch")
 
 
@@ -422,6 +616,9 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
     subset["categoria"] = subset["tipo"] + " — " + subset["estado_hosp"]
 
     semanal = subset.groupby(["semana", "categoria"]).size().reset_index(name="casos")
+    if semanal.empty:
+        st.caption(f"Sin datos para {anio}.")
+        return
 
     # Colores explícitos: Dengue=azul institucional, Grave=naranja;
     # Hospitalizado=color sólido, No hospitalizado=versión más suave.
@@ -441,14 +638,15 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
         },
     )
     fig.update_layout(
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+        legend=dict(**LEYENDA_SUPERIOR, font=dict(size=10)),
         **_LAYOUT,
     )
+    fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
     st.plotly_chart(fig, width="stretch")
 
 
 # ---------------------------------------------------------------------------
-# 4.6 + 4.7  Hospitalizacion territorial (subregion + municipio)
+# 4.6 + 4.7  Hospitalizacion territorial (subregion: tasa; municipio: conteo)
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
@@ -472,43 +670,120 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
         st.caption("Sin hospitalizados para ese filtro.")
         return
 
-    # Subregion
+    anios_en_alcance = sorted(int(a) for a in casos["ano"].dropna().unique())
+
+    # Subregion: TASA por 100.000 hab.
     if "subregion" in subset.columns:
-        sub = subset["subregion"].dropna().value_counts().reset_index()
-        sub.columns = ["territorio", "hospitalizados"]
-        sub = sub.sort_values("hospitalizados")
-        fig_sub = px.bar(
-            sub, x="hospitalizados", y="territorio", text="hospitalizados",
-            orientation="h",
-            labels={"hospitalizados": "Hospitalizados", "territorio": ""},
-        )
-        fig_sub.update_traces(textposition="outside", texttemplate="%{text:,}")
-        fig_sub.update_layout(
-            title="Por subregión (conteo)",
-            margin=dict(l=0, r=0, t=40, b=0),
-        )
-        st.plotly_chart(fig_sub, width="stretch")
+        mapeo_subregion = obtener_mapeo_subregion()
+        tasas = calcular_tasa_por_subregion(subset, anios_en_alcance, mapeo_subregion)
 
-    # Municipio — top 15
-    if "nom_mun_o" in subset.columns:
-        mun = subset["nom_mun_o"].dropna().value_counts().head(15).reset_index()
-        mun.columns = ["municipio", "hospitalizados"]
-        mun = mun.sort_values("hospitalizados")
-        fig_mun = px.bar(
-            mun, x="hospitalizados", y="municipio", text="hospitalizados",
-            orientation="h",
-            labels={"hospitalizados": "Hospitalizados", "municipio": ""},
-        )
-        fig_mun.update_traces(textposition="outside", texttemplate="%{text:,}")
-        fig_mun.update_layout(
-            title="Por municipio — Top 15 (conteo)",
-            margin=dict(l=0, r=0, t=40, b=0),
-        )
-        st.plotly_chart(fig_mun, width="stretch")
+        sub = pd.DataFrame({"territorio": list(tasas.keys()), "tasa": list(tasas.values())})
+        sub = sub.dropna(subset=["tasa"]).sort_values("tasa")
+        if sub.empty:
+            st.caption("Sin población DANE disponible para el período filtrado.")
+        else:
+            fig_sub = px.bar(
+                sub, x="tasa", y="territorio", text="tasa",
+                orientation="h",
+                labels={"tasa": "Hospitalizados x100.000 hab.", "territorio": ""},
+            )
+            fig_sub.update_traces(
+                textposition="outside",
+                texttemplate="%{text:.1f}",
+                name="Tasa x100.000 hab.",
+                showlegend=True,
+            )
+            fig_sub.update_layout(
+                title="Por subregión (tasa x100.000 hab.)",
+                margin=dict(l=0, r=0, t=70, b=0),
+                xaxis={"range": rango_con_margen(sub["tasa"].max())},
+                legend=LEYENDA_SUPERIOR,
+            )
+            st.plotly_chart(fig_sub, width="stretch")
 
-    st.caption(
-        ":material/construction: Tasa por 100.000 hab. pendiente de datos poblacionales DANE."
+    # Municipio — top 15 por TASA x100.000 hab.
+    if "nom_mun_o" in subset.columns and "cod_mun_completo" in subset.columns:
+        municipios_con_casos = sorted(subset["cod_mun_completo"].dropna().unique().astype(int))
+        tasas_municipio = calcular_tasa_por_municipio(subset, anios_en_alcance, municipios_con_casos)
+
+        nombres_municipio = (
+            subset.dropna(subset=["nom_mun_o"])
+            .drop_duplicates(subset=["cod_mun_completo"])
+            .set_index("cod_mun_completo")["nom_mun_o"]
+        )
+
+        mun = pd.DataFrame({
+            "cod_mun_completo": list(tasas_municipio.keys()),
+            "tasa": list(tasas_municipio.values()),
+        })
+        mun["municipio"] = mun["cod_mun_completo"].map(nombres_municipio)
+        mun = mun.dropna(subset=["tasa", "municipio"]).sort_values("tasa", ascending=False).head(15)
+        mun = mun.sort_values("tasa")
+
+        if mun.empty:
+            st.caption("Sin población DANE disponible para el período filtrado.")
+        else:
+            fig_mun = px.bar(
+                mun, x="tasa", y="municipio", text="tasa",
+                orientation="h",
+                labels={"tasa": "Hospitalizados x100.000 hab.", "municipio": ""},
+            )
+            fig_mun.update_traces(
+                textposition="outside",
+                texttemplate="%{text:.1f}",
+                name="Tasa x100.000 hab.",
+                showlegend=True,
+            )
+            fig_mun.update_layout(
+                title="Por municipio — Top 15 (tasa x100.000 hab.)",
+                margin=dict(l=0, r=0, t=70, b=0),
+                xaxis={"range": rango_con_margen(mun["tasa"].max())},
+                legend=LEYENDA_SUPERIOR,
+            )
+            st.plotly_chart(fig_mun, width="stretch")
+
+    st.caption("Tasa = hospitalizados / población en riesgo x 100.000, en ambos niveles.")
+
+
+# ---------------------------------------------------------------------------
+# 4.10  Incidencia por subregion
+# ---------------------------------------------------------------------------
+
+def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
+    st.subheader(":material/bar_chart: Incidencia por subregión")
+
+    if "subregion" not in casos.columns:
+        st.caption("Sin datos de subregión.")
+        return
+
+    anios_en_alcance = sorted(int(a) for a in casos["ano"].dropna().unique())
+    mapeo_subregion = obtener_mapeo_subregion()
+    tasas = calcular_tasa_por_subregion(casos, anios_en_alcance, mapeo_subregion)
+
+    df = pd.DataFrame({"subregion": list(tasas.keys()), "incidencia": list(tasas.values())})
+    df = df.dropna(subset=["incidencia"]).sort_values("incidencia")
+    if df.empty:
+        st.caption("Sin población DANE disponible para el período filtrado.")
+        return
+
+    fig = px.bar(
+        df, x="incidencia", y="subregion", text="incidencia",
+        orientation="h",
+        labels={"incidencia": "Incidencia x100.000 hab.", "subregion": ""},
     )
+    fig.update_traces(
+        textposition="outside",
+        texttemplate="%{text:.1f}",
+        name="Incidencia x100.000 hab.",
+        showlegend=True,
+    )
+    fig.update_layout(
+        **_LAYOUT,
+        xaxis={"range": rango_con_margen(df["incidencia"].max())},
+        legend=LEYENDA_SUPERIOR,
+    )
+    st.plotly_chart(fig, width="stretch")
+    st.caption("Incidencia = casos (210+220) / población en riesgo x 100.000, por subregión.")
 
 
 # ---------------------------------------------------------------------------
@@ -537,7 +812,7 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
     _COLORES_ESTADO_DONA = [
         AZUL_INSTITUCIONAL,   # Conf. laboratorio (el más frecuente → color primario)
         NARANJA_INSTITUCIONAL, # Conf. nexo
-        "#6f5499",             # Probable (morado discreto)
+        "#7c3aed",             # Probable (mismo violeta del Sankey)
         "#374151",             # Descartado / Otro
     ]
     fig = px.pie(
@@ -547,11 +822,12 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
         color_discrete_sequence=_COLORES_ESTADO_DONA,
     )
     fig.update_traces(
-        texttemplate="%{label}<br>%{value:,}",
+        texttemplate="%{value:,} (%{percent})",
         textposition="outside",
     )
     fig.update_layout(
-        showlegend=False,
+        showlegend=True,
+        legend=LEYENDA_SUPERIOR,
         height=300,
         margin=dict(l=10, r=10, t=40, b=10),
     )
@@ -585,6 +861,9 @@ def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
     )
 
     semanal = subset.groupby(["semana", "clasificacion"]).size().reset_index(name="casos")
+    if semanal.empty:
+        st.caption(f"Sin datos para {anio}.")
+        return
 
     fig = px.bar(
         semanal,
@@ -595,8 +874,9 @@ def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
         labels={"semana": "Semana epidemiológica", "casos": "Casos", "clasificacion": "Clasificación"},
     )
     fig.update_layout(
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
+        legend=dict(**LEYENDA_SUPERIOR, font=dict(size=10)),
         height=380,
         **_LAYOUT,
     )
+    fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
     st.plotly_chart(fig, width="stretch")

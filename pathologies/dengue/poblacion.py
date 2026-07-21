@@ -96,12 +96,13 @@ def obtener_mapeo_estratificacion_riesgo() -> dict[int, str]:
 
 
 @st.cache_data
-def obtener_poblacion_por_municipio_anio() -> pd.DataFrame:
-    """Poblacion en riesgo del Magdalena por municipio y anio: poblacion
-    total DANE, solo de municipios con transmision de dengue. Consolida todos
-    los archivos poblacionDane-*.xlsx disponibles en config/referencias/.
-
-    Devuelve columnas: cod_mun_completo, ano, poblacion.
+def _leer_poblacion_magdalena_todas_areas() -> pd.DataFrame:
+    """Consolida los archivos poblacionDane-*.xlsx, acotados al Magdalena y a
+    los municipios con transmision de dengue, SIN colapsar por area geografica
+    (deja Cabecera Municipal, Centros Poblados y Rural Disperso, y Total tal
+    como los publica el DANE). Base comun de
+    obtener_poblacion_por_municipio_anio (usa solo Total) y
+    obtener_poblacion_por_zona_municipio_anio (usa cabecera vs resto).
     """
     archivos = sorted(RUTA_REFERENCIAS.glob("poblacionDane-*.xlsx"))
     if not archivos:
@@ -115,18 +116,191 @@ def obtener_poblacion_por_municipio_anio() -> pd.DataFrame:
     poblacion = pd.concat(piezas, ignore_index=True)
 
     poblacion = poblacion[poblacion["cod_dpto"].astype(str).str.strip() == str(COD_DPTO_MAGDALENA)]
-    poblacion = poblacion[poblacion["area_geografica"].astype(str).str.strip() == "Total"]
-    poblacion = poblacion.dropna(subset=["cod_mun_completo", "ano", "poblacion"])
+    poblacion = poblacion.dropna(subset=["cod_mun_completo", "ano", "poblacion", "area_geografica"])
     poblacion["cod_mun_completo"] = poblacion["cod_mun_completo"].astype(int)
     poblacion["ano"] = poblacion["ano"].astype(int)
     poblacion["poblacion"] = poblacion["poblacion"].astype(int)
+    poblacion["area_geografica"] = poblacion["area_geografica"].astype(str).str.strip()
 
-    # Si dos archivos se solapan en el mismo anio+municipio, se prioriza el
+    # Si dos archivos se solapan en el mismo anio+municipio+area, se prioriza el
     # ultimo leido: sorted() ya ordena los archivos por nombre, y el nombre
     # poblacionDane-inicio-fin hace que el rango mas reciente quede al final.
-    poblacion = poblacion.drop_duplicates(subset=["cod_mun_completo", "ano"], keep="last")
+    poblacion = poblacion.drop_duplicates(subset=["cod_mun_completo", "ano", "area_geografica"], keep="last")
 
     municipios_con_transmision = _obtener_municipios_con_transmision()
     poblacion = poblacion[poblacion["cod_mun_completo"].isin(municipios_con_transmision)]
 
+    return poblacion.reset_index(drop=True)
+
+
+@st.cache_data
+def obtener_poblacion_por_municipio_anio() -> pd.DataFrame:
+    """Poblacion en riesgo del Magdalena por municipio y anio: poblacion
+    total DANE, solo de municipios con transmision de dengue.
+
+    Devuelve columnas: cod_mun_completo, ano, poblacion.
+    """
+    poblacion = _leer_poblacion_magdalena_todas_areas()
+    poblacion = poblacion[poblacion["area_geografica"] == "Total"]
     return poblacion[["cod_mun_completo", "ano", "poblacion"]].reset_index(drop=True)
+
+
+_AREA_DANE_CABECERA = "Cabecera Municipal"
+_AREA_DANE_RESTO = "Centros Poblados y Rural Disperso"
+
+# El dato SIVIGILA distingue 3 zonas de ocurrencia (cabecera municipal, centro
+# poblado, rural disperso: ver _ZONA_AREA_MAP en tendencia.py) pero el DANE
+# solo publica 2 categorias no-Total (cabecera vs el resto combinado); centro
+# poblado y rural disperso comparten esa misma poblacion.
+ZONA_A_AREA_DANE = {
+    "Cabecera municipal": _AREA_DANE_CABECERA,
+    "Centro poblado": _AREA_DANE_RESTO,
+    "Rural disperso": _AREA_DANE_RESTO,
+}
+
+
+@st.cache_data
+def obtener_poblacion_por_zona_municipio_anio() -> pd.DataFrame:
+    """Poblacion DANE por municipio, anio y zona (Cabecera Municipal vs
+    Centros Poblados y Rural Disperso), sin colapsar a Total. Denominador de
+    calcular_tasa_por_zona_municipio (mapa, 3er nivel: zonas dentro de un
+    municipio).
+
+    Devuelve columnas: cod_mun_completo, ano, area_geografica, poblacion.
+    """
+    poblacion = _leer_poblacion_magdalena_todas_areas()
+    poblacion = poblacion[poblacion["area_geografica"] != "Total"]
+    return poblacion[["cod_mun_completo", "ano", "area_geografica", "poblacion"]].reset_index(drop=True)
+
+
+def obtener_poblacion_departamental(anios_en_alcance: list[int]) -> float | None:
+    """Poblacion en riesgo del Magdalena completo (suma de los 30 municipios) para
+    los anios dados. Util para la linea de referencia departamental en graficas
+    por subregion (ej. 5.7 en mortalidad.py). None si falta poblacion para alguno
+    de esos anios, nunca un numero incompleto.
+    """
+    if not anios_en_alcance:
+        return None
+    poblacion_municipio = obtener_poblacion_por_municipio_anio()
+    poblacion_periodo = poblacion_municipio[poblacion_municipio["ano"].isin(anios_en_alcance)]
+    anios_con_poblacion = set(poblacion_periodo["ano"].unique())
+    if not set(anios_en_alcance).issubset(anios_con_poblacion):
+        return None
+    return float(poblacion_periodo["poblacion"].sum())
+
+
+def obtener_poblacion_por_subregion_anio(mapeo_subregion: dict[int, str]) -> pd.DataFrame:
+    """Poblacion en riesgo agregada a nivel subregion (suma de sus municipios) por
+    anio. Reutiliza obtener_poblacion_por_municipio_anio(); es la base de las tasas
+    por subregion en las vistas (tendencia, morbilidad, mortalidad).
+
+    Devuelve columnas: subregion, ano, poblacion.
+    """
+    poblacion_municipio = obtener_poblacion_por_municipio_anio().copy()
+    poblacion_municipio["subregion"] = poblacion_municipio["cod_mun_completo"].map(mapeo_subregion)
+    poblacion_municipio = poblacion_municipio.dropna(subset=["subregion"])
+    return poblacion_municipio.groupby(["subregion", "ano"], as_index=False)["poblacion"].sum()
+
+
+def calcular_tasa_por_subregion(
+    eventos: pd.DataFrame,
+    anios_en_alcance: list[int],
+    mapeo_subregion: dict[int, str],
+) -> dict[str, float | None]:
+    """Tasa por 100.000 hab. de cada subregion del Magdalena para el conjunto de
+    eventos dado (casos o muertes, ya filtrados, con columna "subregion").
+
+    anios_en_alcance son los anios cuya poblacion se suma como denominador
+    (persona-anios si son varios, misma logica que indicators.py._poblacion_en_
+    riesgo: no se usa un solo anio de referencia si el filtro cubre un rango).
+    Si falta poblacion para alguno de los anios pedidos en una subregion, esa
+    subregion queda en None (no disponible), nunca en cero: el sistema no
+    publica numeros falsos.
+
+    Devuelve un dict {subregion: tasa_o_None}, con TODAS las subregiones del
+    mapeo (incluidas las que no tuvieron ningun evento: tasa 0.0, no None).
+    """
+    poblacion_subregion = obtener_poblacion_por_subregion_anio(mapeo_subregion)
+    poblacion_periodo = poblacion_subregion[poblacion_subregion["ano"].isin(anios_en_alcance)]
+
+    resultado: dict[str, float | None] = {}
+    for subregion in sorted(set(mapeo_subregion.values())):
+        if not anios_en_alcance:
+            resultado[subregion] = None
+            continue
+        poblacion_sub = poblacion_periodo[poblacion_periodo["subregion"] == subregion]
+        anios_con_poblacion = set(poblacion_sub["ano"].unique())
+        if not set(anios_en_alcance).issubset(anios_con_poblacion):
+            resultado[subregion] = None
+            continue
+        poblacion_total = poblacion_sub["poblacion"].sum()
+        n_eventos = int((eventos["subregion"] == subregion).sum())
+        resultado[subregion] = n_eventos / poblacion_total * 100_000
+
+    return resultado
+
+
+def calcular_tasa_por_municipio(
+    eventos: pd.DataFrame,
+    anios_en_alcance: list[int],
+    municipios: list[int],
+) -> dict[int, float | None]:
+    """Tasa por 100.000 hab. de cada municipio dado, para el conjunto de eventos
+    (casos o muertes, ya filtrados, con columna cod_mun_completo). Misma logica
+    de persona-anios y "None si falta poblacion" que calcular_tasa_por_subregion,
+    pero a escala municipio.
+
+    Devuelve un dict {cod_mun_completo: tasa_o_None}.
+    """
+    poblacion_municipio = obtener_poblacion_por_municipio_anio()
+    poblacion_periodo = poblacion_municipio[poblacion_municipio["ano"].isin(anios_en_alcance)]
+
+    resultado: dict[int, float | None] = {}
+    for municipio in municipios:
+        if not anios_en_alcance:
+            resultado[municipio] = None
+            continue
+        poblacion_mun = poblacion_periodo[poblacion_periodo["cod_mun_completo"] == municipio]
+        anios_con_poblacion = set(poblacion_mun["ano"].unique())
+        if not set(anios_en_alcance).issubset(anios_con_poblacion):
+            resultado[municipio] = None
+            continue
+        poblacion_total = poblacion_mun["poblacion"].sum()
+        n_eventos = int((eventos["cod_mun_completo"] == municipio).sum())
+        resultado[municipio] = n_eventos / poblacion_total * 100_000
+
+    return resultado
+
+
+def calcular_tasa_por_zona_municipio(
+    casos_por_zona: dict[str, int],
+    codigo_municipio: int,
+    anios_en_alcance: list[int],
+) -> dict[str, float | None]:
+    """Tasa por 100.000 hab. de cada zona (cabecera municipal, centro poblado,
+    rural disperso) DENTRO de un solo municipio (mapa, 3er nivel de detalle).
+
+    Centro poblado y rural disperso comparten denominador porque el DANE no
+    los separa (ver ZONA_A_AREA_DANE / obtener_poblacion_por_zona_municipio_
+    anio); cabecera usa su propio denominador. None si falta poblacion DANE del
+    municipio para alguno de los anios pedidos, nunca en cero.
+    """
+    if not anios_en_alcance:
+        return {zona: None for zona in ZONA_A_AREA_DANE}
+
+    poblacion = obtener_poblacion_por_zona_municipio_anio()
+    poblacion_municipio = poblacion[poblacion["cod_mun_completo"] == codigo_municipio]
+    poblacion_periodo = poblacion_municipio[poblacion_municipio["ano"].isin(anios_en_alcance)]
+
+    resultado: dict[str, float | None] = {}
+    for zona, area_dane in ZONA_A_AREA_DANE.items():
+        poblacion_area = poblacion_periodo[poblacion_periodo["area_geografica"] == area_dane]
+        anios_con_poblacion = set(poblacion_area["ano"].unique())
+        if not set(anios_en_alcance).issubset(anios_con_poblacion):
+            resultado[zona] = None
+            continue
+        poblacion_total = poblacion_area["poblacion"].sum()
+        n_casos = casos_por_zona.get(zona, 0)
+        resultado[zona] = n_casos / poblacion_total * 100_000
+
+    return resultado
