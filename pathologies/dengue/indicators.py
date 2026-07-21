@@ -12,12 +12,11 @@ Regla central: si falta una pieza necesaria para un indicador (poblacion, o el
 codigo 580), ese indicador queda "no disponible" (None), nunca en cero: el
 sistema no publica numeros falsos.
 
-Incidencia y mortalidad dependen de poblacion en riesgo, que solo es confiable
-a escala subregion o mas amplia (nunca municipio: a esa escala el denominador
-poblacional no refleja donde se atendio al paciente, por el desplazamiento de
-pacientes entre municipios). Si el filtro geografico esta acotado a
-municipio(s) especificos, estos dos indicadores quedan "no disponible" aunque
-haya poblacion: el problema no es el dato, es que a esa escala no es confiable.
+Incidencia y mortalidad dependen de poblacion en riesgo. Cuando el filtro
+geografico esta acotado a municipio(s) especificos, la poblacion en riesgo se
+suma solo entre esos municipios (misma fuente que calcular_tasa_por_municipio
+en poblacion.py, ya usada en el mapa y en Hospitalizacion por territorio de
+Morbilidad).
 
 Letalidad, letalidad grave y los dos porcentajes de dengue grave son cocientes
 de columnas de caso (no dependen de poblacion), asi que se calculan igual sin
@@ -43,17 +42,28 @@ COD_MORTALIDAD = 580
 CODIGOS_CASOS = {COD_DENGUE, COD_DENGUE_GRAVE}
 
 
-def _poblacion_en_riesgo(anios: list[int], subregiones: list[str] | None) -> float | None:
+def _poblacion_en_riesgo(
+    anios: list[int], subregiones: list[str] | None, municipios: list[int] | None
+) -> float | None:
     """Suma la poblacion en riesgo (persona-anios) de los municipios en alcance
     para el periodo filtrado. None si falta poblacion para alguno de los anios
     pedidos (una suma parcial daria un numero enganosamente bajo).
+
+    Si el filtro esta acotado a municipio(s) especificos (municipios, con los
+    codigos DIVIPOLA que aparecen en el dato ya filtrado), se usa solo esa
+    poblacion; si no, y hay subregiones filtradas, se usa la poblacion de esas
+    subregiones; si no hay ningun filtro geografico, se usa el Magdalena
+    completo (los municipios que ya trae obtener_poblacion_por_municipio_anio,
+    que son los "con transmision").
     """
     if not anios:
         return None
 
     poblacion = obtener_poblacion_por_municipio_anio()
 
-    if subregiones:
+    if municipios:
+        poblacion = poblacion[poblacion["cod_mun_completo"].isin(municipios)]
+    elif subregiones:
         mapeo_subregion = obtener_mapeo_subregion()
         municipios_en_alcance = {
             cod_municipio for cod_municipio, subregion in mapeo_subregion.items()
@@ -97,22 +107,25 @@ def calcular_indicadores(datos_filtrados: pd.DataFrame, filtros: dict[str, Any])
     else:
         pct_hospitalizados_grave = None
 
+    anios_filtrados = filtros.get("ano") or []
+    subregiones_filtradas = filtros.get("subregion")
+    # Codigos DIVIPOLA de los municipios filtrados: se leen del dato YA
+    # filtrado por nombre (datos_filtrados), no del nombre en si, porque los
+    # nombres de municipio varian en tildes/espacios entre archivos y rompen
+    # un cruce por nombre (ver CLAUDE.md, geografia.py).
     municipios_filtrados = filtros.get("nom_mun_o")
-    if municipios_filtrados:
-        # Tasa no confiable a escala municipio (ver docstring del modulo).
+    municipios_codigos = (
+        sorted(int(c) for c in datos_filtrados["cod_mun_completo"].dropna().unique())
+        if municipios_filtrados else None
+    )
+
+    poblacion_en_riesgo = _poblacion_en_riesgo(anios_filtrados, subregiones_filtradas, municipios_codigos)
+    if poblacion_en_riesgo:
+        incidencia = total_casos / poblacion_en_riesgo * 100_000
+        mortalidad = total_muertes / poblacion_en_riesgo * 100_000
+    else:
         incidencia = None
         mortalidad = None
-        poblacion_en_riesgo = None
-    else:
-        anios_filtrados = filtros.get("ano") or []
-        subregiones_filtradas = filtros.get("subregion")
-        poblacion_en_riesgo = _poblacion_en_riesgo(anios_filtrados, subregiones_filtradas)
-        if poblacion_en_riesgo:
-            incidencia = total_casos / poblacion_en_riesgo * 100_000
-            mortalidad = total_muertes / poblacion_en_riesgo * 100_000
-        else:
-            incidencia = None
-            mortalidad = None
 
     return {
         "incidencia": incidencia,

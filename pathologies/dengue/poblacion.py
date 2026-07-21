@@ -1,8 +1,8 @@
 """Poblacion DANE por municipio y anio: denominador de incidencia y mortalidad
 en indicators.py. Poblacion en riesgo = poblacion total (area geografica
 "Total", cabecera + centros poblados y rural disperso) de los municipios del
-Magdalena clasificados con algun nivel de transmision de dengue segun el
-lineamiento MSPS/INS (archivo de estratificacion de arbovirosis).
+Magdalena clasificados con algun nivel de transmision de dengue segun la
+estratificacion de riesgo (ver estratificacion.py).
 
 Los archivos de poblacion son intercambiables: viven en config/referencias/
 nombrados poblacionDane-{anio_inicio}-{anio_fin}.xlsx (convencion de nombre de
@@ -17,8 +17,9 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from pathologies.dengue.estratificacion import calcular_estratificacion
+
 RUTA_REFERENCIAS = Path(__file__).parent / "config" / "referencias"
-RUTA_ESTRATIFICACION = RUTA_REFERENCIAS / "estratificacion_arbovirosis_colombia_2020_2023.xlsx"
 
 COD_DPTO_MAGDALENA = 47
 
@@ -29,6 +30,16 @@ _NIVELES_SIN_TRANSMISION = {
     "Sin transmisión sin vector",
     "Sin transmisión con vector",
 }
+
+# Claves de session_state donde queda la ultima estratificacion calculada
+# esta sesion (obtener_mapeo_estratificacion_riesgo las escribe;
+# _obtener_municipios_con_transmision y obtener_poblacion_por_municipio_anio
+# las leen). No usa @st.cache_data en las funciones que dependen de estas
+# claves: mezclar cache-por-argumentos con una lectura de session_state haria
+# que el cache no se entere cuando session_state cambia (ej. el usuario pulsa
+# "Actualizar"), y quedaria desactualizado en silencio.
+_CLAVE_ESTRATIFICACION_SESION = "dengue_estratificacion_actual"
+_CLAVE_POBLACION_ASIGNADA_SESION = "dengue_poblacion_asignada_actual"
 
 
 def _leer_archivo_poblacion(ruta: Path) -> pd.DataFrame:
@@ -61,48 +72,92 @@ def _leer_archivo_poblacion(ruta: Path) -> pd.DataFrame:
     raise ValueError(f"No se encontro la fila de encabezado (columna DP) en {ruta.name}")
 
 
-def _leer_estratificacion_magdalena() -> pd.DataFrame:
-    """Estratificacion de arbovirosis (nivel_riesgo por municipio, lineamiento
-    MSPS/INS), acotada al Magdalena. Fuente unica para poblacion en riesgo
-    (indicators.py, via _obtener_municipios_con_transmision) y para el filtro
-    global "Estratificacion de riesgo" (filtros.py, via
-    obtener_mapeo_estratificacion_riesgo).
-    """
-    estratificacion = pd.read_excel(RUTA_ESTRATIFICACION, engine="calamine")
-    return estratificacion[estratificacion["cod_departamento"] == COD_DPTO_MAGDALENA]
-
-
-def _obtener_municipios_con_transmision() -> set[int]:
-    """Municipios del Magdalena con algun nivel de transmision de dengue,
-    segun el lineamiento MSPS/INS. Poblacion en riesgo solo cuenta estos
-    municipios: los marcados sin riesgo o sin transmision no aportan al
-    denominador aunque tengan poblacion.
-    """
-    magdalena = _leer_estratificacion_magdalena()
-    con_transmision = magdalena[~magdalena["nivel_riesgo"].isin(_NIVELES_SIN_TRANSMISION)]
-    return set(con_transmision["cod_municipio"].astype(int))
-
-
 @st.cache_data
-def obtener_mapeo_estratificacion_riesgo() -> dict[int, str]:
+def _calcular_estratificacion_cacheada(datos: pd.DataFrame) -> pd.DataFrame:
+    """El calculo en si (calcular_estratificacion) es caro y es el mismo para
+    cualquier sesion que tenga cargado el mismo consolidado, asi que se
+    cachea a nivel de PROCESO con st.cache_data (compartida entre todas las
+    sesiones/usuarios). La escritura a session_state NO puede vivir aca
+    adentro (ver obtener_mapeo_estratificacion_riesgo): si estuviera aca, una
+    sesion nueva que le pegue a un cache-hit de OTRA sesion nunca ejecutaria
+    este cuerpo, y se quedaria sin el dato en su propio session_state.
+    """
+    return calcular_estratificacion(datos)
+
+
+def obtener_mapeo_estratificacion_riesgo(datos: pd.DataFrame) -> dict[int, str]:
     """Mapeo de cod_municipio (DIVIPOLA, coincide con cod_mun_completo) a
     nivel_riesgo, para el filtro global "Estratificacion de riesgo"
     (core/dashboard_base/filtros.py). A diferencia de poblacion en riesgo, aqui
     se devuelven TODOS los niveles (incluidos "sin riesgo"/"sin transmision"):
     es un filtro, la persona debe poder ver y elegir cualquier categoria.
+
+    datos: el consolidado COMPLETO de dengue (layout.py lo llama con
+    datos_completos, antes de aplicar los filtros globales).
+
+    SIN @st.cache_data propio, a proposito: layout.py la llama una vez en
+    CADA rerun, y siempre debe dejar su resultado en el session_state de ESA
+    sesion (ver abajo). Si esta funcion tuviera @st.cache_data (que es una
+    cache de PROCESO, compartida entre todas las sesiones/usuarios), una
+    sesion nueva que pida el mismo "datos" que ya calculo otra sesion
+    obtendria un cache-hit y esta funcion nunca se ejecutaria, dejando esa
+    sesion nueva sin nada en su session_state: eso es exactamente el bug de
+    "sin poblacion DANE disponible" que se veia con el segundo usuario o al
+    refrescar. Lo caro (calcular_estratificacion) si sigue cacheado, en
+    _calcular_estratificacion_cacheada.
+
+    Ademas de devolver el mapeo, deja en session_state tanto el nivel_riesgo
+    como la poblacion_asignada por municipio (Tabla 5 del lineamiento: Total,
+    Cabecera Municipal, o Centros Poblados y Rural Disperso, ver
+    estratificacion.py): es la unica forma en que _obtener_municipios_con_
+    transmision y obtener_poblacion_por_municipio_anio los consultan, sin
+    tener que recibir "datos" como argumento en cada una (ver
+    _CLAVE_ESTRATIFICACION_SESION / _CLAVE_POBLACION_ASIGNADA_SESION).
     """
-    magdalena = _leer_estratificacion_magdalena()
-    return magdalena.set_index("cod_municipio")["nivel_riesgo"].to_dict()
+    estratificacion = _calcular_estratificacion_cacheada(datos)
+    if estratificacion.empty:
+        mapeo: dict[int, str] = {}
+        mapeo_poblacion_asignada: dict[int, str] = {}
+    else:
+        mapeo = estratificacion.set_index("cod_municipio")["nivel_riesgo"].to_dict()
+        mapeo_poblacion_asignada = estratificacion.set_index("cod_municipio")["poblacion_asignada"].to_dict()
+    st.session_state[_CLAVE_ESTRATIFICACION_SESION] = mapeo
+    st.session_state[_CLAVE_POBLACION_ASIGNADA_SESION] = mapeo_poblacion_asignada
+    return mapeo
+
+
+def _obtener_municipios_con_transmision() -> set[int]:
+    """Municipios del Magdalena con algun nivel de transmision de dengue,
+    segun la estratificacion calculada esta sesion (ver
+    obtener_mapeo_estratificacion_riesgo, que layout.py llama una vez por
+    rerun con el consolidado completo, antes de que cualquier pestana se
+    dibuje). Poblacion en riesgo solo cuenta estos municipios: los marcados
+    sin riesgo o sin transmision no aportan al denominador aunque tengan
+    poblacion.
+
+    Vacio si la estratificacion todavia no se pudo calcular (ver
+    estratificacion.ANIOS_REQUERIDOS: hacen falta 6 anios de historico). Eso
+    vacia tambien la poblacion en riesgo mas abajo, y calcular_indicadores()
+    ya sabe mostrar "no disponible" cuando no hay poblacion, nunca cero.
+    """
+    mapeo = st.session_state.get(_CLAVE_ESTRATIFICACION_SESION, {})
+    return {
+        cod_municipio
+        for cod_municipio, nivel_riesgo in mapeo.items()
+        if nivel_riesgo not in _NIVELES_SIN_TRANSMISION
+    }
 
 
 @st.cache_data
 def _leer_poblacion_magdalena_todas_areas() -> pd.DataFrame:
-    """Consolida los archivos poblacionDane-*.xlsx, acotados al Magdalena y a
-    los municipios con transmision de dengue, SIN colapsar por area geografica
-    (deja Cabecera Municipal, Centros Poblados y Rural Disperso, y Total tal
-    como los publica el DANE). Base comun de
-    obtener_poblacion_por_municipio_anio (usa solo Total) y
-    obtener_poblacion_por_zona_municipio_anio (usa cabecera vs resto).
+    """Consolida los archivos poblacionDane-*.xlsx, acotados al Magdalena, SIN
+    colapsar por area geografica (deja Cabecera Municipal, Centros Poblados y
+    Rural Disperso, y Total tal como los publica el DANE) y SIN filtrar por
+    municipios con transmision: eso lo hacen obtener_poblacion_por_municipio_
+    anio y obtener_poblacion_por_zona_municipio_anio, porque la transmision
+    sale de session_state (ver _obtener_municipios_con_transmision) y esta
+    funcion debe quedar cacheable solo por los archivos Excel, que son
+    estaticos. Base comun de ambas.
     """
     archivos = sorted(RUTA_REFERENCIAS.glob("poblacionDane-*.xlsx"))
     if not archivos:
@@ -127,21 +182,36 @@ def _leer_poblacion_magdalena_todas_areas() -> pd.DataFrame:
     # poblacionDane-inicio-fin hace que el rango mas reciente quede al final.
     poblacion = poblacion.drop_duplicates(subset=["cod_mun_completo", "ano", "area_geografica"], keep="last")
 
-    municipios_con_transmision = _obtener_municipios_con_transmision()
-    poblacion = poblacion[poblacion["cod_mun_completo"].isin(municipios_con_transmision)]
-
     return poblacion.reset_index(drop=True)
 
 
-@st.cache_data
 def obtener_poblacion_por_municipio_anio() -> pd.DataFrame:
-    """Poblacion en riesgo del Magdalena por municipio y anio: poblacion
-    total DANE, solo de municipios con transmision de dengue.
+    """Poblacion en riesgo del Magdalena por municipio y anio: solo de
+    municipios con transmision de dengue, y con la poblacion DANE que le
+    corresponde a cada uno segun donde tuvo casos (Tabla 5 del lineamiento,
+    ver estratificacion._calcular_poblacion_asignada): Total si tuvo casos en
+    cabecera y en zona rural, o solo la poblacion de la zona donde realmente
+    tuvo casos. Antes se usaba "Total" para todos por igual; esto es mas
+    preciso cuando un municipio solo tiene transmision confirmada en una de
+    las dos zonas.
+
+    Sin @st.cache_data propio a proposito: filtra por municipios_con_
+    transmision y poblacion_asignada, que salen de session_state (ver
+    _obtener_municipios_con_transmision) y pueden cambiar entre reruns sin que
+    cambien los argumentos de esta funcion (no tiene ninguno). Lo caro (leer y
+    parsear los Excel de poblacion) ya esta cacheado en
+    _leer_poblacion_magdalena_todas_areas; filtrar sobre ese resultado es
+    barato, asi que no hace falta cachear esto tambien.
 
     Devuelve columnas: cod_mun_completo, ano, poblacion.
     """
+    municipios_con_transmision = _obtener_municipios_con_transmision()
+    poblacion_asignada = st.session_state.get(_CLAVE_POBLACION_ASIGNADA_SESION, {})
+
     poblacion = _leer_poblacion_magdalena_todas_areas()
-    poblacion = poblacion[poblacion["area_geografica"] == "Total"]
+    poblacion = poblacion[poblacion["cod_mun_completo"].isin(municipios_con_transmision)].copy()
+    poblacion["area_asignada"] = poblacion["cod_mun_completo"].map(poblacion_asignada).fillna("Total")
+    poblacion = poblacion[poblacion["area_geografica"] == poblacion["area_asignada"]]
     return poblacion[["cod_mun_completo", "ano", "poblacion"]].reset_index(drop=True)
 
 
@@ -159,16 +229,18 @@ ZONA_A_AREA_DANE = {
 }
 
 
-@st.cache_data
 def obtener_poblacion_por_zona_municipio_anio() -> pd.DataFrame:
     """Poblacion DANE por municipio, anio y zona (Cabecera Municipal vs
     Centros Poblados y Rural Disperso), sin colapsar a Total. Denominador de
     calcular_tasa_por_zona_municipio (mapa, 3er nivel: zonas dentro de un
-    municipio).
+    municipio). Sin @st.cache_data propio: mismo motivo que
+    obtener_poblacion_por_municipio_anio.
 
     Devuelve columnas: cod_mun_completo, ano, area_geografica, poblacion.
     """
+    municipios_con_transmision = _obtener_municipios_con_transmision()
     poblacion = _leer_poblacion_magdalena_todas_areas()
+    poblacion = poblacion[poblacion["cod_mun_completo"].isin(municipios_con_transmision)]
     poblacion = poblacion[poblacion["area_geografica"] != "Total"]
     return poblacion[["cod_mun_completo", "ano", "area_geografica", "poblacion"]].reset_index(drop=True)
 

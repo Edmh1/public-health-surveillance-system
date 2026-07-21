@@ -68,5 +68,5 @@ class DenguePathologyPlugin(PathologyPlugin):
     def obtener_mapeo_subregion(self) -> dict[int, str]:
         return obtener_mapeo_subregion_dengue()
 
-    def obtener_mapeo_estratificacion_riesgo(self) -> dict[int, str]:
-        return obtener_mapeo_estratificacion_riesgo_dengue()
+    def obtener_mapeo_estratificacion_riesgo(self, datos: pd.DataFrame) -> dict[int, str]:
+        return obtener_mapeo_estratificacion_riesgo_dengue(datos)

@@ -64,7 +64,6 @@ _TIPO_CASO_OPTS = {
 
 _LAYOUT = dict(margin=dict(l=0, r=0, t=40, b=0))
 
-
 def _pct(n: float, total: float) -> str:
     if total == 0:
         return "—"
@@ -77,7 +76,6 @@ def _pct(n: float, total: float) -> str:
         return f"{p:.3f}%"
     return "0%"
 
-
 # ---------------------------------------------------------------------------
 # Orquestador
 # ---------------------------------------------------------------------------
@@ -89,22 +87,6 @@ def mostrar_morbilidad(datos: pd.DataFrame) -> None:
         st.info("No hay casos de dengue para los filtros actuales.", icon=":material/info:")
         return
 
-    # Incidencia (tasa poblacional) vive aca ademas de en Situacion: en Situacion
-    # es de un solo anio; aca sigue el filtro global, asi que se puede ver por
-    # rangos de anios. Respeta la regla de "no disponible" (municipio / sin DANE)
-    # porque sale del mismo calcular_indicadores.
-    filtros_actuales = st.session_state.get(CLAVE_FILTROS, {})
-    resultado_indicadores = calcular_indicadores(datos, filtros_actuales)
-
-    anios = sorted(int(a) for a in casos["ano"].dropna().unique())
-    if anios:
-        periodo = str(anios[0]) if len(anios) == 1 else f"{anios[0]}-{anios[-1]}"
-        st.caption(
-            f":material/calendar_today: Indicadores del período filtrado ({periodo}). "
-            "La incidencia es una tasa anual por 100.000 habitantes."
-        )
-
-    _mostrar_kpis(casos, resultado_indicadores["incidencia"])
     # Incidencia (tasa poblacional) vive aca ademas de en Situacion: en Situacion
     # es de un solo anio; aca sigue el filtro global, asi que se puede ver por
     # rangos de anios. Respeta la regla de "no disponible" (municipio / sin DANE)
@@ -170,12 +152,10 @@ def mostrar_morbilidad(datos: pd.DataFrame) -> None:
     with st.container(border=True):
         _mostrar_hospitalizacion_semanal(casos)
 
-
 # ---------------------------------------------------------------------------
 # KPIs
 # ---------------------------------------------------------------------------
 
-def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
 def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
     total = len(casos)
     graves = int((casos["cod_eve"] == COD_DENGUE_GRAVE).sum())
@@ -191,31 +171,17 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
     incidencia_txt = f"{incidencia:,.1f}" if incidencia is not None else "No disponible"
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    incidencia_txt = f"{incidencia:,.1f}" if incidencia is not None else "No disponible"
-
-    c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        st.metric("Casos totales", f"{total:,}", border=True)
         st.metric("Casos totales", f"{total:,}", border=True)
     with c2:
         st.metric(
             "Incidencia",
             incidencia_txt,
             help=(
-                "Casos (210+220) / población en riesgo x 100.000. No disponible si el "
-                "filtro está en un municipio o falta población DANE (las tasas solo son "
-                "confiables a escala subregión o departamento)."
-            ),
-            border=True,
-        )
-    with c3:
-        st.metric(
-            "Incidencia",
-            incidencia_txt,
-            help=(
-                "Casos (210+220) / población en riesgo x 100.000. No disponible si el "
-                "filtro está en un municipio o falta población DANE (las tasas solo son "
-                "confiables a escala subregión o departamento)."
+                "Casos (210+220) / población en riesgo x 100.000. No disponible si falta "
+                "población DANE, o el sistema todavía no tiene los 6 años de histórico "
+                "que pide el lineamiento MSPS/INS para calcular la estratificación de "
+                "riesgo."
             ),
             border=True,
         )
@@ -228,11 +194,7 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
             delta_arrow="off",
             delta_description="del total",
             border=True,
-            delta_arrow="off",
-            delta_description="del total",
-            border=True,
         )
-    with c4:
     with c4:
         st.metric(
             "Dengue grave (220)",
@@ -242,11 +204,7 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
             delta_arrow="off",
             delta_description="del total",
             border=True,
-            delta_arrow="off",
-            delta_description="del total",
-            border=True,
         )
-    with c5:
     with c5:
         st.metric(
             "Hospitalizados graves",
@@ -255,13 +213,9 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
             delta_color="off",
             delta_arrow="off",
             delta_description="de los graves",
-            delta_arrow="off",
-            delta_description="de los graves",
             help="Hospitalizados de dengue grave sobre el total de casos graves",
             border=True,
-            border=True,
         )
-
 
 # ---------------------------------------------------------------------------
 # 4.3  Tipo de caso (dona)
@@ -296,7 +250,6 @@ def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch")
 
-
 # ---------------------------------------------------------------------------
 # 4.2  Flujo clasificacion inicial → final (Sankey)
 # ---------------------------------------------------------------------------
@@ -306,7 +259,6 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
-
 
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     st.subheader(":material/account_tree: Gráfico de Sankey")
@@ -499,7 +451,6 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch")
 
-
 # ---------------------------------------------------------------------------
 # 4.1  Fuente de notificacion (dona)
 # ---------------------------------------------------------------------------
@@ -559,7 +510,6 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch")
 
-
 # ---------------------------------------------------------------------------
 # 4.4  Evolucion semanal por tipo de caso (selector anio local)
 # ---------------------------------------------------------------------------
@@ -615,8 +565,6 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
     )
     # Linea de % graves sobre eje secundario. Hover propio: "Semana X · Y%" en
     # vez de la coordenada (x, y) cruda que muestra Plotly por defecto.
-    # Linea de % graves sobre eje secundario. Hover propio: "Semana X · Y%" en
-    # vez de la coordenada (x, y) cruda que muestra Plotly por defecto.
     fig.add_trace(go.Scatter(
         x=pct_df["semana"],
         y=pct_df["pct_grave"],
@@ -626,7 +574,6 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
         line=dict(dash="dot", width=1.5, color="#555555"),
         yaxis="y2",
         hovertemplate="Semana %{x} · %{y:.1f}% graves<extra></extra>",
-        hovertemplate="Semana %{x} · %{y:.1f}% graves<extra></extra>",
     ))
     fig.update_layout(
         yaxis2=dict(overlaying="y", side="right", title="% Graves", showgrid=False),
@@ -635,7 +582,6 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
     )
     fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
     st.plotly_chart(fig, width="stretch")
-
 
 # ---------------------------------------------------------------------------
 # 4.5  Hospitalizacion por semana y tipo de caso
@@ -690,10 +636,8 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
     fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
     st.plotly_chart(fig, width="stretch")
 
-
 # ---------------------------------------------------------------------------
-# 4.6 + 4.7  Hospitalizacion territorial (subregion: tasa; municipio: conteo)
-# 4.6 + 4.7  Hospitalizacion territorial (subregion: tasa; municipio: conteo)
+# 4.6 + 4.7  Hospitalizacion territorial (subregion y municipio, ambas en tasa)
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
@@ -791,7 +735,6 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
 
     st.caption("Tasa = hospitalizados / población en riesgo x 100.000, en ambos niveles.")
 
-
 # ---------------------------------------------------------------------------
 # 4.10  Incidencia por subregion
 # ---------------------------------------------------------------------------
@@ -831,7 +774,6 @@ def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch")
     st.caption("Incidencia = casos (210+220) / población en riesgo x 100.000, por subregión.")
-
 
 # ---------------------------------------------------------------------------
 # 4.8  Clasificacion final (dona)
@@ -879,7 +821,6 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
         margin=dict(l=10, r=10, t=40, b=10),
     )
     st.plotly_chart(fig, width="stretch")
-
 
 # ---------------------------------------------------------------------------
 # 4.9  Clasificacion final por semana

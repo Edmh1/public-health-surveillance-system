@@ -98,12 +98,18 @@ class PathologyPlugin(ABC):
         cambiar ese archivo reagrupa todo sin reprocesar ninguna pieza.
         """
 
-    def obtener_mapeo_estratificacion_riesgo(self) -> dict[int, str]:
+    def obtener_mapeo_estratificacion_riesgo(self, datos: pd.DataFrame) -> dict[int, str]:
         """Mapeo de codigo DIVIPOLA de municipio (cod_mun_completo) a nivel de riesgo
-        (ej. "Alta transmision", "Sin riesgo"), leido de un Excel externo intercambiable
-        de la patologia. Alimenta el filtro global "Estratificacion de riesgo" (ver
-        core/dashboard_base/filtros.py). No es una columna del dato procesado: se deriva
-        en memoria al filtrar, igual que obtener_mapeo_subregion.
+        (ej. "Alta transmision", "Sin riesgo"). Cada patologia decide como lo obtiene
+        (leerlo de un archivo externo, calcularlo, etc.); dengue lo calcula en
+        pathologies/dengue/estratificacion.py. Alimenta el filtro global
+        "Estratificacion de riesgo" (ver core/dashboard_base/filtros.py). No es una
+        columna del dato procesado: se deriva en memoria al filtrar, igual que
+        obtener_mapeo_subregion.
+
+        datos: el consolidado COMPLETO de la patologia (layout.py lo pasa antes de
+        aplicar ningun filtro global). Asi la estratificacion nunca depende de lo que
+        el usuario filtre en pantalla, solo del dato cargado en la sesion.
 
         No es abstracto (metodo concreto, no @abstractmethod): no toda patologia tiene
         una nocion de estratificacion de riesgo (ej. tuberculosis no es transmitida por

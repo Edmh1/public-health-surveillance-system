@@ -71,7 +71,11 @@ def ejecutar_dashboard() -> None:
 
         datos_completos = modulo_datos.obtener_datos(patologia)
         mapeo_subregion = plugin.obtener_mapeo_subregion()
-        mapeo_estratificacion_riesgo = plugin.obtener_mapeo_estratificacion_riesgo()
+        # datos_completos (no datos_filtrados): la estratificacion es una
+        # clasificacion de referencia del territorio, no debe cambiar porque el
+        # usuario mueva un filtro global (ver PathologyPlugin.obtener_mapeo_
+        # estratificacion_riesgo en core/registry.py).
+        mapeo_estratificacion_riesgo = plugin.obtener_mapeo_estratificacion_riesgo(datos_completos)
         filtros = _mostrar_filtros_en_sidebar(
             patologia, datos_completos, plugin.columna_anio, mapeo_subregion, mapeo_estratificacion_riesgo
         )

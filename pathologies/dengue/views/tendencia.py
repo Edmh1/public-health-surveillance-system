@@ -36,12 +36,6 @@ CODIGOS_CASOS = {210, 220}
 # claro pero visible; el techo, el azul institucional oscuro.
 ESCALA_INCIDENCIA = ["#9ecae1", "#5ba3d0", "#2a6db0", "#1b3a6b"]
 
-# Escala azul para los mapas de coropletas. NO arranca en blanco: la escala
-# "Blues" de Plotly llega casi a blanco en su extremo bajo, y la subregion de
-# menor valor se perdia contra el fondo blanco de la pagina. El piso es un azul
-# claro pero visible; el techo, el azul institucional oscuro.
-ESCALA_INCIDENCIA = ["#9ecae1", "#5ba3d0", "#2a6db0", "#1b3a6b"]
-
 _NIVEL_OPCIONES = ["Subregión", "Municipio"]
 _NIVEL_ETIQUETAS = {
     "Subregión": ":material/map: Subregión",
@@ -49,7 +43,6 @@ _NIVEL_ETIQUETAS = {
 }
 
 _LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
-
 
 def mostrar_tendencia(datos: pd.DataFrame) -> None:
     casos = datos[datos["cod_eve"].isin(CODIGOS_CASOS)]
@@ -84,7 +77,6 @@ def mostrar_tendencia(datos: pd.DataFrame) -> None:
     with st.container(border=True):
         _mostrar_evolucion_temporal(casos)
 
-
 # ---------------------------------------------------------------------------
 # KPIs
 # ---------------------------------------------------------------------------
@@ -97,12 +89,7 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
     anio_actual = anios_ordenados[-1] if anios_ordenados else None
 
     # Variacion vs anio anterior
-    anios_ordenados = [int(a) for a in por_anio.index]
-    anio_actual = anios_ordenados[-1] if anios_ordenados else None
-
-    # Variacion vs anio anterior
     if len(por_anio) >= 2:
-        anio_anterior = anios_ordenados[-2]
         anio_anterior = anios_ordenados[-2]
         n_actual   = int(por_anio.iloc[-1])
         n_anterior = int(por_anio.iloc[-2])
@@ -112,7 +99,6 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
         valor_anio = f"{n_actual:,}"
         delta_anio = f"{pct:+.1f}% vs {anio_anterior}"
     elif len(por_anio) == 1:
-        label_anio = f"Casos {anio_actual}"
         label_anio = f"Casos {anio_actual}"
         valor_anio = f"{int(por_anio.iloc[-1]):,}"
         delta_anio = None
@@ -127,29 +113,17 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 
     if "semana" in casos_anio.columns and not casos_anio["semana"].dropna().empty:
         sem = casos_anio.groupby("semana").size()
-    # Semana pico y municipio mas afectado se calculan SOBRE EL ANIO MAS RECIENTE
-    # (no sobre todos los anios combinados, que daria una semana/municipio "pico"
-    # sumando anios distintos, poco interpretable). El periodo queda explicito en
-    # el label y en la leyenda de arriba de las tarjetas.
-    casos_anio = casos[casos["ano"] == anio_actual] if anio_actual is not None else casos
-
-    if "semana" in casos_anio.columns and not casos_anio["semana"].dropna().empty:
-        sem = casos_anio.groupby("semana").size()
         semana_pico  = int(sem.idxmax())
         casos_pico   = int(sem.max())
         semana_label = f"Sem. {semana_pico}"
-        semana_help  = f"{casos_pico:,} casos en la semana {semana_pico} de {anio_actual}"
         semana_help  = f"{casos_pico:,} casos en la semana {semana_pico} de {anio_actual}"
     else:
         semana_label, semana_help = "—", None
 
     if "nom_mun_o" in casos_anio.columns:
         mun = casos_anio["nom_mun_o"].dropna().value_counts()
-    if "nom_mun_o" in casos_anio.columns:
-        mun = casos_anio["nom_mun_o"].dropna().value_counts()
         if not mun.empty:
             top_mun  = str(mun.index[0])
-            top_help = f"{int(mun.iloc[0]):,} casos en {anio_actual}"
             top_help = f"{int(mun.iloc[0]):,} casos en {anio_actual}"
         else:
             top_mun, top_help = "—", None
@@ -163,22 +137,15 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
             "(el año más reciente)."
         )
 
-    if anio_actual is not None:
-        st.caption(
-            f":material/calendar_today: **Casos totales** cubren todo el período filtrado; "
-            f"**semana pico** y **municipio más afectado** corresponden a {anio_actual} "
-            "(el año más reciente)."
-        )
-
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Casos totales", f"{total:,}", help="Total en todos los años filtrados.", border=True)
-        st.metric("Casos totales", f"{total:,}", help="Total en todos los años filtrados.", border=True)
+        st.metric(
+            "Casos totales",
+            f"{total:,}",
+            help="Casos (210+220) en todos los años filtrados. No incluye mortalidad (580), que vive en la pestaña Mortalidad.",
+            border=True,
+        )
     with c2:
-        # delta con flecha SI es legitimo aqui: compara contra el año anterior
-        # (una variacion real que subio o bajo), a diferencia de los KPI de "% del
-        # total" del resto del dashboard.
-        st.metric(label_anio, valor_anio, delta=delta_anio, border=True)
         # delta con flecha SI es legitimo aqui: compara contra el año anterior
         # (una variacion real que subio o bajo), a diferencia de los KPI de "% del
         # total" del resto del dashboard.
@@ -186,12 +153,8 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
     with c3:
         etiqueta_semana = f"Semana pico {anio_actual}" if anio_actual is not None else "Semana pico"
         st.metric(etiqueta_semana, semana_label, help=semana_help, border=True)
-        etiqueta_semana = f"Semana pico {anio_actual}" if anio_actual is not None else "Semana pico"
-        st.metric(etiqueta_semana, semana_label, help=semana_help, border=True)
     with c4:
         st.metric("Municipio más afectado", top_mun, help=top_help, border=True)
-        st.metric("Municipio más afectado", top_mun, help=top_help, border=True)
-
 
 # ---------------------------------------------------------------------------
 # 1.1  Casos por año
@@ -228,7 +191,6 @@ def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch")
 
-
 # ---------------------------------------------------------------------------
 # 1.5  Mapa del Magdalena
 # ---------------------------------------------------------------------------
@@ -239,7 +201,6 @@ _ZONA_AREA_COLORES = {
     "Centro poblado": NARANJA_INSTITUCIONAL,
     "Rural disperso": "#7c3aed",
 }
-
 
 def _mostrar_mapa(casos: pd.DataFrame) -> None:
     """Vista general por subregion (incidencia); al pasar el mouse se resalta la
@@ -267,7 +228,6 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
         _mostrar_mapa_drilldown(con_geo, subregion_activa)
     else:
         _mostrar_mapa_overview(con_geo)
-
 
 def _mostrar_mapa_overview(con_geo: pd.DataFrame) -> None:
     st.caption(":material/touch_app: Haz clic en una subregión para ver el detalle por municipio.")
@@ -317,7 +277,6 @@ def _mostrar_mapa_overview(con_geo: pd.DataFrame) -> None:
         "Incidencia = casos (210+220) / población en riesgo x 100.000. "
         "Subregiones en gris no tienen población DANE para el período filtrado."
     )
-
 
 def _mostrar_mapa_drilldown(con_geo: pd.DataFrame, subregion_activa: str) -> None:
     col_volver, col_titulo = st.columns([1, 4], vertical_alignment="center")
@@ -375,7 +334,6 @@ def _mostrar_mapa_drilldown(con_geo: pd.DataFrame, subregion_activa: str) -> Non
         hover_data=hover,
     )
     fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
-    fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
     fig.update_geos(fitbounds="locations", visible=False)
     fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0}, height=360)
     resultado = st.plotly_chart(
@@ -398,7 +356,6 @@ def _mostrar_mapa_drilldown(con_geo: pd.DataFrame, subregion_activa: str) -> Non
         "Incidencia = casos (210+220) / población en riesgo del municipio x 100.000. "
         "Municipios en gris no tienen población DANE para el período filtrado."
     )
-
 
 def _mostrar_mapa_zonas(con_geo: pd.DataFrame, subregion_activa: str, codigo_municipio: str) -> None:
     datos_municipio = con_geo[con_geo["cod_mun_completo"] == int(codigo_municipio)]
@@ -499,7 +456,6 @@ def _mostrar_mapa_zonas(con_geo: pd.DataFrame, subregion_activa: str, codigo_mun
         "o rural disperso). Incidencia x100.000 hab."
     )
 
-
 # ---------------------------------------------------------------------------
 # 1.2 / 1.3 / 1.4  Analisis semanal (selector de anio local)
 # ---------------------------------------------------------------------------
@@ -533,7 +489,6 @@ def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
 
     _grafica_variacion_porcentual(casos, anio)       # 1.4
 
-
 def _grafica_semanal_anio(casos: pd.DataFrame, anio: int) -> None:
     """1.2  Casos semanales del año con linea de promedio."""
     subset = casos[casos["ano"] == anio]
@@ -561,7 +516,6 @@ def _grafica_semanal_anio(casos: pd.DataFrame, anio: int) -> None:
     fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
     st.plotly_chart(fig, width="stretch")
 
-
 def _grafica_comparacion_vs_anterior(casos: pd.DataFrame, anio: int) -> None:
     """1.3  Barras (año anterior) + linea (año seleccionado)."""
     anio_prev = anio - 1
@@ -582,14 +536,12 @@ def _grafica_comparacion_vs_anterior(casos: pd.DataFrame, anio: int) -> None:
     fig = go.Figure()
 
     # Hover propio "Semana X · Y casos (año)" en vez de la coordenada (x, y) cruda.
-    # Hover propio "Semana X · Y casos (año)" en vez de la coordenada (x, y) cruda.
     if not df_prev.empty:
         fig.add_trace(go.Bar(
             x=df_prev["semana"], y=df_prev["casos"],
             name=str(anio_prev),
             marker_color=NARANJA_INSTITUCIONAL,
             opacity=0.65,
-            hovertemplate=f"Semana %{{x}} · %{{y:,}} casos ({anio_prev})<extra></extra>",
             hovertemplate=f"Semana %{{x}} · %{{y:,}} casos ({anio_prev})<extra></extra>",
         ))
 
@@ -600,7 +552,6 @@ def _grafica_comparacion_vs_anterior(casos: pd.DataFrame, anio: int) -> None:
             name=str(anio),
             line=dict(color=AZUL_INSTITUCIONAL, width=2),
             marker=dict(size=4),
-            hovertemplate=f"Semana %{{x}} · %{{y:,}} casos ({anio})<extra></extra>",
             hovertemplate=f"Semana %{{x}} · %{{y:,}} casos ({anio})<extra></extra>",
         ))
 
@@ -614,7 +565,6 @@ def _grafica_comparacion_vs_anterior(casos: pd.DataFrame, anio: int) -> None:
     ultima_semana = int(pd.concat([df_prev["semana"], df_act["semana"]]).max())
     fig.update_xaxes(**eje_semanal(ultima_semana))
     st.plotly_chart(fig, width="stretch")
-
 
 def _grafica_variacion_porcentual(casos: pd.DataFrame, anio: int) -> None:
     """1.4  Variacion porcentual semanal frente al año anterior."""
@@ -661,7 +611,6 @@ def _grafica_variacion_porcentual(casos: pd.DataFrame, anio: int) -> None:
     fig.update_layout(**_LAYOUT_BASE, legend=LEYENDA_SUPERIOR)
     fig.update_xaxes(**eje_semanal(int(variacion["semana"].max())))
     st.plotly_chart(fig, width="stretch")
-
 
 # ---------------------------------------------------------------------------
 # 1.6  Evolucion temporal por subregion o municipio

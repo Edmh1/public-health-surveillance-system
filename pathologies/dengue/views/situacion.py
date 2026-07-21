@@ -23,8 +23,6 @@ from core.dashboard_base.estilos import (
 from core.dashboard_base.filtros import CLAVE_FILTROS
 from core.geografia import obtener_geojson_subregiones
 from pathologies.dengue.geografia import obtener_mapeo_subregion
-from core.geografia import obtener_geojson_subregiones
-from pathologies.dengue.geografia import obtener_mapeo_subregion
 from pathologies.dengue.canal_endemico import (
     ETIQUETAS_LINEAS,
     VENTANA_MAXIMA,
@@ -62,7 +60,6 @@ _ZONA_COLOR = {
     _ZONA_SIN_DATOS: "#c9ccd1",
 }
 
-
 # canal_endemico.py es calculo puro (sin Streamlit, ver su docstring); el cache
 # vive aqui, en la vista, para no ensuciar ese modulo con una dependencia de
 # Streamlit. Evita recalcular cuando un widget SIN relacion (ej. un filtro
@@ -74,7 +71,6 @@ def _calcular_canal_endemico_cacheado(
 ) -> dict:
     return calcular_canal_endemico(datos_procesados, metodo=metodo, anio_vigilancia=anio_vigilancia, anios_base=anios_base)
 
-
 @st.cache_data(show_spinner=False)
 def _calcular_situacion_cacheada(
     datos_con_subregion: pd.DataFrame, anio_vigilancia: int, anios_base: list[int]
@@ -83,25 +79,8 @@ def _calcular_situacion_cacheada(
         datos_con_subregion, anio_vigilancia=anio_vigilancia, anios_base=anios_base
     )
 
-
 def mostrar_situacion(datos: pd.DataFrame) -> None:
     filtros_actuales = st.session_state.get(CLAVE_FILTROS, {})
-
-    # Los KPIs (incidencia, mortalidad, letalidad) son indicadores ANUALES: la
-    # letalidad se compara contra la meta anual del INS, y la pestana se llama
-    # "situacion actual". Por eso tienen su PROPIO selector de periodo, que arranca
-    # en el anio mas reciente (asi abre como "situacion actual" y la letalidad
-    # cuadra con la meta anual), pero deja elegir cualquier anio o "Todos
-    # (combinado)" para no perder la libertad de agrupar sobre varios anios.
-    # El mapa y el canal endemico NO dependen de este selector: usan toda la
-    # historia disponible (la necesitan para su linea base), calculada aparte
-    # sobre `datos` completo mas abajo.
-    anios_presentes = sorted((int(a) for a in datos["ano"].dropna().unique()), reverse=True)
-
-    datos_kpi, filtros_kpi, leyenda_periodo = _resolver_periodo_kpi(
-        datos, filtros_actuales, anios_presentes
-    )
-
 
     # Los KPIs (incidencia, mortalidad, letalidad) son indicadores ANUALES: la
     # letalidad se compara contra la meta anual del INS, y la pestana se llama
@@ -132,15 +111,6 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
     if leyenda_periodo is not None:
         st.caption(leyenda_periodo)
     _mostrar_kpis_principales(resultado_indicadores)
-        resultado_indicadores = calcular_indicadores(datos_kpi, filtros_kpi)
-
-    # Arriba, solo los 3 indicadores clave (incidencia, mortalidad, letalidad):
-    # es lo primero que se ve, seguido de inmediato por el mapa de situacion.
-    # (Letalidad grave, % confirmados y % hospitalizados graves no van aqui: viven
-    # en Mortalidad / Morbilidad.)
-    if leyenda_periodo is not None:
-        st.caption(leyenda_periodo)
-    _mostrar_kpis_principales(resultado_indicadores)
 
     st.space("small")
 
@@ -162,7 +132,6 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
         "nivel departamental) en construcción :)."
     )
 
-
 def _resolver_periodo_kpi(
     datos: pd.DataFrame, filtros_actuales: dict, anios_presentes: list[int]
 ) -> tuple[pd.DataFrame, dict, str | None]:
@@ -203,52 +172,7 @@ def _resolver_periodo_kpi(
 
     return datos_kpi, filtros_kpi, leyenda
 
-
-def _resolver_periodo_kpi(
-    datos: pd.DataFrame, filtros_actuales: dict, anios_presentes: list[int]
-) -> tuple[pd.DataFrame, dict, str | None]:
-    """Selector de AÑO para los KPIs de Situacion (no afecta mapa ni canal). Es un
-    slider de un solo anio: arranca en el mas reciente (abre como "situacion
-    actual" y la letalidad cuadra con la meta anual del INS) y se puede mover a
-    cualquier otro anio. Para ver las tasas agrupadas por rango de anios estan las
-    pestanas Morbilidad (incidencia) y Mortalidad (mortalidad). Devuelve el
-    subconjunto de datos, los filtros ajustados al anio y la leyenda.
-    """
-    if not anios_presentes:
-        return datos, filtros_actuales, None
-
-    anios_asc = sorted(anios_presentes)
-    anio_max = anios_asc[-1]
-
-    if len(anios_asc) == 1:
-        anio_sel = anio_max
-    else:
-        columna_selector, _ = st.columns([2, 2])
-        with columna_selector:
-            anio_sel = st.select_slider(
-                "Año de los indicadores",
-                options=anios_asc,
-                value=anio_max,  # anio mas reciente por defecto
-                key="situacion_periodo_kpi",
-                help=(
-                    "Los indicadores de arriba son anuales (la letalidad se compara con la "
-                    "meta anual del INS). Por defecto se muestra el año más reciente; "
-                    "muévelo para ver otro año."
-                ),
-            )
-
-    anio_sel = int(anio_sel)
-    datos_kpi = datos[datos["ano"] == anio_sel]
-    filtros_kpi = {**filtros_actuales, "ano": [anio_sel]}
-    leyenda = f":material/event: Indicadores del año {anio_sel}."
-
-    return datos_kpi, filtros_kpi, leyenda
-
-
 # ---------------------------------------------------------------------------
-# KPIs. Arriba, 3 principales (incidencia, mortalidad, letalidad). Los 2
-# secundarios (% confirmados/hospitalizados graves) van junto al mapa. Letalidad
-# grave no se muestra en Situacion: ya vive en la pestana Mortalidad.
 # KPIs. Arriba, 3 principales (incidencia, mortalidad, letalidad). Los 2
 # secundarios (% confirmados/hospitalizados graves) van junto al mapa. Letalidad
 # grave no se muestra en Situacion: ya vive en la pestana Mortalidad.
@@ -256,29 +180,17 @@ def _resolver_periodo_kpi(
 
 _AYUDA_TASA_NO_DISPONIBLE = (
     "No disponible: puede faltar población DANE para alguno de los años "
-    "filtrados, o el filtro está acotado a municipio(s) específicos (las tasas "
-    "solo son confiables a escala subregión o departamento, nunca municipio, "
-    "por el desplazamiento de pacientes entre municipios)."
-)
-
-
-_AYUDA_TASA_NO_DISPONIBLE = (
-    "No disponible: puede faltar población DANE para alguno de los años "
-    "filtrados, o el filtro está acotado a municipio(s) específicos (las tasas "
-    "solo son confiables a escala subregión o departamento, nunca municipio, "
-    "por el desplazamiento de pacientes entre municipios)."
+    "filtrados, o el sistema todavía no tiene los 6 años de histórico que "
+    "pide el lineamiento MSPS/INS para calcular la estratificación de riesgo."
 )
 
 
 def _formatear_tasa(valor: float | None) -> str:
     return f"{valor:,.1f}" if valor is not None else "No disponible"
 
-
 def _formatear_pct(valor: float | None, decimales: int = 2) -> str:
     return f"{valor:.{decimales}f}%" if valor is not None else "No disponible"
 
-
-def _mostrar_kpis_principales(resultado: dict) -> None:
 def _mostrar_kpis_principales(resultado: dict) -> None:
     incidencia = resultado["incidencia"]
     mortalidad = resultado["mortalidad"]
@@ -292,9 +204,7 @@ def _mostrar_kpis_principales(resultado: dict) -> None:
             help=(
                 "Casos (210+220) / población en riesgo x 100.000."
                 if incidencia is not None else _AYUDA_TASA_NO_DISPONIBLE
-                if incidencia is not None else _AYUDA_TASA_NO_DISPONIBLE
             ),
-            border=True,
             border=True,
         )
     with col2:
@@ -304,9 +214,7 @@ def _mostrar_kpis_principales(resultado: dict) -> None:
             help=(
                 "Muertes (580) / población en riesgo x 100.000."
                 if mortalidad is not None else _AYUDA_TASA_NO_DISPONIBLE
-                if mortalidad is not None else _AYUDA_TASA_NO_DISPONIBLE
             ),
-            border=True,
             border=True,
         )
     with col3:
@@ -315,18 +223,14 @@ def _mostrar_kpis_principales(resultado: dict) -> None:
             "Letalidad",
             _formatear_pct(letalidad, decimales=4),
             delta="Supera la meta INS" if supera_meta else None,
-            delta="Supera la meta INS" if supera_meta else None,
             delta_color="inverse" if supera_meta else "off",
-            delta_arrow="off",
             delta_arrow="off",
             help=(
                 "Muertes (580) / casos (210+220) x 100. "
                 f"Meta nacional INS: < {META_LETALIDAD}%."
             ),
             border=True,
-            border=True,
         )
-
 
 # ---------------------------------------------------------------------------
 # 2.1  Mapa de situacion (situacion actual por subregion)
@@ -351,24 +255,7 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
 
     with st.expander("Ajustar año de vigilancia y línea base histórica", icon=":material/tune:"):
         resultado_seleccion = _seleccionar_linea_base(anios_disponibles, key_prefix="situacion_mapa")
-        "Zona del canal endémico en la última semana reportada de cada subregión, "
-        "comparada contra esa misma semana en años anteriores."
-    )
 
-    # El mapa es lo que debe verse primero, sin que los selectores y las
-    # explicaciones lo empujen hacia abajo. Se reservan las posiciones de arriba
-    # (referencia, mapa) con contenedores vacios, se dibujan los controles ABAJO
-    # en un expander, y luego se rellenan las posiciones de arriba con el
-    # resultado ya calculado.
-    ranura_referencia = st.container()
-    ranura_mapa = st.container()
-
-    anios_disponibles = sorted((int(anio) for anio in casos["ano"].dropna().unique()), reverse=True)
-
-    with st.expander("Ajustar año de vigilancia y línea base histórica", icon=":material/tune:"):
-        resultado_seleccion = _seleccionar_linea_base(anios_disponibles, key_prefix="situacion_mapa")
-
-    with st.expander(":material/help: ¿Cómo se lee este mapa?"):
     with st.expander(":material/help: ¿Cómo se lee este mapa?"):
         st.markdown(
             "- Cada subregión se compara contra su propia última semana con casos "
@@ -376,8 +263,6 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
             "reportado hasta la semana 20 del año, se usa la semana 20. Las semanas "
             "siguientes, que todavía no han pasado, no se inventan.\n"
             "- Si una subregión reporta con más rezago que otra, su semana de referencia "
-            "puede quedar más atrás que la de las demás — por eso cada tarjeta muestra su "
-            "propia semana y año, en vez de asumir que todas comparten la misma.\n"
             "puede quedar más atrás que la de las demás — por eso cada tarjeta muestra su "
             "propia semana y año, en vez de asumir que todas comparten la misma.\n"
             "- La comparación siempre es contra esa MISMA semana calendario en los años "
@@ -388,12 +273,6 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
         )
 
     if resultado_seleccion is None:
-        with ranura_mapa:
-            st.warning(
-                "Ajusta el año de vigilancia o la línea base en el panel de abajo para "
-                "poder calcular la situación.",
-                icon=":material/tune:",
-            )
         with ranura_mapa:
             st.warning(
                 "Ajusta el año de vigilancia o la línea base en el panel de abajo para "
@@ -412,11 +291,6 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
                 f"Ninguna subregión tiene casos reportados en {anio_vigilancia}.",
                 icon=":material/info:",
             )
-        with ranura_mapa:
-            st.info(
-                f"Ninguna subregión tiene casos reportados en {anio_vigilancia}.",
-                icon=":material/info:",
-            )
         return
 
     with ranura_referencia:
@@ -432,19 +306,6 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
                 ":material/history: Las subregiones no comparten la misma semana de "
                 "referencia (alguna reporta con más rezago); el detalle está en cada tarjeta."
             )
-    with ranura_referencia:
-        semanas_referencia = situacion[["ano", "semana"]].drop_duplicates()
-        if len(semanas_referencia) == 1:
-            fila_unica = semanas_referencia.iloc[0]
-            st.caption(
-                f":material/history: Semana de referencia (todas las subregiones): "
-                f"semana {int(fila_unica['semana'])} de {int(fila_unica['ano'])}."
-            )
-        else:
-            st.caption(
-                ":material/history: Las subregiones no comparten la misma semana de "
-                "referencia (alguna reporta con más rezago); el detalle está en cada tarjeta."
-            )
 
     with ranura_mapa:
         col_mapa, col_resumen = st.columns([1.6, 1])
@@ -463,47 +324,7 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-    with ranura_mapa:
-        col_mapa, col_resumen = st.columns([1.6, 1])
-        with col_mapa:
-            st.plotly_chart(_graficar_mapa_situacion(situacion), width="stretch")
-        with col_resumen:
-            for _, fila in situacion.sort_values("subregion").iterrows():
-                zona = fila["situacion"]
-                st.markdown(
-                    f'<div style="background-color:{_con_opacidad(_ZONA_COLOR[zona], 0.15)}; '
-                    f'border-left: 4px solid {_ZONA_COLOR[zona]}; border-radius: 6px; '
-                    f'padding: 0.5rem 0.8rem; margin-bottom: 0.6rem;">'
-                    f'<strong>{fila["subregion"]}</strong><br>'
-                    f'{zona} '
-                    f'<small style="color:#666;">— semana {int(fila["semana"])} de {int(fila["ano"])}</small>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
 
-
-def _graficar_mapa_situacion(situacion: pd.DataFrame) -> go.Figure:
-    # Mapa a nivel SUBREGION (5 poligonos fusionados), no municipio: la situacion
-    # es un dato por subregion, y asi al pasar el mouse se resalta la subregion
-    # completa en vez de un municipio suelto.
-    mapeo_subregion = obtener_mapeo_subregion()
-    geojson = obtener_geojson_subregiones(mapeo_subregion)
-
-    todas_subregiones = sorted(set(mapeo_subregion.values()))
-    df = pd.DataFrame({"subregion": todas_subregiones})
-    df = df.merge(situacion[["subregion", "situacion", "semana", "ano"]], on="subregion", how="left")
-    df["situacion"] = df["situacion"].fillna(_ZONA_SIN_DATOS)
-    df["detalle_semana"] = df.apply(
-        lambda fila: (
-            f"Semana {int(fila['semana'])} de {int(fila['ano'])}"
-            if pd.notna(fila["semana"]) else "Sin datos"
-        ),
-        axis=1,
-    )
-    # Columna aparte para el nombre en el hover: "subregion" es el location del
-    # choropleth, y mostrarla directo la duplicaria; con esta copia sale como una
-    # fila etiquetada "Subregión", igual que en el mapa de Tendencia.
-    df["nombre_sub"] = df["subregion"]
 def _graficar_mapa_situacion(situacion: pd.DataFrame) -> go.Figure:
     # Mapa a nivel SUBREGION (5 poligonos fusionados), no municipio: la situacion
     # es un dato por subregion, y asi al pasar el mouse se resalta la subregion
@@ -529,10 +350,7 @@ def _graficar_mapa_situacion(situacion: pd.DataFrame) -> go.Figure:
 
     fig = px.choropleth(
         df,
-        df,
         geojson=geojson,
-        locations="subregion",
-        featureidkey="properties.subregion",
         locations="subregion",
         featureidkey="properties.subregion",
         color="situacion",
@@ -540,10 +358,7 @@ def _graficar_mapa_situacion(situacion: pd.DataFrame) -> go.Figure:
         color_discrete_map=_ZONA_COLOR,
         hover_data={"subregion": False, "nombre_sub": True, "situacion": True, "detalle_semana": True},
         labels={"nombre_sub": "Subregión", "situacion": "Situación", "detalle_semana": "Referencia"},
-        hover_data={"subregion": False, "nombre_sub": True, "situacion": True, "detalle_semana": True},
-        labels={"nombre_sub": "Subregión", "situacion": "Situación", "detalle_semana": "Referencia"},
     )
-    fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
     fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
     fig.update_geos(fitbounds="locations", visible=False)
     fig.update_layout(
@@ -552,7 +367,6 @@ def _graficar_mapa_situacion(situacion: pd.DataFrame) -> go.Figure:
         legend=dict(**LEYENDA_SUPERIOR, title=None),
     )
     return fig
-
 
 # ---------------------------------------------------------------------------
 # 2.2  Canal endemico (cuartiles y Bortman lado a lado)
@@ -617,22 +431,11 @@ def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
 
     st.space("small")
     st.caption(":material/tune: Parámetros del canal endémico")
-    # Las graficas van ARRIBA de los controles (año de vigilancia, ventana,
-    # excluir): se reserva su posicion con un contenedor vacio, se dibujan los
-    # controles debajo y luego se rellena el contenedor de arriba. Asi los
-    # selectores no tapan ni empujan el grafico.
-    ranura_graficas = st.container()
-
-    st.space("small")
-    st.caption(":material/tune: Parámetros del canal endémico")
     resultado_seleccion = _seleccionar_linea_base(
         anios_disponibles, key_prefix=f"situacion_canal_{escala}_{territorio}"
     )
 
-
     if resultado_seleccion is None:
-        with ranura_graficas:
-            st.caption("Ajusta el año de vigilancia o la línea base abajo para ver el canal.")
         with ranura_graficas:
             st.caption("Ajusta el año de vigilancia o la línea base abajo para ver el canal.")
         return
@@ -659,7 +462,6 @@ def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
                     f'margin-top:-0.5rem;">{etiqueta}</p>',
                     unsafe_allow_html=True,
                 )
-
 
 def _seleccionar_linea_base(anios_disponibles: list[int], key_prefix: str) -> tuple[int, list[int]] | None:
     """Selector compartido de año de vigilancia + ventana (5-7 años) + exclusión
@@ -751,7 +553,6 @@ def _seleccionar_linea_base(anios_disponibles: list[int], key_prefix: str) -> tu
     )
     return anio_vigilancia, anios_base
 
-
 def _construir_linea_base(anios_disponibles_desc: list[int], tamano_objetivo: int, excluidos: list[int]) -> list[int]:
     """Rellena la ventana con los anios mas recientes de anios_disponibles_desc (ya
     ordenado de mas reciente a mas antiguo), saltando los excluidos y extendiendo
@@ -768,7 +569,6 @@ def _construir_linea_base(anios_disponibles_desc: list[int], tamano_objetivo: in
         if len(seleccionados) == tamano_objetivo:
             break
     return sorted(seleccionados)
-
 
 def _graficar_canal(resultado: dict, territorio: str, anio_vigilancia: int) -> go.Figure:
     bandas = resultado["bandas"]
@@ -849,12 +649,10 @@ def _graficar_canal(resultado: dict, territorio: str, anio_vigilancia: int) -> g
     )
     return fig
 
-
 def _con_opacidad(color_hex: str, alpha: float) -> str:
     color_hex = color_hex.lstrip("#")
     rojo, verde, azul = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
     return f"rgba({rojo},{verde},{azul},{alpha})"
-
 
 # ---------------------------------------------------------------------------
 # Dialogo de metodologia: adaptado del proyecto de pasantia (pages/2_Teoria.py),
@@ -867,7 +665,6 @@ _ZONAS_DESCRIPCION = [
     (ZONA_ALERTA, "Casos entre la línea central y el límite superior. Exceso moderado, vigilancia reforzada."),
     (ZONA_EPIDEMIA, "Casos por encima del límite superior. Exceso epidémico, respuesta inmediata."),
 ]
-
 
 @st.dialog("Metodología del canal endémico", width="large")
 def _dialogo_metodologia() -> None:

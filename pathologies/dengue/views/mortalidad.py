@@ -11,10 +11,6 @@ Tasa de mortalidad (muertes / poblacion en riesgo x 100.000) solo se ofrece por
 subregion (5.7), nunca a nivel municipio ni en la tabla drill-down (5.6), que se
 queda en letalidad (580/casos, no depende de poblacion) para poder mostrar
 tambien el nivel municipio sin romper la regla de tasas de CLAUDE.md.
-Tasa de mortalidad (muertes / poblacion en riesgo x 100.000) solo se ofrece por
-subregion (5.7), nunca a nivel municipio ni en la tabla drill-down (5.6), que se
-queda en letalidad (580/casos, no depende de poblacion) para poder mostrar
-tambien el nivel municipio sin romper la regla de tasas de CLAUDE.md.
 """
 
 import pandas as pd
@@ -51,10 +47,8 @@ _LAYOUT = dict(margin=dict(l=0, r=0, t=40, b=0))
 
 _TOP_N = 10
 
-
 def _pct(n: float, total: float, dec: int = 2) -> float:
     return round(n / total * 100, dec) if total else 0.0
-
 
 # ---------------------------------------------------------------------------
 # Orquestador
@@ -72,14 +66,6 @@ def mostrar_mortalidad(datos: pd.DataFrame) -> None:
         )
         return
 
-    # Tasa de mortalidad (poblacional) vive aca ademas de en Situacion: en
-    # Situacion es de un solo anio; aca sigue el filtro global (se puede ver por
-    # rangos). Sale de calcular_indicadores, asi respeta la regla de "no
-    # disponible" (municipio / sin DANE).
-    filtros_actuales = st.session_state.get(CLAVE_FILTROS, {})
-    resultado_indicadores = calcular_indicadores(datos, filtros_actuales)
-
-    _mostrar_kpis(muertes, casos, graves, resultado_indicadores["mortalidad"])
     # Tasa de mortalidad (poblacional) vive aca ademas de en Situacion: en
     # Situacion es de un solo anio; aca sigue el filtro global (se puede ver por
     # rangos). Sale de calcular_indicadores, asi respeta la regla de "no
@@ -129,14 +115,10 @@ def mostrar_mortalidad(datos: pd.DataFrame) -> None:
     with st.container(border=True):
         _mostrar_cie10(muertes)
 
-
 # ---------------------------------------------------------------------------
 # KPIs
 # ---------------------------------------------------------------------------
 
-def _mostrar_kpis(
-    muertes: pd.DataFrame, casos: pd.DataFrame, graves: pd.DataFrame, mortalidad: float | None
-) -> None:
 def _mostrar_kpis(
     muertes: pd.DataFrame, casos: pd.DataFrame, graves: pd.DataFrame, mortalidad: float | None
 ) -> None:
@@ -146,7 +128,6 @@ def _mostrar_kpis(
 
     letalidad       = _pct(n_total, n_casos, 4)
     letalidad_grave = _pct(n_total, n_graves, 2)
-    mortalidad_txt  = f"{mortalidad:,.1f}" if mortalidad is not None else "No disponible"
     mortalidad_txt  = f"{mortalidad:,.1f}" if mortalidad is not None else "No disponible"
 
     # Menores de 15 (grupo de atencion prioritaria en mortalidad por dengue)
@@ -170,41 +151,17 @@ def _mostrar_kpis(
         )
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    # Define el "cuando" de los KPIs: cubren todo el periodo filtrado (todos los
-    # anios seleccionados en el filtro global). Importante porque la letalidad se
-    # compara con la meta ANUAL del INS: si el periodo abarca varios anios, es un
-    # valor combinado, no de un solo anio.
-    anios = sorted(int(a) for a in casos["ano"].dropna().unique())
-    if anios:
-        periodo = str(anios[0]) if len(anios) == 1 else f"{anios[0]}-{anios[-1]}"
-        st.caption(
-            f":material/calendar_today: Indicadores del período filtrado ({periodo}). "
-            "La letalidad se compara con la meta anual del INS."
-        )
-
-    c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        st.metric("Muertes por dengue", f"{n_total:,}", border=True)
         st.metric("Muertes por dengue", f"{n_total:,}", border=True)
     with c2:
         st.metric(
             "Mortalidad",
             mortalidad_txt,
             help=(
-                "Muertes (580) / población en riesgo x 100.000. No disponible si el "
-                "filtro está en un municipio o falta población DANE (las tasas solo son "
-                "confiables a escala subregión o departamento)."
-            ),
-            border=True,
-        )
-    with c3:
-        st.metric(
-            "Mortalidad",
-            mortalidad_txt,
-            help=(
-                "Muertes (580) / población en riesgo x 100.000. No disponible si el "
-                "filtro está en un municipio o falta población DANE (las tasas solo son "
-                "confiables a escala subregión o departamento)."
+                "Muertes (580) / población en riesgo x 100.000. No disponible si falta "
+                "población DANE, o el sistema todavía no tiene los 6 años de histórico "
+                "que pide el lineamiento MSPS/INS para calcular la estratificación de "
+                "riesgo."
             ),
             border=True,
         )
@@ -213,20 +170,12 @@ def _mostrar_kpis(
             "Menores de 15 años",
             f"{n_men15:,}",
             delta=f"{_pct(n_men15, n_total, 1):.1f}%",
-            delta=f"{_pct(n_men15, n_total, 1):.1f}%",
             delta_color="off",
-            delta_arrow="off",
-            delta_description="del total",
             delta_arrow="off",
             delta_description="del total",
             help="Grupo de atención prioritaria en mortalidad por dengue",
             border=True,
-            border=True,
         )
-    with c4:
-        # delta_color="inverse" cuando supera la meta: senal epidemiologica real,
-        # uso legitimo de color de alerta (DESIGN.md). delta_arrow="off" porque es
-        # una etiqueta de estado ("supera la meta"), no una direccion de cambio.
     with c4:
         # delta_color="inverse" cuando supera la meta: senal epidemiologica real,
         # uso legitimo de color de alerta (DESIGN.md). delta_arrow="off" porque es
@@ -235,9 +184,7 @@ def _mostrar_kpis(
             "Letalidad",
             f"{letalidad:.4f}%",
             delta="Supera la meta INS" if supera_meta else None,
-            delta="Supera la meta INS" if supera_meta else None,
             delta_color="inverse" if supera_meta else "off",
-            delta_arrow="off",
             delta_arrow="off",
             help=(
                 "Muertes (580) / Casos dengue (210+220) x 100. "
@@ -245,18 +192,14 @@ def _mostrar_kpis(
                 "cada 1.000 casos de dengue deberia haber menos de 1 muerte."
             ),
             border=True,
-            border=True,
         )
-    with c5:
     with c5:
         st.metric(
             "Letalidad grave",
             f"{letalidad_grave:.2f}%",
             help="Muertes (580) / Casos de dengue grave (220) x 100",
             border=True,
-            border=True,
         )
-
 
 # ---------------------------------------------------------------------------
 # 5.1  Distribucion temporal
@@ -309,7 +252,6 @@ def _mostrar_temporal(muertes: pd.DataFrame) -> None:
     )
     fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
     st.plotly_chart(fig, width="stretch")
-
 
 # ---------------------------------------------------------------------------
 # 5.2  Edad y sexo
@@ -364,7 +306,6 @@ def _mostrar_edad_sexo(muertes: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch")
 
-
 # ---------------------------------------------------------------------------
 # 5.5  Regimen SGSSS
 # ---------------------------------------------------------------------------
@@ -401,7 +342,6 @@ def _mostrar_regimen(muertes: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch")
 
-
 # ---------------------------------------------------------------------------
 # 5.3  EPS
 # ---------------------------------------------------------------------------
@@ -436,7 +376,6 @@ def _mostrar_eps(muertes: pd.DataFrame) -> None:
     )
     st.plotly_chart(fig, width="stretch")
 
-
 # ---------------------------------------------------------------------------
 # 5.6  Indicadores por territorio (tabla drill-down)
 # ---------------------------------------------------------------------------
@@ -447,8 +386,7 @@ def _mostrar_tabla_territorial(
     st.subheader(":material/table_chart: Indicadores por territorio")
     st.caption(
         "Letalidad = muertes / (casos 210+220). "
-        "Letalidad grave = muertes / casos 220. "
-        "Tasa por 100.000 hab.: pendiente de datos DANE."
+        "Letalidad grave = muertes / casos 220."
     )
 
     nivel = st.segmented_control(
@@ -510,7 +448,6 @@ def _mostrar_tabla_territorial(
 
     st.dataframe(tabla, hide_index=True, width="stretch")
 
-
 # ---------------------------------------------------------------------------
 # 5.7  Tasas / indicadores por subregion (con selector)
 # ---------------------------------------------------------------------------
@@ -527,7 +464,6 @@ def _mostrar_tasas_subregion(
 
     indicador = st.segmented_control(
         "Indicador",
-        ["Muertes (conteo)", "Letalidad (%)", "Letalidad grave (%)", "Tasa de mortalidad (x100.000)"],
         ["Muertes (conteo)", "Letalidad (%)", "Letalidad grave (%)", "Tasa de mortalidad (x100.000)"],
         default="Letalidad (%)",
         required=True,
@@ -566,28 +502,10 @@ def _mostrar_tasas_subregion(
         etiqueta_eje = "Letalidad (%)"
         formato = ".4f"
     elif indicador == "Letalidad grave (%)":
-    elif indicador == "Letalidad grave (%)":
         df["valor"] = df.apply(lambda r: _pct(r["muertes"], r["graves"], 2), axis=1)
         ref_val = _pct(ref_m, ref_g, 2)
         etiqueta_eje = "Letalidad grave (%)"
         formato = ".2f"
-    else:
-        # Tasa de mortalidad: unico indicador de esta grafica con denominador
-        # poblacional. Subregion sin poblacion DANE para el periodo queda fuera
-        # (None, nunca en cero).
-        anios_en_alcance = sorted(int(a) for a in casos["ano"].dropna().unique())
-        mapeo_subregion = obtener_mapeo_subregion()
-        tasas = calcular_tasa_por_subregion(muertes, anios_en_alcance, mapeo_subregion)
-        df["valor"] = df["subregion"].map(tasas)
-        poblacion_departamental = obtener_poblacion_departamental(anios_en_alcance)
-        ref_val = (ref_m / poblacion_departamental * 100_000) if poblacion_departamental else None
-        etiqueta_eje = "Tasa de mortalidad (x100.000 hab.)"
-        formato = ".2f"
-
-    df = df.dropna(subset=["valor"]).sort_values("valor")
-    if df.empty:
-        st.caption("Sin población DANE disponible para el período filtrado.")
-        return
     else:
         # Tasa de mortalidad: unico indicador de esta grafica con denominador
         # poblacional. Subregion sin poblacion DANE para el periodo queda fuera
@@ -638,7 +556,6 @@ def _mostrar_tasas_subregion(
             f":material/warning: Letalidad departamental {ref_val:.4f}% "
             f"supera la meta nacional de {META_LETALIDAD}%."
         )
-
 
 # ---------------------------------------------------------------------------
 # 5.8  Causas de muerte CIE-10
