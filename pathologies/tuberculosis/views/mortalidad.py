@@ -10,7 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
+from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, LEYENDA_SUPERIOR, NARANJA_INSTITUCIONAL
 from core.geografia import obtener_geojson_municipios_magdalena
 
 COD_PULMONAR = 820
@@ -166,19 +166,22 @@ def _mostrar_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:
 
     geojson = obtener_geojson_municipios_magdalena()
 
-    fig = px.choropleth_mapbox(
+    fig = px.choropleth(
         por_mun,
         geojson=geojson,
         locations="cod_mun_str",
         featureidkey="properties.mpio_cdpmp",
         color="muertes",
         color_continuous_scale=["#f7f7f7", "#fdd49e", "#fdbb84", "#fc8d59", "#e34a33", "#b30000"],
-        mapbox_style="carto-positron",
-        center={"lat": 10.4, "lon": -74.2},
-        zoom=7.5,
         title="Muertes por TB — municipio",
     )
-    fig.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+    fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
+    fig.update_geos(fitbounds="locations", visible=False)
+    fig.update_layout(
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},
+        height=360,
+        legend=dict(**LEYENDA_SUPERIOR, title=None),
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 

@@ -237,7 +237,7 @@ def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
-    st.subheader(":material/account_tree: Clasificación: inicial → final")
+    st.subheader(":material/account_tree: Gráfico de Sankey")
 
     cols_req = {"tip_cas", "estado_final_de_caso"}
     if not cols_req.issubset(casos.columns):
@@ -248,66 +248,158 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     df["inicial"] = df["tip_cas"].astype(str).map(_TIP_CAS_MAP).fillna("Otro (inicial)")
     df["final"] = df["estado_final_de_caso"].astype(str).map(_ESTADO_FINAL_MAP).fillna("Otro (final)")
 
-    flujo = df.groupby(["inicial", "final"]).size().reset_index(name="n")
-    flujo = flujo[flujo["n"] > 0]
-
-    if flujo.empty:
+    if df.empty:
         st.caption("Sin datos de flujo de clasificación.")
         return
 
+    conteo_inicial = df.groupby("inicial").size().reset_index(name="n")
+
+    transiciones = df.groupby(["inicial", "final"]).size().reset_index(name="n")
+    transiciones = transiciones[transiciones["inicial"] != transiciones["final"]]
+
     _PALETA_ESTADOS = {
-        "Probable": "#64748b",
-        "Conf. laboratorio": "#1b3a6b",
-        "Conf. nexo epidemiológico": "#e8852c",
-        "Conf. clínica": "#5b88b3",
-        "Descartado": "#94a3b8",
-        "Sin ajuste": "#d1d5db",
-        "Sospechoso": "#475569",
-        "Otro (inicial)": "#9ca3af",
-        "Otro (final)": "#9ca3af",
+        "Probable":                    "#7c3aed",
+        "Conf. laboratorio":           "#1b3a6b",
+        "Conf. nexo epidemiológico":   "#e8852c",
+        "Conf. clínica":               "#0891b2",
+        "Sospechoso":                  "#c026d3",
+        "Descartado":                  "#475569",
+        "Sin ajuste":                  "#a8a29e",
+        "Otro (inicial)":              "#795548",
+        "Otro (final)":                "#795548",
+        "Otro":                        "#795548",
     }
-    todos_estados = sorted(set(flujo["inicial"]) | set(flujo["final"]))
-    nodos_izq = sorted(flujo["inicial"].unique())
-    nodos_der = [n for n in todos_estados if n not in nodos_izq]
-    nodos = nodos_izq + nodos_der
-    idx = {n: i for i, n in enumerate(nodos)}
 
-    colores_nodos = [_PALETA_ESTADOS.get(n, "#6b7280") for n in nodos]
+    NODO_TOTAL = "Casos totales"
+    nodos_iniciales = (
+        conteo_inicial.sort_values("n", ascending=False)["inicial"].tolist()
+    )
 
-    colores_links = [
-        _hex_rgba(_PALETA_ESTADOS.get(row["inicial"], "#6b7280"), 0.45)
-        for _, row in flujo.iterrows()
-    ]
+    posicion_inicial = {nombre: i for i, nombre in enumerate(nodos_iniciales)}
+    altura_promedio_final = {}
+    for nombre_final, grupo in transiciones.groupby("final"):
+        peso = grupo["n"].sum()
+        suma_ponderada = sum(
+            posicion_inicial[fila["inicial"]] * fila["n"] for _, fila in grupo.iterrows()
+        )
+        altura_promedio_final[nombre_final] = suma_ponderada / peso
+    nodos_finales = sorted(altura_promedio_final, key=altura_promedio_final.get)
+
+    etiquetas = [NODO_TOTAL] + nodos_iniciales + nodos_finales
+    idx_inicial = {nombre: 1 + i for i, nombre in enumerate(nodos_iniciales)}
+    idx_final = {
+        nombre: 1 + len(nodos_iniciales) + i for i, nombre in enumerate(nodos_finales)
+    }
+
+    total_casos = int(conteo_inicial["n"].sum())
+
+    def _centros_verticales(valores_columna: list[int]) -> list[float]:
+        separacion = 0.04
+        margen = 0.02
+        cantidad = len(valores_columna)
+        util = 1.0 - 2 * margen - separacion * max(cantidad - 1, 0)
+        altos = [util * valor / total_casos for valor in valores_columna]
+        alto_pila = sum(altos) + separacion * max(cantidad - 1, 0)
+        cursor = max((1.0 - alto_pila) / 2, margen)
+        centros = []
+        for alto in altos:
+            centros.append(min(max(cursor + alto / 2, 0.01), 0.99))
+            cursor += alto + separacion
+        return centros
+
+    casos_por_inicial = conteo_inicial.set_index("inicial")["n"]
+    casos_por_final = transiciones.groupby("final")["n"].sum()
+
+    posiciones_x = (
+        [0.01] + [0.5] * len(nodos_iniciales) + [0.99] * len(nodos_finales)
+    )
+    posiciones_y = (
+        [0.5]
+        + _centros_verticales([int(casos_por_inicial[n]) for n in nodos_iniciales])
+        + _centros_verticales([int(casos_por_final[n]) for n in nodos_finales])
+    )
+
+    colores_nodos = (
+        [AZUL_INSTITUCIONAL]
+        + [_PALETA_ESTADOS.get(n, "#6b7280") for n in nodos_iniciales]
+        + [_PALETA_ESTADOS.get(n, "#6b7280") for n in nodos_finales]
+    )
+
+    fuentes, destinos, valores, colores_links = [], [], [], []
+
+    for _, fila in conteo_inicial.iterrows():
+        fuentes.append(0)
+        destinos.append(idx_inicial[fila["inicial"]])
+        valores.append(int(fila["n"]))
+        colores_links.append(_hex_rgba(_PALETA_ESTADOS.get(fila["inicial"], "#6b7280"), 0.45))
+
+    for _, fila in transiciones.iterrows():
+        fuentes.append(idx_inicial[fila["inicial"]])
+        destinos.append(idx_final[fila["final"]])
+        valores.append(int(fila["n"]))
+        colores_links.append(_hex_rgba(_PALETA_ESTADOS.get(fila["inicial"], "#6b7280"), 0.45))
 
     fig = go.Figure(go.Sankey(
         arrangement="snap",
         node=dict(
-            label=nodos,
+            label=etiquetas,
+            x=posiciones_x,
+            y=posiciones_y,
             color=colores_nodos,
             pad=24,
             thickness=22,
             line=dict(color="white", width=0.8),
         ),
         link=dict(
-            source=[idx[r["inicial"]] for _, r in flujo.iterrows()],
-            target=[idx[r["final"]] for _, r in flujo.iterrows()],
-            value=flujo["n"].tolist(),
+            source=fuentes,
+            target=destinos,
+            value=valores,
             color=colores_links,
             hovertemplate="%{source.label} → %{target.label}: %{value:,} casos<extra></extra>",
         ),
         textfont=dict(size=12, color="#1a1a1a", family="sans-serif"),
     ))
+
+    encabezados = [
+        (0.01, "left", "Total"),
+        (0.5, "center", "Clasificación inicial"),
+        (0.99, "right", "Clasificación final"),
+    ]
+    for pos_x, ancla, texto in encabezados:
+        fig.add_annotation(
+            x=pos_x, y=1.05, xref="paper", yref="paper",
+            text=f"<b>{texto}</b>", showarrow=False,
+            xanchor=ancla, font=dict(size=12, color="#374151"),
+        )
+
+    estados_en_leyenda = set()
+    for nombre in nodos_iniciales + nodos_finales:
+        canonico = nombre.replace(" (inicial)", "").replace(" (final)", "")
+        if canonico in estados_en_leyenda:
+            continue
+        estados_en_leyenda.add(canonico)
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None],
+            mode="markers",
+            marker=dict(size=10, symbol="square", color=_PALETA_ESTADOS.get(nombre, "#6b7280")),
+            name=canonico,
+            hoverinfo="skip",
+        ))
+
     fig.update_layout(
-        height=340,
-        margin=dict(l=10, r=10, t=44, b=10),
+        height=540,
+        margin=dict(l=10, r=10, t=100, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        showlegend=True,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.14,
+            xanchor="center", x=0.5, font=dict(size=10),
+        ),
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption(
-        ":material/info: Los flujos heredan el color del estado inicial. "
-        "Traza cada clasificación de izquierda a derecha para ver cómo se ajustó."
-    )
 
 
 # ---------------------------------------------------------------------------
