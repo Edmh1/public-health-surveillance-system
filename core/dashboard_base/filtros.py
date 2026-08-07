@@ -19,6 +19,8 @@ import pandas as pd
 import streamlit as st
 
 CLAVE_FILTROS = "filtros_globales"
+_CLAVE_ANIOS_DISPONIBLES = "_filtro_anios_disponibles"
+_CLAVE_SEMANAS_DISPONIBLES = "_filtro_semanas_disponibles"
 
 # Mapeo de codigos de clasificacion a nombres legibles.
 # Aplica tanto a TIP_CAS (clasificacion inicial) como a AJUSTE / Estado_final_de_caso.
@@ -126,6 +128,13 @@ def mostrar_filtros_globales(
     datos_con_subregion = _agregar_columna_subregion(datos, mapeo_subregion)
     anios_disponibles = _opciones_de_columna(datos, columna_anio)
     semanas_disponibles = _opciones_de_columna(datos, "semana")
+
+    # Se guardan para que resumen_filtros_activos() pueda distinguir "el anio/
+    # semana filtrado es el rango completo por defecto" (nada que mostrar) de
+    # "el usuario de verdad achico el rango" (si hay que mostrarlo), sin tener
+    # que recibir el dataframe completo en cada grafica que llama esa funcion.
+    st.session_state[_CLAVE_ANIOS_DISPONIBLES] = anios_disponibles
+    st.session_state[_CLAVE_SEMANAS_DISPONIBLES] = semanas_disponibles
 
     # ----- Header: titulo + badge de activos + boton limpiar -----
     n_activos = _contar_activos(anios_disponibles, semanas_disponibles)
@@ -272,3 +281,72 @@ def aplicar_filtros(
             continue
         datos_filtrados = datos_filtrados[datos_filtrados[columna].isin(valores_elegidos)]
     return datos_filtrados
+
+
+# Claves fijas del dict de filtros (ver mostrar_filtros_globales); la unica que
+# varia por patologia es la del anio (PathologyPlugin.columna_anio), asi que
+# resumen_filtros_activos() la identifica como "la que sobra" del dict.
+_CLAVES_FILTRO_CONOCIDAS = {"semana", "subregion", "nom_mun_o", "nivel_riesgo", "estado_final_de_caso"}
+
+
+def resumen_filtros_activos(incluir_periodo: bool = True) -> str:
+    """Texto corto con los filtros globales activos ahora mismo (ej.
+    " (Centro · 2022-2024)"), listo para pegar directo despues del titulo de
+    una grafica: asi la grafica se explica sola sin tener que mirar la barra
+    lateral para saber que esta filtrado. Cadena vacia si no hay ningun
+    filtro activo (el titulo queda igual que antes).
+
+    Compara el anio/semana elegidos contra el rango COMPLETO disponible (ver
+    _CLAVE_ANIOS_DISPONIBLES / _CLAVE_SEMANAS_DISPONIBLES, que
+    mostrar_filtros_globales deja en session_state): el slider siempre trae
+    algun valor por defecto (el rango completo), asi que "hay un valor" no
+    alcanza para saber si la persona de verdad acoto el filtro.
+
+    incluir_periodo=False para las secciones con selector de anio PROPIO que
+    ignora el filtro temporal global (ver los "Selector propio" de tendencia.py
+    /morbilidad.py/mortalidad.py): ahi mostrar el anio/semana del filtro global
+    seria enganoso, porque esa seccion no le hace caso.
+    """
+    filtros = st.session_state.get(CLAVE_FILTROS, {})
+    if not filtros:
+        return ""
+
+    partes = []
+
+    subregiones = filtros.get("subregion")
+    if subregiones:
+        partes.append(", ".join(subregiones))
+
+    municipios = filtros.get("nom_mun_o")
+    if municipios:
+        partes.append(", ".join(municipios))
+
+    if incluir_periodo:
+        columna_anio = next((clave for clave in filtros if clave not in _CLAVES_FILTRO_CONOCIDAS), None)
+        anios_elegidos = filtros.get(columna_anio) if columna_anio else None
+        anios_disponibles = st.session_state.get(_CLAVE_ANIOS_DISPONIBLES, [])
+        if (
+            anios_elegidos and len(anios_disponibles) >= 2
+            and (min(anios_elegidos), max(anios_elegidos)) != (min(anios_disponibles), max(anios_disponibles))
+        ):
+            anio_min, anio_max = min(anios_elegidos), max(anios_elegidos)
+            partes.append(str(anio_min) if anio_min == anio_max else f"{anio_min}-{anio_max}")
+
+        semanas_elegidas = filtros.get("semana")
+        semanas_disponibles = st.session_state.get(_CLAVE_SEMANAS_DISPONIBLES, [])
+        if (
+            semanas_elegidas and len(semanas_disponibles) >= 2
+            and (min(semanas_elegidas), max(semanas_elegidas)) != (min(semanas_disponibles), max(semanas_disponibles))
+        ):
+            semana_min, semana_max = int(min(semanas_elegidas)), int(max(semanas_elegidas))
+            partes.append(f"Sem. {semana_min}" if semana_min == semana_max else f"Sem. {semana_min}-{semana_max}")
+
+    niveles_riesgo = filtros.get("nivel_riesgo")
+    if niveles_riesgo:
+        partes.append(", ".join(niveles_riesgo))
+
+    clasificaciones = filtros.get("estado_final_de_caso")
+    if clasificaciones:
+        partes.append(", ".join(_etiquetar_clasificacion(valor) for valor in clasificaciones))
+
+    return f" ({' · '.join(partes)})" if partes else ""

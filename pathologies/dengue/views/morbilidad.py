@@ -21,7 +21,7 @@ from core.dashboard_base.estilos import (
     eje_semanal,
     rango_con_margen,
 )
-from core.dashboard_base.filtros import CLAVE_FILTROS
+from core.dashboard_base.filtros import CLAVE_FILTROS, resumen_filtros_activos
 from pathologies.dengue.geografia import obtener_mapeo_subregion
 from pathologies.dengue.indicators import calcular_indicadores
 from pathologies.dengue.poblacion import calcular_tasa_por_municipio, calcular_tasa_por_subregion
@@ -222,7 +222,7 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
-    st.subheader(":material/pie_chart: Tipo de caso")
+    st.subheader(f":material/pie_chart: Tipo de caso{resumen_filtros_activos()}")
 
     conteo = casos["cod_eve"].value_counts()
     labels = {COD_DENGUE: "Dengue (210)", COD_DENGUE_GRAVE: "Dengue grave (220)"}
@@ -261,7 +261,7 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
-    st.subheader(":material/account_tree: Gráfico de Sankey")
+    st.subheader(f":material/account_tree: Gráfico de Sankey{resumen_filtros_activos()}")
 
     cols_req = {"tip_cas", "estado_final_de_caso"}
     if not cols_req.issubset(casos.columns):
@@ -460,7 +460,7 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
     Se prefiere barra sobre dona: la dona dificulta comparar magnitudes entre
     categorias cuando hay grandes diferencias (ej. Rutinaria vs. BAC).
     """
-    st.subheader(":material/notification_important: Fuente")
+    st.subheader(f":material/notification_important: Fuente{resumen_filtros_activos()}")
 
     if "fuente" not in casos.columns:
         st.caption("Sin datos de fuente.")
@@ -515,7 +515,7 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/show_chart: Casos semanales por tipo")
+    st.subheader(f":material/show_chart: Casos semanales por tipo{resumen_filtros_activos(incluir_periodo=False)}")
 
     if "semana" not in casos.columns:
         st.caption("Sin datos de semana.")
@@ -588,7 +588,7 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/local_hospital: Hospitalización por semana")
+    st.subheader(f":material/local_hospital: Hospitalización por semana{resumen_filtros_activos(incluir_periodo=False)}")
 
     if "pac_hos" not in casos.columns or "semana" not in casos.columns:
         st.caption("Sin datos.")
@@ -641,7 +641,7 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
-    st.subheader(":material/map: Hospitalización por territorio")
+    st.subheader(f":material/map: Hospitalización por territorio{resumen_filtros_activos()}")
 
     if "pac_hos" not in casos.columns:
         st.caption("Sin datos de hospitalización.")
@@ -740,7 +740,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
-    st.subheader(":material/bar_chart: Incidencia por subregión")
+    st.subheader(f":material/bar_chart: Incidencia por subregión{resumen_filtros_activos()}")
 
     if "subregion" not in casos.columns:
         st.caption("Sin datos de subregión.")
@@ -780,7 +780,7 @@ def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
-    st.subheader(":material/fact_check: Clasificación final")
+    st.subheader(f":material/fact_check: Clasificación final{resumen_filtros_activos()}")
 
     if "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")
@@ -827,7 +827,7 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/stacked_bar_chart: Clasificación final por semana")
+    st.subheader(f":material/stacked_bar_chart: Clasificación final por semana{resumen_filtros_activos(incluir_periodo=False)}")
 
     if "semana" not in casos.columns or "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")

@@ -19,6 +19,7 @@ from core.dashboard_base.estilos import (
     NARANJA_INSTITUCIONAL,
     rango_con_margen,
 )
+from core.dashboard_base.filtros import resumen_filtros_activos
 
 CODIGOS_CASOS = {210, 220}
 _TOP_N = 10
@@ -179,7 +180,7 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_piramide(casos: pd.DataFrame) -> None:
-    st.subheader(":material/groups: Pirámide por sexo y edad")
+    st.subheader(f":material/groups: Pirámide por sexo y edad{resumen_filtros_activos()}")
 
     if not {"edad_anios", "sexo"}.issubset(casos.columns):
         st.caption("Sin datos de edad o sexo.")
@@ -257,7 +258,7 @@ _ICONOS_EXPLORADOR = {
 
 
 def _explorador_demografico(casos: pd.DataFrame) -> None:
-    st.subheader(":material/tune: Distribución demográfica")
+    st.subheader(f":material/tune: Distribución demográfica{resumen_filtros_activos()}")
 
     seleccion = st.segmented_control(
         "Ver distribución por",
@@ -415,7 +416,7 @@ def _chart_regimen(casos: pd.DataFrame, height: int = 300) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_pueblos_indigenas(casos: pd.DataFrame) -> None:
-    st.subheader(":material/forest: Pueblos indígenas afectados")
+    st.subheader(f":material/forest: Pueblos indígenas afectados{resumen_filtros_activos()}")
 
     if "nom_grupo" not in casos.columns:
         st.caption("Sin datos de pueblo indigena.")
@@ -462,7 +463,7 @@ def _mostrar_pueblos_indigenas(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_eps(casos: pd.DataFrame) -> None:
-    st.subheader(":material/local_hospital: EPS de afiliación")
+    st.subheader(f":material/local_hospital: EPS de afiliación{resumen_filtros_activos()}")
     st.caption(f"Top {_TOP_N} por casos notificados")
 
     if "nom_ase" not in casos.columns:
@@ -501,7 +502,7 @@ def _mostrar_eps(casos: pd.DataFrame) -> None:
 
 
 def _mostrar_upgd(casos: pd.DataFrame) -> None:
-    st.subheader(":material/medical_services: UPGD notificadora")
+    st.subheader(f":material/medical_services: UPGD notificadora{resumen_filtros_activos()}")
     st.caption(f"Top {_TOP_N} unidades por casos reportados")
 
     if "nom_upgd" not in casos.columns:

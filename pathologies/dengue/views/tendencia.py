@@ -18,6 +18,7 @@ from core.dashboard_base.estilos import (
     eje_semanal,
     rango_con_margen,
 )
+from core.dashboard_base.filtros import resumen_filtros_activos
 from core.geografia import obtener_geojson_municipios_magdalena, obtener_geojson_subregiones
 from pathologies.dengue.geografia import obtener_mapeo_subregion
 from pathologies.dengue.poblacion import (
@@ -161,7 +162,7 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
-    st.subheader(":material/bar_chart: Casos por año")
+    st.subheader(f":material/bar_chart: Casos por año{resumen_filtros_activos()}")
 
     por_anio = casos.groupby("ano").size().reset_index(name="casos")
 
@@ -209,7 +210,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
     subregion; clic en un municipio -> division por zona (cabecera municipal,
     centro poblado, rural disperso).
     """
-    st.subheader(":material/map: Mapa del Magdalena")
+    st.subheader(f":material/map: Mapa del Magdalena{resumen_filtros_activos()}")
 
     subregion_activa = st.session_state.get("mapa_subregion_seleccionada")
     municipio_activo = st.session_state.get("mapa_municipio_seleccionado")
@@ -461,7 +462,7 @@ def _mostrar_mapa_zonas(con_geo: pd.DataFrame, subregion_activa: str, codigo_mun
 # ---------------------------------------------------------------------------
 
 def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/show_chart: Análisis semanal")
+    st.subheader(f":material/show_chart: Análisis semanal{resumen_filtros_activos(incluir_periodo=False)}")
 
     anios = sorted(casos["ano"].dropna().unique().tolist(), reverse=True)
     if not anios:
@@ -617,7 +618,7 @@ def _grafica_variacion_porcentual(casos: pd.DataFrame, anio: int) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_evolucion_temporal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/timeline: Evolución temporal")
+    st.subheader(f":material/timeline: Evolución temporal{resumen_filtros_activos()}")
 
     nivel = st.segmented_control(
         "Agrupar por",

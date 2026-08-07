@@ -20,7 +20,7 @@ from core.dashboard_base.estilos import (
     LEYENDA_SUPERIOR,
     eje_semanal,
 )
-from core.dashboard_base.filtros import CLAVE_FILTROS
+from core.dashboard_base.filtros import CLAVE_FILTROS, resumen_filtros_activos
 from core.geografia import obtener_geojson_subregiones
 from pathologies.dengue.geografia import obtener_mapeo_subregion
 from pathologies.dengue.canal_endemico import (
@@ -93,7 +93,7 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
     # sobre `datos` completo mas abajo.
     anios_presentes = sorted((int(a) for a in datos["ano"].dropna().unique()), reverse=True)
 
-    datos_kpi, filtros_kpi, leyenda_periodo = _resolver_periodo_kpi(
+    datos_kpi, filtros_kpi, leyenda_periodo, anio_kpi = _resolver_periodo_kpi(
         datos, filtros_actuales, anios_presentes
     )
 
@@ -110,7 +110,7 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
     # en Mortalidad / Morbilidad.)
     if leyenda_periodo is not None:
         st.caption(leyenda_periodo)
-    _mostrar_kpis_principales(resultado_indicadores)
+    _mostrar_kpis_principales(resultado_indicadores, anio_kpi)
 
     st.space("small")
 
@@ -134,16 +134,18 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
 
 def _resolver_periodo_kpi(
     datos: pd.DataFrame, filtros_actuales: dict, anios_presentes: list[int]
-) -> tuple[pd.DataFrame, dict, str | None]:
+) -> tuple[pd.DataFrame, dict, str | None, int | None]:
     """Selector de AÑO para los KPIs de Situacion (no afecta mapa ni canal). Es un
     slider de un solo anio: arranca en el mas reciente (abre como "situacion
     actual" y la letalidad cuadra con la meta anual del INS) y se puede mover a
     cualquier otro anio. Para ver las tasas agrupadas por rango de anios estan las
     pestanas Morbilidad (incidencia) y Mortalidad (mortalidad). Devuelve el
-    subconjunto de datos, los filtros ajustados al anio y la leyenda.
+    subconjunto de datos, los filtros ajustados al anio, la leyenda, y el anio
+    elegido (para que _mostrar_kpis_principales lo use en el tooltip de Letalidad
+    al comparar contra la meta del INS).
     """
     if not anios_presentes:
-        return datos, filtros_actuales, None
+        return datos, filtros_actuales, None, None
 
     anios_asc = sorted(anios_presentes)
     anio_max = anios_asc[-1]
@@ -170,7 +172,7 @@ def _resolver_periodo_kpi(
     filtros_kpi = {**filtros_actuales, "ano": [anio_sel]}
     leyenda = f":material/event: Indicadores del año {anio_sel}."
 
-    return datos_kpi, filtros_kpi, leyenda
+    return datos_kpi, filtros_kpi, leyenda, anio_sel
 
 # ---------------------------------------------------------------------------
 # KPIs. Arriba, 3 principales (incidencia, mortalidad, letalidad). Los 2
@@ -191,7 +193,7 @@ def _formatear_tasa(valor: float | None) -> str:
 def _formatear_pct(valor: float | None, decimales: int = 2) -> str:
     return f"{valor:.{decimales}f}%" if valor is not None else "No disponible"
 
-def _mostrar_kpis_principales(resultado: dict) -> None:
+def _mostrar_kpis_principales(resultado: dict, anio_kpi: int | None) -> None:
     incidencia = resultado["incidencia"]
     mortalidad = resultado["mortalidad"]
     letalidad = resultado["letalidad"]
@@ -219,16 +221,23 @@ def _mostrar_kpis_principales(resultado: dict) -> None:
         )
     with col3:
         supera_meta = letalidad is not None and letalidad > META_LETALIDAD
+        ayuda_letalidad = "Muertes (580) / casos (210+220) x 100. "
+        if letalidad is not None and anio_kpi is not None:
+            comparacion = "supera" if supera_meta else "cumple"
+            umbral = f"{META_LETALIDAD}%" if supera_meta else f"< {META_LETALIDAD}%"
+            ayuda_letalidad += (
+                f"La letalidad de {anio_kpi} ({letalidad:.4f}%) {comparacion} la "
+                f"meta nacional INS de {umbral}."
+            )
+        else:
+            ayuda_letalidad += f"Meta nacional INS: < {META_LETALIDAD}%."
         st.metric(
             "Letalidad",
             _formatear_pct(letalidad, decimales=4),
             delta="Supera la meta INS" if supera_meta else None,
             delta_color="inverse" if supera_meta else "off",
             delta_arrow="off",
-            help=(
-                "Muertes (580) / casos (210+220) x 100. "
-                f"Meta nacional INS: < {META_LETALIDAD}%."
-            ),
+            help=ayuda_letalidad,
             border=True,
         )
 
@@ -237,7 +246,7 @@ def _mostrar_kpis_principales(resultado: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
-    st.subheader(":material/map: Situación actual por subregión")
+    st.subheader(f":material/map: Situación actual por subregión{resumen_filtros_activos()}")
     st.caption(
         "Zona del canal endémico en la última semana reportada de cada subregión, "
         "comparada contra esa misma semana en años anteriores."
@@ -375,7 +384,7 @@ def _graficar_mapa_situacion(situacion: pd.DataFrame) -> go.Figure:
 def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
     col_titulo, col_metodologia = st.columns([5, 1.3], vertical_alignment="center")
     with col_titulo:
-        st.subheader(":material/monitoring: Canal endémico")
+        st.subheader(f":material/monitoring: Canal endémico{resumen_filtros_activos()}")
     with col_metodologia:
         if st.button(
             "Metodología",

@@ -25,7 +25,7 @@ from core.dashboard_base.estilos import (
     eje_semanal,
     rango_con_margen,
 )
-from core.dashboard_base.filtros import CLAVE_FILTROS
+from core.dashboard_base.filtros import CLAVE_FILTROS, resumen_filtros_activos
 from pathologies.dengue.geografia import obtener_mapeo_subregion
 from pathologies.dengue.indicators import calcular_indicadores
 from pathologies.dengue.poblacion import calcular_tasa_por_subregion, obtener_poblacion_departamental
@@ -143,8 +143,8 @@ def _mostrar_kpis(
     # compara con la meta ANUAL del INS: si el periodo abarca varios anios, es un
     # valor combinado, no de un solo anio.
     anios = sorted(int(a) for a in casos["ano"].dropna().unique())
-    if anios:
-        periodo = str(anios[0]) if len(anios) == 1 else f"{anios[0]}-{anios[-1]}"
+    periodo = (str(anios[0]) if len(anios) == 1 else f"{anios[0]}-{anios[-1]}") if anios else None
+    if periodo is not None:
         st.caption(
             f":material/calendar_today: Indicadores del período filtrado ({periodo}). "
             "La letalidad se compara con la meta anual del INS."
@@ -180,17 +180,23 @@ def _mostrar_kpis(
         # delta_color="inverse" cuando supera la meta: senal epidemiologica real,
         # uso legitimo de color de alerta (DESIGN.md). delta_arrow="off" porque es
         # una etiqueta de estado ("supera la meta"), no una direccion de cambio.
+        ayuda_letalidad = (
+            "Muertes (580) / Casos dengue (210+220) x 100. "
+            f"La meta nacional INS establece una letalidad < {META_LETALIDAD}%: "
+            "cada 1.000 casos de dengue deberia haber menos de 1 muerte."
+        )
+        if periodo is not None:
+            comparacion = "supera" if supera_meta else "cumple"
+            ayuda_letalidad += (
+                f" La letalidad acumulada de {periodo} ({letalidad:.4f}%) {comparacion} esa meta."
+            )
         st.metric(
             "Letalidad",
             f"{letalidad:.4f}%",
             delta="Supera la meta INS" if supera_meta else None,
             delta_color="inverse" if supera_meta else "off",
             delta_arrow="off",
-            help=(
-                "Muertes (580) / Casos dengue (210+220) x 100. "
-                f"La meta nacional INS establece una letalidad < {META_LETALIDAD}%: "
-                "cada 1.000 casos de dengue deberia haber menos de 1 muerte."
-            ),
+            help=ayuda_letalidad,
             border=True,
         )
     with c5:
@@ -206,7 +212,7 @@ def _mostrar_kpis(
 # ---------------------------------------------------------------------------
 
 def _mostrar_temporal(muertes: pd.DataFrame) -> None:
-    st.subheader(":material/calendar_month: Muertes por semana epidemiologica")
+    st.subheader(f":material/calendar_month: Muertes por semana epidemiologica{resumen_filtros_activos(incluir_periodo=False)}")
 
     if "semana" not in muertes.columns:
         st.caption("Sin datos de semana.")
@@ -258,7 +264,7 @@ def _mostrar_temporal(muertes: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_edad_sexo(muertes: pd.DataFrame) -> None:
-    st.subheader(":material/groups: Muertes por sexo y edad")
+    st.subheader(f":material/groups: Muertes por sexo y edad{resumen_filtros_activos()}")
 
     if not {"edad_anios", "sexo"}.issubset(muertes.columns):
         st.caption("Sin datos de edad o sexo.")
@@ -311,7 +317,7 @@ def _mostrar_edad_sexo(muertes: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_regimen(muertes: pd.DataFrame) -> None:
-    st.subheader(":material/health_and_safety: Régimen SGSSS")
+    st.subheader(f":material/health_and_safety: Régimen SGSSS{resumen_filtros_activos()}")
 
     if "tip_ss" not in muertes.columns:
         st.caption("Sin datos.")
@@ -347,7 +353,7 @@ def _mostrar_regimen(muertes: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_eps(muertes: pd.DataFrame) -> None:
-    st.subheader(":material/local_hospital: EPS de afiliación")
+    st.subheader(f":material/local_hospital: EPS de afiliación{resumen_filtros_activos()}")
 
     if "nom_ase" not in muertes.columns:
         st.caption("Sin datos.")
@@ -383,7 +389,7 @@ def _mostrar_eps(muertes: pd.DataFrame) -> None:
 def _mostrar_tabla_territorial(
     muertes: pd.DataFrame, casos: pd.DataFrame, graves: pd.DataFrame
 ) -> None:
-    st.subheader(":material/table_chart: Indicadores por territorio")
+    st.subheader(f":material/table_chart: Indicadores por territorio{resumen_filtros_activos()}")
     st.caption(
         "Letalidad = muertes / (casos 210+220). "
         "Letalidad grave = muertes / casos 220."
@@ -455,7 +461,7 @@ def _mostrar_tabla_territorial(
 def _mostrar_tasas_subregion(
     muertes: pd.DataFrame, casos: pd.DataFrame, graves: pd.DataFrame
 ) -> None:
-    st.subheader(":material/bar_chart: Indicadores por subregión")
+    st.subheader(f":material/bar_chart: Indicadores por subregión{resumen_filtros_activos()}")
 
     col_sub = "subregion"
     if col_sub not in muertes.columns or col_sub not in casos.columns:
@@ -552,9 +558,14 @@ def _mostrar_tasas_subregion(
     st.plotly_chart(fig, width="stretch")
 
     if indicador == "Letalidad (%)" and ref_val > META_LETALIDAD:
+        anios_periodo = sorted(int(a) for a in casos["ano"].dropna().unique())
+        periodo = (
+            str(anios_periodo[0]) if len(anios_periodo) == 1
+            else f"{anios_periodo[0]}-{anios_periodo[-1]}"
+        ) if anios_periodo else "el período filtrado"
         st.caption(
-            f":material/warning: Letalidad departamental {ref_val:.4f}% "
-            f"supera la meta nacional de {META_LETALIDAD}%."
+            f":material/warning: La letalidad departamental acumulada de {periodo} "
+            f"({ref_val:.4f}%) supera la meta nacional INS de {META_LETALIDAD}%."
         )
 
 # ---------------------------------------------------------------------------
@@ -562,7 +573,7 @@ def _mostrar_tasas_subregion(
 # ---------------------------------------------------------------------------
 
 def _mostrar_cie10(muertes: pd.DataFrame) -> None:
-    st.subheader(":material/medical_information: Causas de muerte asociadas (CIE-10)")
+    st.subheader(f":material/medical_information: Causas de muerte asociadas (CIE-10){resumen_filtros_activos()}")
 
     col_cod  = "cbmte"
     col_nom  = "nom_cbmte"
