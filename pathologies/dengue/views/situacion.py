@@ -1,7 +1,7 @@
 """Pestana 2 Situacion: KPIs, mapa de situacion (2.1) y canal endemico (2.2),
 cuartiles y Bortman lado a lado, tal como el INS Colombia recomienda usarlos en
-paralelo para confirmar senales de alerta. El pronostico de corto plazo (2.3)
-sigue pendiente (modelo predictivo), ver PROGRESO.md.
+paralelo para confirmar senales de alerta. El pronostico de corto plazo vive en
+su propia pestana (Pronostico, ver pathologies/dengue/views/pronostico.py).
 
 Casos = cod_eve en {210, 220}. La mortalidad (580) no participa del canal endemico
 ni del mapa de situacion, pero si de los KPIs (letalidad, mortalidad).
@@ -126,11 +126,6 @@ def mostrar_situacion(datos: pd.DataFrame) -> None:
 
     with st.container(border=True):
         _mostrar_canal_endemico(casos)
-
-    st.caption(
-        ":material/construction: El pronóstico de corto plazo (modelo predictivo a "
-        "nivel departamental) en construcción :)."
-    )
 
 def _resolver_periodo_kpi(
     datos: pd.DataFrame, filtros_actuales: dict, anios_presentes: list[int]

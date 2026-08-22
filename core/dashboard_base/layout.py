@@ -102,6 +102,7 @@ def ejecutar_dashboard() -> None:
 ICONOS_PESTANAS = {
     "Tendencia": ":material/trending_up:",
     "Situación": ":material/insights:",
+    "Pronóstico": ":material/query_stats:",
     "Sociodemográfica": ":material/groups:",
     "Morbilidad": ":material/healing:",
     "Mortalidad": ":material/bar_chart:",

@@ -13,3 +13,5 @@ rq
 python-keycloak
 PyYAML
 tzdata
+prophet
+epiweeks

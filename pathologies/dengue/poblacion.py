@@ -245,16 +245,42 @@ def obtener_poblacion_por_zona_municipio_anio() -> pd.DataFrame:
     return poblacion[["cod_mun_completo", "ano", "area_geografica", "poblacion"]].reset_index(drop=True)
 
 
-def obtener_poblacion_departamental(anios_en_alcance: list[int]) -> float | None:
-    """Poblacion en riesgo del Magdalena completo (suma de los 30 municipios) para
-    los anios dados. Util para la linea de referencia departamental en graficas
-    por subregion (ej. 5.7 en mortalidad.py). None si falta poblacion para alguno
-    de esos anios, nunca un numero incompleto.
+def obtener_poblacion_en_riesgo_departamental(anios_en_alcance: list[int]) -> float | None:
+    """Poblacion en riesgo del Magdalena completo (suma de los municipios con
+    transmision) para los anios dados. Util para la linea de referencia
+    departamental en graficas por subregion (ej. 5.7 en mortalidad.py). None si
+    falta poblacion para alguno de esos anios, nunca un numero incompleto.
+
+    OJO: pese al nombre "departamental", NO es la poblacion total de los 30
+    municipios: sigue siendo poblacion en riesgo (excluye municipios sin
+    transmision, usa la Tabla 5 de asignacion por zona). Para la poblacion total
+    sin filtrar (denominador de la pestana Pronostico) usar
+    obtener_poblacion_total_departamental.
     """
     if not anios_en_alcance:
         return None
     poblacion_municipio = obtener_poblacion_por_municipio_anio()
     poblacion_periodo = poblacion_municipio[poblacion_municipio["ano"].isin(anios_en_alcance)]
+    anios_con_poblacion = set(poblacion_periodo["ano"].unique())
+    if not set(anios_en_alcance).issubset(anios_con_poblacion):
+        return None
+    return float(poblacion_periodo["poblacion"].sum())
+
+
+def obtener_poblacion_total_departamental(anios_en_alcance: list[int]) -> float | None:
+    """Poblacion TOTAL del Magdalena (los 30 municipios, area geografica "Total"
+    del DANE), SIN excluir por estratificacion de riesgo. Denominador de la tasa
+    (casos x100.000 hab.) de la pestana Pronostico: el pronostico es una serie
+    departamental unica (no filtrable por municipio/subregion), asi que su tasa
+    usa poblacion sin ajustar, no la poblacion en riesgo del resto del dashboard
+    (ver CLAUDE.md, seccion de la pestana Pronostico). None si falta poblacion
+    para alguno de los anios pedidos, nunca un numero incompleto.
+    """
+    if not anios_en_alcance:
+        return None
+    poblacion = _leer_poblacion_magdalena_todas_areas()
+    poblacion = poblacion[poblacion["area_geografica"] == "Total"]
+    poblacion_periodo = poblacion[poblacion["ano"].isin(anios_en_alcance)]
     anios_con_poblacion = set(poblacion_periodo["ano"].unique())
     if not set(anios_en_alcance).issubset(anios_con_poblacion):
         return None

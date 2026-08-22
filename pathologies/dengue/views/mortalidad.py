@@ -28,7 +28,7 @@ from core.dashboard_base.estilos import (
 from core.dashboard_base.filtros import CLAVE_FILTROS, resumen_filtros_activos
 from pathologies.dengue.geografia import obtener_mapeo_subregion
 from pathologies.dengue.indicators import calcular_indicadores
-from pathologies.dengue.poblacion import calcular_tasa_por_subregion, obtener_poblacion_departamental
+from pathologies.dengue.poblacion import calcular_tasa_por_subregion, obtener_poblacion_en_riesgo_departamental
 
 COD_MUERTE       = 580
 CODIGOS_CASOS    = {210, 220}
@@ -520,7 +520,7 @@ def _mostrar_tasas_subregion(
         mapeo_subregion = obtener_mapeo_subregion()
         tasas = calcular_tasa_por_subregion(muertes, anios_en_alcance, mapeo_subregion)
         df["valor"] = df["subregion"].map(tasas)
-        poblacion_departamental = obtener_poblacion_departamental(anios_en_alcance)
+        poblacion_departamental = obtener_poblacion_en_riesgo_departamental(anios_en_alcance)
         ref_val = (ref_m / poblacion_departamental * 100_000) if poblacion_departamental else None
         etiqueta_eje = "Tasa de mortalidad (x100.000 hab.)"
         formato = ".2f"
