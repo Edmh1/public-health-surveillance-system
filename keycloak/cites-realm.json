@@ -1,0 +1,78 @@
+{
+  "id": "cites-realm",
+  "realm": "cites",
+  "displayName": "CITES - Universidad del Magdalena",
+  "enabled": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": true,
+  "sslRequired": "none",
+  "accessTokenLifespanForImplicitFlow": 3600,
+  "ssoSessionIdleTimeout": 86400,
+  "ssoSessionMaxLifespan": 604800,
+  "clients": [
+    {
+      "clientId": "dashboard",
+      "name": "Dashboard SIVIDEM",
+      "description": "Cliente público para el dashboard de SIVIDEM. Direct access grants habilitados para login con usuario/contraseña.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "dashboard-secret",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "profile",
+        "roles",
+        "email"
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "Visor",
+        "description": "Solo consulta: ve el dashboard pero no puede modificar datos."
+      },
+      {
+        "name": "Editor",
+        "description": "Gestión de datos: puede subir, editar y eliminar piezas."
+      },
+      {
+        "name": "Admin",
+        "description": "Administrador: todos los permisos de Editor más eliminación permanente y gestión de usuarios."
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@sividem.co",
+      "firstName": "Administrador",
+      "lastName": "SIVIDEM",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sividem2024",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "Admin"
+      ]
+    }
+  ],
+  "defaultSignatureAlgorithm": "RS256"
+}

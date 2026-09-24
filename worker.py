@@ -7,10 +7,12 @@ from rq import Worker
 from core.ingestion.cola import NOMBRE_COLA, conectar_redis
 from core.registry import registrar_patologia
 from pathologies.dengue.plugin import DenguePathologyPlugin
+from pathologies.tuberculosis.plugin import TuberculosisPathologyPlugin
 
 
 def registrar_patologias_disponibles() -> None:
     registrar_patologia(DenguePathologyPlugin())
+    registrar_patologia(TuberculosisPathologyPlugin())
 
 
 def main() -> None:

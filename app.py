@@ -5,12 +5,14 @@ from dotenv import load_dotenv
 from core.dashboard_base.layout import ejecutar_dashboard
 from core.registry import registrar_patologia
 from pathologies.dengue.plugin import DenguePathologyPlugin
+from pathologies.tuberculosis.plugin import TuberculosisPathologyPlugin
 
 load_dotenv()
 
 
 def registrar_patologias_disponibles() -> None:
     registrar_patologia(DenguePathologyPlugin())
+    registrar_patologia(TuberculosisPathologyPlugin())
 
 
 registrar_patologias_disponibles()
