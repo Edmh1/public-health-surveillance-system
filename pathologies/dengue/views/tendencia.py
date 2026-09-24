@@ -150,7 +150,7 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
         # delta con flecha SI es legitimo aqui: compara contra el año anterior
         # (una variacion real que subio o bajo), a diferencia de los KPI de "% del
         # total" del resto del dashboard.
-        st.metric(label_anio, valor_anio, delta=delta_anio, border=True)
+        st.metric(label_anio, valor_anio, delta=delta_anio, delta_color="inverse", border=True)
     with c3:
         etiqueta_semana = f"Semana pico {anio_actual}" if anio_actual is not None else "Semana pico"
         st.metric(etiqueta_semana, semana_label, help=semana_help, border=True)
