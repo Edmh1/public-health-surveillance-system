@@ -26,17 +26,6 @@ La primera patología implementada es dengue. El sistema está construido como p
 
 La descripción completa de cada pestaña, con sus gráficas, selectores y reglas de cálculo, está en la [guía de módulos](docs/modulos.md).
 
-<!-- Capturas del sistema: agregar aquí imágenes de docs/img/ (por ejemplo situacion.png, pronostico.png, tendencia-mapa.png, morbilidad-sankey.png, gestion-piezas.png). -->
-![Captura login del Sistema](docs/img/cap-login.png)
-![Captura 1 del Sistema](docs/img/cap-1.png)
-![Captura 2 del Sistema](docs/img/cap-2.png)
-![Captura 3 del Sistema](docs/img/cap-3.png)
-![Captura 4 del Sistema](docs/img/cap-4.png)
-![Captura 5 del Sistema](docs/img/cap-5.png)
-![Captura 6 del Sistema](docs/img/cap-6.png)
-![Captura 7 del Sistema](docs/img/cap-7.png)
-![Captura 7 del Sistema](docs/img/cap-8.png)
-![Captura 7 del Sistema](docs/img/cap-9.png)
 
 ## Arquitectura
 
