@@ -473,16 +473,20 @@ Ante un fallo (archivo ilegible, falta una columna, el consolidado nuevo no pasa
 ### Ciclo de vida de una pieza
 
 ```mermaid
-stateDiagram-v2
-    direction LR
-    [*] --> Activa: Subir y procesar con éxito
-    Activa --> Activa: Editar con versión corregida<br/>(la anterior pasa a la papelera)
-    Activa --> Papelera: Eliminar
-    Papelera --> Activa: Restaurar<br/>(confirma si ya hay una activa)
-    Papelera --> [*]: Eliminar para siempre<br/>(solo Admin)
+flowchart LR
+    N([Archivo nuevo]) -->|Subir| A[Activa]
+    A -->|Eliminar o editar| P[Papelera]
+    P -->|Restaurar| A
+    P -->|Eliminar para siempre| X([Borrada])
 ```
 
-Solo las piezas activas forman parte del consolidado que lee el dashboard. La papelera guarda una versión por año y código: si una pieza se edita dos veces sin restaurar la versión intermedia, la más antigua se reemplaza. Todas las transiciones quedan en la bitácora con usuario y fecha.
+- Subir: el archivo se procesa y la pieza queda activa, es decir, forma parte de los datos que muestra el dashboard.
+- Eliminar: la pieza sale del dashboard y pasa a la papelera, de donde se puede recuperar.
+- Editar: se sube una versión corregida que queda activa en su lugar, y la versión anterior pasa a la papelera.
+- Restaurar: la pieza vuelve a estar activa. Si ya hay una activa del mismo año y código, el sistema pide confirmar el reemplazo.
+- Eliminar para siempre: solo Admin, con confirmación explícita. El archivo se destruye y no se puede recuperar.
+
+La papelera guarda una versión por año y código: si una pieza se edita dos veces sin restaurar la versión intermedia, la más antigua se reemplaza. Todos los movimientos quedan en la bitácora con usuario y fecha.
 
 ### Subpestaña Piezas activas
 

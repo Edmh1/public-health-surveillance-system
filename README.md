@@ -57,37 +57,55 @@ El núcleo (core/) no conoce ninguna patología en particular; cada patología v
 
 ### Flujo de una carga de datos
 
-La interfaz nunca procesa archivos: los encola y la persona sigue trabajando. El worker atiende un archivo a la vez, así que dos subidas simultáneas se procesan en orden sin conflicto.
+```mermaid
+flowchart LR
+    A["Editor sube el Excel<br/>y confirma año y código"] --> B["El archivo queda<br/>en la cola"]
+    B --> C["El worker lo lee<br/>y lo limpia"]
+    C --> D{"¿Resultado<br/>válido?"}
+    D -->|"Sí"| E["Se actualizan los datos<br/>del dashboard"]
+    E --> F["Todos los conectados<br/>ven el aviso de datos nuevos"]
+    D -->|"No"| G["Los datos anteriores<br/>quedan intactos"]
+    G --> H["Quien subió el archivo<br/>ve el motivo del error"]
+```
+
+1. La persona sube el archivo desde la pestaña Gestión. El sistema propone año y código a partir del nombre y ella los confirma.
+2. La interfaz no procesa el archivo: lo deja en una cola y la persona puede seguir trabajando. Si dos personas suben al mismo tiempo, los archivos se procesan en orden, uno a la vez.
+3. Un proceso aparte (el worker) lee el Excel y lo limpia.
+4. Antes de publicar, el sistema comprueba que el resultado esté completo. Si lo está, reemplaza los datos del dashboard de una sola vez, sin que nadie llegue a ver datos a medias, y todas las personas conectadas reciben un aviso para actualizar.
+5. Si algo falla (archivo ilegible, falta una columna, resultado incompleto), los datos anteriores no se tocan y quien subió el archivo ve el motivo. El fallo queda registrado en el historial de Procesamientos.
+
+#### Secuencia técnica
+
+El mismo flujo, visto por componente:
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor E as Editor
-    participant D as Dashboard (Streamlit)
-    participant Q as Cola (Redis)
-    participant W as Worker (RQ)
-    participant P as Parquet
-    participant S as SQLite
-    actor O as Otras sesiones
+    participant D as Dashboard<br/>(Streamlit)
+    participant R as Cola<br/>(Redis)
+    participant W as Worker<br/>(RQ)
+    participant A as Almacenamiento<br/>(Parquet + SQLite)
 
-    E->>D: Sube Datos_2024_210.xlsx
-    D->>D: Autocompleta año y código desde el nombre
-    E->>D: Confirma año y código
-    D->>Q: Encola la ruta del archivo
-    D-->>E: Aviso "enviado a procesar"
-    Q->>W: Entrega el trabajo
-    W->>W: Lee el Excel (calamine) y limpia con el plugin de la patología
-    W->>P: Escribe consolidado temporal y lo verifica
-    alt Verificación correcta
-        W->>P: Promueve el consolidado (cambio de nombre atómico)
-        W->>P: Guarda la pieza (la versión anterior pasa a la papelera)
-        W->>S: Registra procesamiento exitoso y movimiento en bitácora
-        D-->>E: Notificación "procesado correctamente"
-        D-->>O: Banner "hay datos nuevos, actualizar"
-    else Archivo ilegible, columna faltante o verificación fallida
-        W->>S: Registra el fallo con su motivo
-        D-->>E: Notificación con el motivo del fallo
+    E->>D: Sube el Excel y confirma año y código
+    D->>R: Encola el trabajo
+    D-->>E: "Enviado a procesar"
+    R->>W: Entrega el trabajo
+    W->>W: Lee y limpia el Excel
+    alt Resultado válido
+        W->>A: Publica el consolidado nuevo y registra el éxito
+    else Falla la lectura, la limpieza o la verificación
+        W->>A: Registra el error con su motivo
     end
+    Note over D,A: El dashboard consulta el estado en SQLite cada 4 segundos
+    D->>A: ¿Terminó el procesamiento?
+    A-->>D: Éxito o error
+    D-->>E: Notificación con el resultado
 ```
+
+- El dashboard y el worker no se hablan directamente: se comunican por la cola (para entregar el trabajo) y por SQLite (para saber cómo terminó).
+- El consolidado nuevo se escribe aparte y se verifica antes de reemplazar al oficial con un cambio de nombre atómico. Por eso, si algo falla, el consolidado anterior sigue intacto.
+- Las demás sesiones abiertas también revisan cada 4 segundos si cambió la fecha de modificación del consolidado. Cuando cambia, muestran el aviso de datos nuevos; los datos solo se recargan cuando cada persona pulsa Actualizar.
 
 ## Tecnologías
 
