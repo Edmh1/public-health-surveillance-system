@@ -28,15 +28,6 @@ La descripción completa de cada pestaña, con sus gráficas, selectores y regla
 
 <!-- Capturas del sistema: agregar aquí imágenes de docs/img/ (por ejemplo situacion.png, pronostico.png, tendencia-mapa.png, morbilidad-sankey.png, gestion-piezas.png). -->
 
-## Principios del diseño
-
-- Los números falsos no se publican. Si falta un insumo para un indicador (un código sin subir, población DANE de un año, historia insuficiente para una línea base), el indicador se muestra como "No disponible", nunca como cero.
-- Tasas donde el denominador es confiable. Las tasas se calculan solo para el Magdalena y, como regla general, por subregión: agregar municipios reduce el efecto de la subnotificación causada por pacientes que se atienden fuera de su municipio de residencia. El denominador es la población en riesgo según una estratificación calculada por el propio sistema con el lineamiento MSPS/INS 2020-2023.
-- Metodologías oficiales y explicadas en pantalla. El canal endémico sigue las recomendaciones del INS (línea base de 5 a 7 años, exclusión manual de años atípicos) y cada método tiene su diálogo de metodología con fórmulas y ejemplos. El pronóstico incluye un diálogo con la fundamentación del modelo.
-- El dashboard nunca lee datos a medio escribir. El consolidado se reescribe con un archivo temporal, se verifica y solo entonces reemplaza al oficial en un cambio de nombre atómico.
-- La persona decide cuándo cambian sus datos. El consolidado se carga una vez por sesión; los filtros operan en memoria. Cuando alguien sube datos nuevos, todas las personas conectadas reciben un aviso para actualizar cuando lo decidan.
-- Contrato e implementaciones intercambiables. Las patologías (PathologyPlugin) y el proveedor de identidad (AuthProvider) están detrás de contratos abstractos: cambiar Keycloak por otro proveedor, o agregar una patología, es cambiar o agregar una pieza sin tocar el resto.
-
 ## Arquitectura
 
 SIVIDEM se despliega como cuatro contenedores orquestados con Docker Compose: la aplicación web (Streamlit), un worker de procesamiento (RQ), la cola (Redis) y el proveedor de identidad (Keycloak). Los datos de casos se guardan en Parquet y el estado operativo (procesamientos, bitácora, registro de archivos) en SQLite.
