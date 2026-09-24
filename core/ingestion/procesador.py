@@ -1,10 +1,11 @@
 """Procesador de piezas: el trabajo que el worker ejecuta para cada archivo subido.
 
 Pasos por pieza, en orden: leer el Excel con el lector rapido, limpiar con el
-clean de la patologia, guardar el Parquet individual, consolidar, y marcar el
-estado en SQLite con su traza en la bitacora. Si algo falla, no se guarda el
-Excel ni se toca el consolidado o la pieza activa anterior; solo se documenta
-el motivo del fallo.
+clean de la patologia, consolidar (escritura atomica verificada), guardar el
+Parquet individual, y marcar el estado en SQLite con su traza en la bitacora.
+Si algo falla hasta la consolidacion inclusive, no se guarda el Excel ni se
+toca el consolidado o la pieza activa anterior; solo se documenta el motivo del
+fallo.
 """
 
 from pathlib import Path
@@ -55,6 +56,9 @@ def procesar_pieza(
         plugin = obtener_patologia(patologia)
         datos_crudos = _leer_excel(ruta_archivo)
         datos_limpios = plugin.limpiar(datos_crudos)
+        # Se consolida antes de tocar piezas/ y papelera/: si la verificacion del
+        # consolidado nuevo falla, el oficial sigue intacto y no hay nada que deshacer.
+        agregar_pieza(ruta_consolidado, plugin.columna_anio, plugin.columna_codigo, anio, codigo, datos_limpios)
     except Exception as error:
         registrar_procesamiento_fallido(patologia, anio, codigo, archivo_original, usuario, motivo_fallo=str(error))
         Path(ruta_archivo).unlink(missing_ok=True)
@@ -82,7 +86,6 @@ def procesar_pieza(
         marcar_pieza_inactiva(patologia, anio, codigo)
 
     guardar_pieza(directorio_piezas, anio, codigo, datos_limpios)
-    agregar_pieza(ruta_consolidado, plugin.columna_anio, plugin.columna_codigo, anio, codigo, datos_limpios)
 
     ruta_pieza_guardada = directorio_piezas / f"{anio}_{codigo}.parquet"
     registrar_pieza(patologia, anio, codigo, archivo_original, str(ruta_pieza_guardada))
