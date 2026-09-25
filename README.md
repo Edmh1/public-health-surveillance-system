@@ -13,10 +13,12 @@ SIVIDEM es un dashboard web de vigilancia epidemiológica para el departamento d
 
 La primera patología implementada es dengue. El sistema está construido como plataforma modular: cada patología es un plugin que cumple un contrato común, de modo que se pueden agregar nuevas (por ejemplo tuberculosis) sin modificar el núcleo.
 
+La investigación que sustenta el sistema (análisis exploratorio, variables climáticas y comparación de modelos de pronóstico) está en el repositorio [dengue-surveillance-magdalena](https://github.com/Edmh1/dengue-surveillance-magdalena). Ver [Investigación y modelado](#investigación-y-modelado).
+
 ## Qué ofrece
 
 - Situación actual: incidencia, mortalidad y letalidad del año (con alerta si la letalidad supera la meta nacional del INS), mapa del estado epidemiológico de cada subregión y canal endémico por los métodos de cuartiles y Bortman, lado a lado, como recomienda el INS.
-- Pronóstico: casos esperados en las próximas 1 a 4 semanas con un modelo Prophet autorregresivo, banda de incertidumbre y modo de validación con ejemplos históricos reales en el que el modelo solo ve datos hasta una fecha pasada y se compara con lo que ocurrió después.
+- Pronóstico: casos esperados en las próximas 1 a 4 semanas con un modelo Prophet autorregresivo, banda de incertidumbre y modo de validación con ejemplos históricos reales en el que el modelo solo ve datos hasta una fecha pasada y se compara con lo que ocurrió después. El modelo se eligió en el [estudio de modelado](https://github.com/Edmh1/dengue-surveillance-magdalena).
 - Tendencia: casos por año, comparación semanal contra el año anterior, variación porcentual, mapa interactivo de incidencia en tres niveles (subregión, municipio y zona) y evolución por territorio.
 - Sociodemográfica: pirámide por sexo y edad, grupos vulnerables, área, estrato, etnia, pueblos indígenas, régimen de salud, EPS y UPGD notificadoras.
 - Morbilidad: gravedad, hospitalización, flujo de clasificación inicial a final (diagrama de Sankey), fuente de notificación y tasas por subregión y municipio.
@@ -225,6 +227,20 @@ El procesamiento recorta automáticamente los casos al Magdalena por departament
 3. Registrar el plugin en app.py y en worker.py con registrar_patologia(...).
 
 El selector de patología, los filtros globales, la subida de archivos, la papelera, el historial, los avisos y la escritura atómica funcionan sin cambios para la nueva patología.
+
+## Investigación y modelado
+
+El análisis y la experimentación previos al sistema viven en un repositorio aparte: [dengue-surveillance-magdalena](https://github.com/Edmh1/dengue-surveillance-magdalena). Usa la serie histórica de SIVIGILA 2007-2024 del Magdalena y deja trazados los experimentos con MLflow. Este repositorio lleva a producción lo que allí se validó.
+
+| Notebook | Qué contiene | Qué aportó a SIVIDEM |
+|---|---|---|
+| [01 Análisis exploratorio](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/01_dengue_eda.ipynb) | Limpieza y consolidación de los microdatos SIVIGILA | Las reglas de limpieza que aplica el worker (pathologies/dengue/clean.py) y la evidencia de subnotificación que llevó a calcular tasas por subregión |
+| [02 Variables climáticas](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/02_dengue_climate_feature.ipynb) | Temperatura, precipitación y humedad de NASA POWER, ERA5 y CHIRPS, validadas contra estaciones del IDEAM | Las covariables climáticas que se evaluaron en el modelado |
+| [03 Modelado](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/03_dengue_modeling.ipynb) | Comparación de SARIMAX, Prophet, XGBoost, LightGBM, LSTM y N-BEATS con evaluación walk-forward | La elección de Prophet con rezagos de 1, 2, 4 y 8 semanas |
+| [04 Agrupamiento](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/04_dengue_clustering.ipynb) | Agrupación de los municipios del Magdalena según su clima | Trabajo exploratorio, no integrado al sistema |
+| [05 Ablación clima vs. rezagos](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/05_dengue_ablacion_clima_vs_lags.ipynb) | Aporte del clima frente al de los casos de semanas anteriores, por horizonte | Pronóstico sin variables climáticas y horizonte máximo de 4 semanas |
+
+Las métricas de validación del modelo (R2 y RMSE por horizonte) se resumen dentro del propio dashboard, en el diálogo de Fundamentación de la pestaña Pronóstico.
 
 ## Metodología y referencias
 
