@@ -28,7 +28,6 @@ La investigación que sustenta el sistema (análisis exploratorio, variables cli
 
 La descripción completa de cada pestaña, con sus gráficas, selectores y reglas de cálculo, está en la [guía de módulos](docs/modulos.md).
 
-<!-- Capturas del sistema: agregar aquí imágenes de docs/img/ (por ejemplo situacion.png, pronostico.png, tendencia-mapa.png, morbilidad-sankey.png, gestion-piezas.png). -->
 
 ## Arquitectura
 
