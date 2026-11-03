@@ -373,13 +373,28 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     # el ojo puede seguir "que le paso a cada clasificacion inicial" por color.
     fuentes, destinos, valores, colores_links = [], [], [], []
 
-    for _, fila in conteo_inicial.iterrows():
+    # Plotly apila los enlaces de cada nodo en el orden en que llegan, no por la
+    # altura del nodo destino. Si se emiten en el orden del dataframe las bandas
+    # se cruzan aunque los nodos esten bien colocados, asi que se ordenan por la
+    # posicion vertical ya calculada (inicial, y luego final).
+    posicion_final = {nombre: i for i, nombre in enumerate(nodos_finales)}
+
+    conteo_inicial_ordenado = conteo_inicial.copy()
+    conteo_inicial_ordenado["orden_inicial"] = conteo_inicial_ordenado["inicial"].map(posicion_inicial)
+    conteo_inicial_ordenado = conteo_inicial_ordenado.sort_values("orden_inicial")
+
+    transiciones_ordenadas = transiciones.copy()
+    transiciones_ordenadas["orden_inicial"] = transiciones_ordenadas["inicial"].map(posicion_inicial)
+    transiciones_ordenadas["orden_final"] = transiciones_ordenadas["final"].map(posicion_final)
+    transiciones_ordenadas = transiciones_ordenadas.sort_values(["orden_inicial", "orden_final"])
+
+    for _, fila in conteo_inicial_ordenado.iterrows():
         fuentes.append(0)
         destinos.append(idx_inicial[fila["inicial"]])
         valores.append(int(fila["n"]))
         colores_links.append(_hex_rgba(_PALETA_ESTADOS.get(fila["inicial"], "#6b7280"), 0.45))
 
-    for _, fila in transiciones.iterrows():
+    for _, fila in transiciones_ordenadas.iterrows():
         fuentes.append(idx_inicial[fila["inicial"]])
         destinos.append(idx_final[fila["final"]])
         valores.append(int(fila["n"]))
