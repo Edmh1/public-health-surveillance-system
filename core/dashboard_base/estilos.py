@@ -243,4 +243,8 @@ def imagen_a_data_uri(ruta: Path) -> str:
     """Codifica una imagen de assets/ como data URI para incrustarla en HTML."""
     contenido = ruta.read_bytes()
     codificado = base64.b64encode(contenido).decode("ascii")
-    return f"data:image/svg+xml;base64,{codificado}"
+    if ruta.suffix.lower() == ".svg":
+        tipo_mime = "image/svg+xml"
+    else:
+        tipo_mime = "image/png"
+    return f"data:{tipo_mime};base64,{codificado}"
