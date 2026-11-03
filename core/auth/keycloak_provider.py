@@ -52,6 +52,10 @@ class KeycloakAuthProvider(AuthProvider):
         client_id: str | None = None,
         client_secret_key: str | None = None,
     ):
+        # max_retries=1 (el default de la libreria) duplica la espera real ante una
+        # caida de Keycloak: cada intento agota el timeout completo antes de reintentar
+        # una vez, asi que el congelamiento real es timeout x 2. Se fija en 0 para que
+        # timeout sea el limite real de espera (corrige el bug del login congelado).
         self.cliente_keycloak = KeycloakOpenID(
             server_url=server_url or os.environ["KEYCLOAK_SERVER_URL"],
             realm_name=realm_name or os.environ["KEYCLOAK_REALM"],
