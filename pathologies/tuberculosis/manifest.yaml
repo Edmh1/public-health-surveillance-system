@@ -1,0 +1,16 @@
+nombre: tuberculosis
+codigos_esperados:
+  - 810
+  - 820
+  - 825
+columna_anio: ano
+columna_codigo: cod_eve
+rutas:
+  piezas: data/tuberculosis/piezas
+  consolidado: data/tuberculosis/consolidado/tuberculosis_consolidado.parquet
+  papelera: data/tuberculosis/papelera
+columnas_esperadas:
+etiquetas_cod_eve:
+  820: Pulmonar
+  810: Extrapulmonar
+  825: Farmacorresistente

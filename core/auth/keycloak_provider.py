@@ -52,10 +52,6 @@ class KeycloakAuthProvider(AuthProvider):
         client_id: str | None = None,
         client_secret_key: str | None = None,
     ):
-        # max_retries=1 (el default de la libreria) duplica la espera real ante una
-        # caida de Keycloak: cada intento agota el timeout completo antes de reintentar
-        # una vez, asi que el congelamiento real es timeout x 2. Se fija en 0 para que
-        # timeout sea el limite real de espera (ver bug del login pegado).
         self.cliente_keycloak = KeycloakOpenID(
             server_url=server_url or os.environ["KEYCLOAK_SERVER_URL"],
             realm_name=realm_name or os.environ["KEYCLOAK_REALM"],
@@ -71,8 +67,11 @@ class KeycloakAuthProvider(AuthProvider):
         except KeycloakAuthenticationError:
             return None
 
-        informacion_token = self.cliente_keycloak.decode_token(token["access_token"])
-        usuario = _usuario_desde_token(informacion_token, token["access_token"], token["refresh_token"])
+        info_acceso = self.cliente_keycloak.decode_token(token["access_token"])
+        info_id = self.cliente_keycloak.decode_token(token["id_token"])
+
+        informacion = {**info_acceso, **info_id}
+        usuario = _usuario_desde_token(informacion, token["access_token"], token.get("refresh_token"))
         return usuario
 
     def cerrar_sesion(self, usuario: Usuario) -> None:
