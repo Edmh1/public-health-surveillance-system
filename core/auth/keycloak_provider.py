@@ -67,8 +67,13 @@ class KeycloakAuthProvider(AuthProvider):
         except KeycloakAuthenticationError:
             return None
 
+        # El id_token es opcional: un cliente sin scope openid no lo emite. El
+        # access token va primero porque es el que trae realm_access (el rol).
         info_acceso = self.cliente_keycloak.decode_token(token["access_token"])
-        info_id = self.cliente_keycloak.decode_token(token["id_token"])
+        info_id = {}
+        id_token = token.get("id_token")
+        if id_token:
+            info_id = self.cliente_keycloak.decode_token(id_token)
 
         informacion = {**info_acceso, **info_id}
         usuario = _usuario_desde_token(informacion, token["access_token"], token.get("refresh_token"))
