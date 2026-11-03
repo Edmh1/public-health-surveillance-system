@@ -97,11 +97,11 @@ def ejecutar_dashboard() -> None:
         fragmento_banner_datos_nuevos(patologia)
         fragmento_avisos_subida(usuario.nombre_usuario)
 
-    datos_filtrados = _aplicar_filtro_cod_eve(plugin, datos_filtrados)
+    datos_filtrados = _aplicar_filtro_cod_eve(patologia, plugin, datos_filtrados)
     _mostrar_pestanas(patologia, usuario, plugin, datos_filtrados)
 
 
-def _aplicar_filtro_cod_eve(plugin, datos: pd.DataFrame) -> pd.DataFrame:
+def _aplicar_filtro_cod_eve(patologia: str, plugin, datos: pd.DataFrame) -> pd.DataFrame:
     etiquetas = plugin.manifest.get("etiquetas_cod_eve")
     if not etiquetas or "cod_eve" not in datos.columns:
         return datos
@@ -109,12 +109,13 @@ def _aplicar_filtro_cod_eve(plugin, datos: pd.DataFrame) -> pd.DataFrame:
     pares = sorted(etiquetas.items(), key=lambda x: x[0])
     codigos_legibles = [f"{label} ({cod})" for cod, label in pares]
 
+    # La clave lleva la patologia para que la seleccion de una no se arrastre a otra.
     seleccionadas = st.pills(
         "Tipo de evento",
         options=codigos_legibles,
         selection_mode="multi",
         default=[],
-        key="filtro_cod_eve_patologia",
+        key=f"filtro_cod_eve_{patologia}",
     )
 
     if not seleccionadas:
