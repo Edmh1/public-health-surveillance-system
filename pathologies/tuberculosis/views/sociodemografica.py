@@ -18,6 +18,7 @@ from core.demografia import (
     clasificar_grupo_curso_vida,
 )
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
+from pathologies.tuberculosis.views.ejes import mostrar_grafica_tb
 from pathologies.tuberculosis.views.titulos import TAMANO_TITULO, titulo_tb
 
 COD_PULMONAR = 820
@@ -135,7 +136,7 @@ def _mostrar_piramide_poblacional(casos: pd.DataFrame) -> None:
         yaxis_title="Curso de vida",
         **_LAYOUT_BASE,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
 
 
 def _mostrar_etnia(casos: pd.DataFrame) -> None:
@@ -159,7 +160,7 @@ def _mostrar_etnia(casos: pd.DataFrame) -> None:
     )
     fig.update_traces(texttemplate="%{text}%", textposition="outside")
     fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title=None)
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
 
 
 def _mostrar_regimen(casos: pd.DataFrame) -> None:
@@ -185,7 +186,7 @@ def _mostrar_regimen(casos: pd.DataFrame) -> None:
     )
     fig.update_traces(texttemplate="%{text}%", textposition="outside")
     fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title=None)
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
 
 
 def _mostrar_eps(casos: pd.DataFrame) -> None:
@@ -209,7 +210,7 @@ def _mostrar_eps(casos: pd.DataFrame) -> None:
     )
     fig.update_traces(texttemplate="%{text}%", textposition="outside")
     fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title=None)
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
 
 
 def _mostrar_upgd(casos: pd.DataFrame) -> None:
@@ -233,7 +234,7 @@ def _mostrar_upgd(casos: pd.DataFrame) -> None:
     )
     fig.update_traces(texttemplate="%{text}%", textposition="outside")
     fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title=None)
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
 
 
 def _mostrar_poblaciones_vulnerables(casos: pd.DataFrame) -> None:
@@ -265,4 +266,4 @@ def _mostrar_poblaciones_vulnerables(casos: pd.DataFrame) -> None:
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
     )
     fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title=None)
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)

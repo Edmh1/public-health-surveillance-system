@@ -16,6 +16,7 @@ from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO, CLAVE_FILTROS
 from core.geografia import obtener_geojson_municipios_magdalena
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
 from pathologies.tuberculosis.indicators import calcular_indicadores
+from pathologies.tuberculosis.views.ejes import mostrar_grafica_tb
 from pathologies.tuberculosis.views.titulos import TAMANO_TITULO, titulo_tb
 
 COD_PULMONAR = 820
@@ -236,7 +237,7 @@ def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
         height=300,
         margin=dict(l=20, r=20, t=40, b=20),
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica_tb(fig, width="stretch")
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +410,7 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
             xanchor="center", x=0.5, font=dict(size=10),
         ),
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica_tb(fig, width="stretch")
 
 
 # ---------------------------------------------------------------------------
@@ -449,7 +450,7 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
         margin=dict(l=0, r=60, t=40, b=0),
         yaxis={"categoryorder": "total ascending"},
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica_tb(fig, width="stretch")
 
 
 # ---------------------------------------------------------------------------
@@ -511,7 +512,7 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         **_LAYOUT,
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica_tb(fig, width="stretch")
 
 
 # ---------------------------------------------------------------------------
@@ -558,7 +559,7 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10)),
         **_LAYOUT,
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica_tb(fig, width="stretch")
 
 
 # ---------------------------------------------------------------------------
@@ -604,7 +605,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
             margin=dict(l=0, r=0, t=40, b=0),
             title_font_size=TAMANO_TITULO,
         )
-        st.plotly_chart(fig_mun, width="stretch")
+        mostrar_grafica_tb(fig_mun, width="stretch")
 
     st.caption(
         "Conteo de hospitalizados por municipio. Las tasas a nivel municipal no son "
@@ -658,7 +659,7 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
         height=300,
         margin=dict(l=10, r=10, t=40, b=10),
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica_tb(fig, width="stretch")
 
 
 # ---------------------------------------------------------------------------
@@ -701,4 +702,4 @@ def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
         height=380,
         **_LAYOUT,
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica_tb(fig, width="stretch")

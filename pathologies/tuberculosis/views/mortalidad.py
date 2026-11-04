@@ -23,6 +23,7 @@ from pathologies.tuberculosis.mapas import (
     municipio_desde_seleccion,
     resumen_semaforo,
 )
+from pathologies.tuberculosis.views.ejes import mostrar_grafica_tb
 from pathologies.tuberculosis.views.titulos import TAMANO_TITULO
 
 COD_PULMONAR = 820
@@ -128,7 +129,7 @@ def _mostrar_muertes_por_anio(muertes: pd.DataFrame, casos: pd.DataFrame) -> Non
         barmode="overlay",
         **_LAYOUT_BASE, xaxis_title=None, yaxis_title=None,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
 
 
 def _mostrar_muertes_sexo_edad(muertes: pd.DataFrame) -> None:
@@ -168,7 +169,7 @@ def _mostrar_muertes_sexo_edad(muertes: pd.DataFrame) -> None:
         xaxis_title="Muertes",
         **_LAYOUT_BASE,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
 
 
 def _mostrar_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:
@@ -218,7 +219,7 @@ def _mostrar_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    resultado = st.plotly_chart(
+    resultado = mostrar_grafica_tb(
         fig,
         use_container_width=True,
         on_select="rerun",
@@ -261,4 +262,4 @@ def _mostrar_letalidad_temporal(casos: pd.DataFrame, muertes: pd.DataFrame) -> N
         color_discrete_sequence=[NARANJA_INSTITUCIONAL],
     )
     fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title="%")
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)

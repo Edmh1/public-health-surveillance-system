@@ -28,6 +28,7 @@ from pathologies.tuberculosis.mapas import (
     resumen_semaforo,
 )
 from pathologies.tuberculosis.poblacion import calcular_tasa_por_subregion
+from pathologies.tuberculosis.views.ejes import mostrar_grafica_tb
 from pathologies.tuberculosis.views.titulos import TAMANO_TITULO
 
 COD_PULMONAR = 820
@@ -139,7 +140,7 @@ def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
         yaxis_title="Casos",
         legend=LEYENDA_SUPERIOR,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
 
 
 def _mostrar_mapa(casos: pd.DataFrame) -> None:
@@ -185,7 +186,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    resultado = st.plotly_chart(
+    resultado = mostrar_grafica_tb(
         fig,
         use_container_width=True,
         on_select="rerun",
@@ -254,7 +255,7 @@ def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
             title=f"Casos semanales de {etiqueta_tipos_tb(casos)} — {anio_seleccionado} vs {anio_seleccionado - 1}",
             **_LAYOUT_BASE,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        mostrar_grafica_tb(fig, use_container_width=True)
 
     with col_variacion:
         if not casos_anterior.empty:
@@ -279,7 +280,7 @@ def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
             )
             fig.update_traces(marker_color=colores)
             fig.update_layout(**_LAYOUT_BASE, yaxis_title="%")
-            st.plotly_chart(fig, use_container_width=True)
+            mostrar_grafica_tb(fig, use_container_width=True)
         else:
             st.info(f"Sin datos para {anio_seleccionado - 1}", icon=":material/info:")
 
@@ -315,4 +316,4 @@ def _mostrar_incidencia_por_territorio(casos: pd.DataFrame) -> None:
     )
     fig.update_traces(textposition="outside")
     fig.update_layout(**_LAYOUT_BASE, xaxis_title="Tasa × 100.000", yaxis_title=None)
-    st.plotly_chart(fig, use_container_width=True)
+    mostrar_grafica_tb(fig, use_container_width=True)
