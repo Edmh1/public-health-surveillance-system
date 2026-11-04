@@ -9,10 +9,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
+from core.dashboard_base.estilos import (
+    AZUL_INSTITUCIONAL,
+    LEYENDA_SUPERIOR,
+    NARANJA_INSTITUCIONAL,
+)
 from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
 from core.geografia import obtener_geojson_municipios_magdalena, obtener_geojson_subregiones
-from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
+from pathologies.tuberculosis.etiquetas import ETIQUETAS_POR_CODIGO, etiqueta_tipos_tb
 from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
 from pathologies.tuberculosis.mapas import (
     COLORES_SEMAFORO,
@@ -96,17 +100,41 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 
 
 def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
-    por_anio = casos.groupby("ano").size().reset_index(name="casos")
-    por_anio["ano"] = por_anio["ano"].astype(int)
-    por_anio = por_anio.sort_values("ano")
+    por_anio_tipo = (
+        casos.assign(tipo=casos["cod_eve"].map(ETIQUETAS_POR_CODIGO))
+        .dropna(subset=["tipo"])
+        .groupby(["ano", "tipo"])
+        .size()
+        .reset_index(name="casos")
+    )
+    por_anio_tipo["ano"] = por_anio_tipo["ano"].astype(int)
+    por_anio_tipo = por_anio_tipo.sort_values(["ano", "tipo"])
+
+    orden_tipos = ["Pulmonar", "Extrapulmonar", "Farmacorresistente"]
+    colores_tipo = {
+        "Pulmonar": AZUL_INSTITUCIONAL,
+        "Extrapulmonar": NARANJA_INSTITUCIONAL,
+        "Farmacorresistente": "#7c3aed",
+    }
 
     fig = px.bar(
-        por_anio, x="ano", y="casos",
+        por_anio_tipo,
+        x="ano",
+        y="casos",
+        color="tipo",
+        barmode="stack",
+        category_orders={"tipo": orden_tipos},
+        color_discrete_map=colores_tipo,
+        labels={"ano": "Año", "casos": "Casos", "tipo": "Tipo"},
         title=f"Casos de {etiqueta_tipos_tb(casos)} por año",
-        color_discrete_sequence=[AZUL_INSTITUCIONAL],
     )
-    fig.update_traces(texttemplate="%{y:,}", textposition="outside")
-    fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title=None)
+    fig.update_traces(texttemplate="%{y:,}", textposition="inside")
+    fig.update_layout(
+        **_LAYOUT_BASE,
+        xaxis_title=None,
+        yaxis_title="Casos",
+        legend=LEYENDA_SUPERIOR,
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 
