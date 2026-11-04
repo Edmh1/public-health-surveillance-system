@@ -159,6 +159,17 @@ def _a_int64(bloque_columnas):
     return bloque_columnas.apply(convertir_columna)
 
 
+def _columnas_presentes(datos, columnas):
+    """Filtra la lista a las columnas que realmente trae el archivo.
+
+    Los formatos nuevos del SIVIGILA pueden omitir columnas opcionales (por
+    ejemplo nacionalidad). ColumnTransformer falla si se le pide una columna
+    ausente, asi que solo se convierten las que existen; las requeridas por
+    pasos posteriores siguen fallando con su propio error si faltan.
+    """
+    return [columna for columna in columnas if columna in datos.columns]
+
+
 class ConvertirTipos(BaseEstimator, TransformerMixin):
     """Paso 3: fechas a datetime, ocupacion a Float64, resto de columnas listadas a Int64."""
 
@@ -168,12 +179,22 @@ class ConvertirTipos(BaseEstimator, TransformerMixin):
     def transform(self, datos):
         columnas_originales = list(datos.columns)
 
+        columnas_fechas = _columnas_presentes(datos, COLUMNAS_FECHA)
+        columnas_enteras = _columnas_presentes(datos, COLUMNAS_ENTERAS)
+
+        transformadores = []
+        if columnas_fechas:
+            transformadores.append(("fechas", FunctionTransformer(_a_datetime), columnas_fechas))
+        if "ocupacion" in datos.columns:
+            transformadores.append(("ocupacion", FunctionTransformer(_a_float64), ["ocupacion"]))
+        if columnas_enteras:
+            transformadores.append(("enteras", FunctionTransformer(_a_int64), columnas_enteras))
+
+        if not transformadores:
+            return datos
+
         convertidor = ColumnTransformer(
-            transformers=[
-                ("fechas", FunctionTransformer(_a_datetime), COLUMNAS_FECHA),
-                ("ocupacion", FunctionTransformer(_a_float64), ["ocupacion"]),
-                ("enteras", FunctionTransformer(_a_int64), COLUMNAS_ENTERAS),
-            ],
+            transformers=transformadores,
             remainder="passthrough",
             verbose_feature_names_out=False,
         )
