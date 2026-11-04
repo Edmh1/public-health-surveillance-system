@@ -22,6 +22,8 @@ CLAVE_FILTROS = "filtros_globales"
 CLAVE_FILTRO_EVENTO = "filtro_cod_eve_patologia"
 _CLAVE_ANIOS_DISPONIBLES = "_filtro_anios_disponibles"
 _CLAVE_SEMANAS_DISPONIBLES = "_filtro_semanas_disponibles"
+_CLAVE_MUNICIPIOS_DISPONIBLES = "_filtro_municipios_disponibles"
+_CLAVE_FILTRO_PENDIENTE = "_filtro_pendiente"
 
 # Mapeo de codigos de clasificacion a nombres legibles.
 # Aplica tanto a TIP_CAS (clasificacion inicial) como a AJUSTE / Estado_final_de_caso.
@@ -43,6 +45,24 @@ def _etiquetar_clasificacion(valor) -> str:
     Si el valor ya es un texto no numerico (columna procesada con label), lo retorna tal cual.
     """
     return _ETIQUETAS_CLASIFICACION.get(str(valor).strip(), str(valor))
+
+
+def _aplicar_filtro_pendiente() -> None:
+    """Aplica cambios de filtro pedidos desde una pestana (clic en mapa, Volver).
+
+    Se guardan en una clave aparte y se aplican al inicio de mostrar_filtros_globales,
+    antes de instanciar los widgets del sidebar. Modificar directamente
+    st.session_state['filtro_municipio'] o ['filtro_subregion'] despues de creados
+    lanza StreamlitWidgetAlreadyInstantiatedError.
+    """
+    pendiente = st.session_state.pop(_CLAVE_FILTRO_PENDIENTE, None)
+    if not pendiente:
+        return
+
+    if "municipio" in pendiente:
+        st.session_state["filtro_municipio"] = pendiente["municipio"]
+    if pendiente.get("subregion") is not None:
+        st.session_state["filtro_subregion"] = pendiente["subregion"]
 
 
 CLAVES_REINICIABLES = (
@@ -127,6 +147,8 @@ def mostrar_filtros_globales(
     mapeo_estratificacion_riesgo: dict[int, str],
 ) -> dict:
     """Dibuja los filtros globales en la barra lateral y devuelve los valores elegidos."""
+    _aplicar_filtro_pendiente()
+
     datos_con_subregion = _agregar_columna_subregion(datos, mapeo_subregion)
     anios_disponibles = _opciones_de_columna(datos, columna_anio)
     semanas_disponibles = _opciones_de_columna(datos, "semana")
@@ -178,6 +200,7 @@ def mostrar_filtros_globales(
     else:
         datos_para_municipios = datos_con_subregion
     municipios_disponibles = _opciones_de_columna(datos_para_municipios, "nom_mun_o")
+    st.session_state[_CLAVE_MUNICIPIOS_DISPONIBLES] = _opciones_de_columna(datos, "nom_mun_o")
     municipios_elegidos = st.sidebar.multiselect(
         "Municipio",
         municipios_disponibles,
@@ -265,6 +288,33 @@ def mostrar_filtros_globales(
     }
     st.session_state[CLAVE_FILTROS] = filtros
     return filtros
+
+
+def seleccionar_municipio(nombre: str) -> bool:
+    """Solicita filtrar el dashboard por un municipio puntual (clic en un mapa).
+
+    Devuelve False si el municipio no existe entre los datos cargados. El cambio
+    se deja pendiente para aplicarlo antes de instanciar los widgets del sidebar;
+    no se puede modificar st.session_state['filtro_municipio'] directamente
+    despues de que el multiselect ya fue creado.
+    """
+    disponibles = st.session_state.get(_CLAVE_MUNICIPIOS_DISPONIBLES, [])
+    if nombre not in disponibles:
+        return False
+
+    st.session_state[_CLAVE_FILTRO_PENDIENTE] = {
+        "municipio": [nombre],
+        "subregion": [],
+    }
+    return True
+
+
+def limpiar_municipio() -> None:
+    """Solicita quitar el filtro de municipio (boton Volver de los mapas)."""
+    st.session_state[_CLAVE_FILTRO_PENDIENTE] = {
+        "municipio": [],
+        "subregion": None,
+    }
 
 
 def aplicar_filtros(

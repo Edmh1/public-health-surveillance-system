@@ -14,14 +14,17 @@ from core.dashboard_base.estilos import (
     LEYENDA_SUPERIOR,
     NARANJA_INSTITUCIONAL,
 )
-from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
+from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO, seleccionar_municipio
 from core.geografia import obtener_geojson_municipios_magdalena, obtener_geojson_subregiones
 from pathologies.tuberculosis.etiquetas import ETIQUETAS_POR_CODIGO, etiqueta_tipos_tb
 from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
 from pathologies.tuberculosis.mapas import (
     COLORES_SEMAFORO,
     ORDEN_SEMAFORO,
+    boton_volver_municipio,
+    clave_mapa,
     datos_mapa_casos,
+    municipio_desde_seleccion,
     resumen_semaforo,
 )
 from pathologies.tuberculosis.poblacion import calcular_tasa_por_subregion
@@ -139,6 +142,10 @@ def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
 
 
 def _mostrar_mapa(casos: pd.DataFrame) -> None:
+    clave_base = "tb_mapa_tendencia"
+    boton_volver_municipio(clave_base)
+    seleccion_unica = len(st.session_state.get("filtro_municipio", [])) == 1
+
     geojson = obtener_geojson_municipios_magdalena()
     mapa = datos_mapa_casos(casos)
 
@@ -172,11 +179,36 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
     fig.update_geos(fitbounds="locations", visible=False, bgcolor="rgba(0,0,0,0)")
     fig.update_layout(
         margin=dict(l=0, r=0, t=40, b=0),
+        showlegend=not seleccion_unica,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption(resumen_semaforo(mapa, "incidencia", "casos por 100.000 habitantes"))
+    resultado = st.plotly_chart(
+        fig,
+        use_container_width=True,
+        on_select="rerun",
+        selection_mode="points",
+        key=clave_mapa(clave_base),
+    )
+    nombre_municipio = municipio_desde_seleccion(resultado, mapa)
+    if nombre_municipio and st.session_state.get("filtro_municipio") != [nombre_municipio]:
+        if seleccionar_municipio(nombre_municipio):
+            st.rerun()
+
+    if seleccion_unica:
+        fila = mapa.iloc[0]
+        incidencia = fila["incidencia"]
+        incidencia_txt = f"{incidencia:.1f}" if pd.notna(incidencia) else "sin dato"
+        st.caption(
+            f"{fila['municipio']} · Casos: {int(fila['casos']):,} · "
+            f"Incidencia: {incidencia_txt} por 100.000 habitantes. "
+            "Usa Volver para quitar el filtro."
+        )
+    else:
+        st.caption(
+            f"{resumen_semaforo(mapa, 'incidencia', 'casos por 100.000 habitantes')} "
+            "Haz clic en un municipio para filtrar el dashboard."
+        )
 
 
 def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:

@@ -11,13 +11,16 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, LEYENDA_SUPERIOR, NARANJA_INSTITUCIONAL
-from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
+from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO, seleccionar_municipio
 from core.geografia import obtener_geojson_municipios_magdalena
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
 from pathologies.tuberculosis.mapas import (
     COLORES_SEMAFORO,
     ORDEN_SEMAFORO,
+    boton_volver_municipio,
+    clave_mapa,
     datos_mapa_muertes,
+    municipio_desde_seleccion,
     resumen_semaforo,
 )
 
@@ -168,6 +171,10 @@ def _mostrar_muertes_sexo_edad(muertes: pd.DataFrame) -> None:
 
 
 def _mostrar_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:
+    clave_base = "tb_mapa_mortalidad"
+    boton_volver_municipio(clave_base)
+    seleccion_unica = len(st.session_state.get("filtro_municipio", [])) == 1
+
     mapa = datos_mapa_muertes(casos, muertes)
     geojson = obtener_geojson_municipios_magdalena()
 
@@ -205,11 +212,36 @@ def _mostrar_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:
         margin={"r": 0, "t": 40, "l": 0, "b": 0},
         height=360,
         legend=dict(**LEYENDA_SUPERIOR, title=None),
+        showlegend=not seleccion_unica,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption(resumen_semaforo(mapa, "tasa_mortalidad", "muertes por 100.000 habitantes"))
+    resultado = st.plotly_chart(
+        fig,
+        use_container_width=True,
+        on_select="rerun",
+        selection_mode="points",
+        key=clave_mapa(clave_base),
+    )
+    nombre_municipio = municipio_desde_seleccion(resultado, mapa)
+    if nombre_municipio and st.session_state.get("filtro_municipio") != [nombre_municipio]:
+        if seleccionar_municipio(nombre_municipio):
+            st.rerun()
+
+    if seleccion_unica:
+        fila = mapa.iloc[0]
+        tasa = fila["tasa_mortalidad"]
+        tasa_txt = f"{tasa:.1f}" if pd.notna(tasa) else "sin dato"
+        st.caption(
+            f"{fila['municipio']} · Muertes: {int(fila['muertes']):,} · "
+            f"Tasa de mortalidad: {tasa_txt} por 100.000 habitantes. "
+            "Usa Volver para quitar el filtro."
+        )
+    else:
+        st.caption(
+            f"{resumen_semaforo(mapa, 'tasa_mortalidad', 'muertes por 100.000 habitantes')} "
+            "Haz clic en un municipio para filtrar el dashboard."
+        )
 
 
 def _mostrar_letalidad_temporal(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:

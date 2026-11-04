@@ -12,18 +12,24 @@ import unicodedata
 import pandas as pd
 import streamlit as st
 
-from core.dashboard_base.filtros import CLAVE_FILTROS
+from core.dashboard_base.filtros import CLAVE_FILTROS, limpiar_municipio
 from core.geografia import obtener_geojson_municipios_magdalena
 from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
 from pathologies.tuberculosis.poblacion import obtener_poblacion_por_municipio_anio
 
+COLOR_SELECCIONADO = "#1b3a6b"
 COLORES_SEMAFORO = {
     "Baja": "#2e7d32",
     "Media": "#f9a825",
     "Alta": "#c62828",
     "Sin dato": "#d9d9d9",
+    "Seleccionado": COLOR_SELECCIONADO,
 }
-ORDEN_SEMAFORO = ["Baja", "Media", "Alta", "Sin dato"]
+ORDEN_SEMAFORO = ["Baja", "Media", "Alta", "Sin dato", "Seleccionado"]
+
+# Keys de los tres mapas de TB. Al volver a todos los municipios se renuevan
+# todas para que ninguna seleccion vieja vuelva a aplicar el filtro.
+CLAVES_MAPAS_TB = ("tb_mapa_situacion", "tb_mapa_tendencia", "tb_mapa_mortalidad")
 
 
 def _normalizar(texto) -> str:
@@ -148,6 +154,12 @@ def _agregar_poblacion_y_semaforo(datos: pd.DataFrame, columna_tasa: str, anios:
     datos = datos.merge(_poblacion_por_municipio(anios), on="cod_mun_completo", how="left")
     datos[columna_tasa] = datos["eventos"] / datos["poblacion"] * 100_000
     datos["semaforo"] = _clasificar_semaforo(datos[columna_tasa])
+
+    # Con un solo municipio no hay comparacion posible: se pinta con el color
+    # institucional y se oculta la leyenda del semaforo en la vista.
+    if len(st.session_state.get("filtro_municipio", [])) == 1:
+        datos["semaforo"] = "Seleccionado"
+
     datos["cod_mun_str"] = datos["cod_mun_completo"].astype(str)
     return datos
 
@@ -177,6 +189,50 @@ def datos_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> pd.DataFra
     base["eventos"] = base["eventos"].fillna(0).astype(int)
     base["muertes"] = base["eventos"]
     return _agregar_poblacion_y_semaforo(base, "tasa_mortalidad", _anios_de(casos))
+
+
+def clave_mapa(clave_base: str) -> str:
+    """Key renovable para st.plotly_chart.
+
+    Al volver a todos los municipios se incrementa el contador para que el mapa
+    se renderice con una key nueva y no conserve la seleccion anterior.
+    """
+    contador = st.session_state.get(f"{clave_base}_contador", 0)
+    return f"{clave_base}_{contador}"
+
+
+def boton_volver_municipio(clave_base: str) -> None:
+    """Boton para quitar el filtro de municipio cuando hay exactamente uno."""
+    if len(st.session_state.get("filtro_municipio", [])) != 1:
+        return
+
+    if st.button(
+        "Volver",
+        icon=":material/arrow_back:",
+        help="Quitar el filtro de municipio y volver a todos los municipios",
+        key=f"volver_{clave_base}",
+    ):
+        limpiar_municipio()
+        for clave in CLAVES_MAPAS_TB:
+            contador_key = f"{clave}_contador"
+            st.session_state[contador_key] = st.session_state.get(contador_key, 0) + 1
+        st.rerun()
+
+
+def municipio_desde_seleccion(resultado, mapa: pd.DataFrame) -> str | None:
+    """Nombre del municipio clickeado en un st.plotly_chart, o None si no hay clic."""
+    try:
+        puntos = resultado.selection.points
+    except AttributeError:
+        return None
+    if not puntos:
+        return None
+
+    codigo = str(puntos[0].get("location", ""))
+    fila = mapa.loc[mapa["cod_mun_str"] == codigo]
+    if fila.empty:
+        return None
+    return str(fila.iloc[0]["municipio"])
 
 
 def resumen_semaforo(datos: pd.DataFrame, columna: str, unidad: str) -> str:

@@ -9,7 +9,11 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, LEYENDA_SUPERIOR, NARANJA_INSTITUCIONAL
-from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO, resumen_filtros_activos
+from core.dashboard_base.filtros import (
+    CLAVE_FILTRO_EVENTO,
+    resumen_filtros_activos,
+    seleccionar_municipio,
+)
 from core.geografia import obtener_geojson_municipios_magdalena
 from pathologies.tuberculosis.canal_endemico import (
     METODOS_DISPONIBLES,
@@ -24,7 +28,10 @@ from pathologies.tuberculosis.indicators import calcular_indicadores
 from pathologies.tuberculosis.mapas import (
     COLORES_SEMAFORO,
     ORDEN_SEMAFORO,
+    boton_volver_municipio,
+    clave_mapa,
     datos_mapa_casos,
+    municipio_desde_seleccion,
     resumen_semaforo,
 )
 
@@ -105,9 +112,25 @@ def _mostrar_kpis(datos: pd.DataFrame) -> None:
 
 
 def _mostrar_mapa_situacion(casos: pd.DataFrame) -> None:
-    st.subheader(
-        f":material/map: Incidencia de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia"
-        f"{resumen_filtros_activos()}"
+    clave_base = "tb_mapa_situacion"
+    boton_volver_municipio(clave_base)
+    seleccion_unica = len(st.session_state.get("filtro_municipio", [])) == 1
+
+    with st.container(key="titulo_mapa_situacion"):
+        st.subheader(
+            f":material/map: Incidencia de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia"
+            f"{resumen_filtros_activos()}"
+        )
+
+    st.html(
+        """
+        <style>
+        .st-key-titulo_mapa_situacion h3,
+        .st-key-titulo_mapa_situacion [data-testid="stHeading"] {
+            font-size: 1.05rem !important;
+        }
+        </style>
+        """
     )
 
     mapa = datos_mapa_casos(casos)
@@ -144,11 +167,36 @@ def _mostrar_mapa_situacion(casos: pd.DataFrame) -> None:
         margin={"r": 0, "t": 40, "l": 0, "b": 0},
         height=360,
         legend=dict(**LEYENDA_SUPERIOR, title=None),
+        showlegend=not seleccion_unica,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption(resumen_semaforo(mapa, "incidencia", "casos por 100.000 habitantes"))
+    resultado = st.plotly_chart(
+        fig,
+        use_container_width=True,
+        on_select="rerun",
+        selection_mode="points",
+        key=clave_mapa(clave_base),
+    )
+    nombre_municipio = municipio_desde_seleccion(resultado, mapa)
+    if nombre_municipio and st.session_state.get("filtro_municipio") != [nombre_municipio]:
+        if seleccionar_municipio(nombre_municipio):
+            st.rerun()
+
+    if seleccion_unica:
+        fila = mapa.iloc[0]
+        incidencia = fila["incidencia"]
+        incidencia_txt = f"{incidencia:.1f}" if pd.notna(incidencia) else "sin dato"
+        st.caption(
+            f"{fila['municipio']} · Casos: {int(fila['casos']):,} · "
+            f"Incidencia: {incidencia_txt} por 100.000 habitantes. "
+            "Usa Volver para quitar el filtro."
+        )
+    else:
+        st.caption(
+            f"{resumen_semaforo(mapa, 'incidencia', 'casos por 100.000 habitantes')} "
+            "Haz clic en un municipio para filtrar el dashboard."
+        )
 
 
 def _mostrar_tabla_priorizacion(casos: pd.DataFrame) -> None:
