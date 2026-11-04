@@ -14,6 +14,12 @@ from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, LEYENDA_SUPERIOR, NA
 from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
 from core.geografia import obtener_geojson_municipios_magdalena
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
+from pathologies.tuberculosis.mapas import (
+    COLORES_SEMAFORO,
+    ORDEN_SEMAFORO,
+    datos_mapa_muertes,
+    resumen_semaforo,
+)
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -162,31 +168,48 @@ def _mostrar_muertes_sexo_edad(muertes: pd.DataFrame) -> None:
 
 
 def _mostrar_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:
-    por_mun = casos.groupby("cod_mun_completo").size().reset_index(name="casos")
-    muertes_por_mun = muertes.groupby("cod_mun_completo").size().reset_index(name="muertes")
-    por_mun = por_mun.merge(muertes_por_mun, on="cod_mun_completo", how="left")
-    por_mun["muertes"] = por_mun["muertes"].fillna(0).astype(int)
-    por_mun["cod_mun_str"] = por_mun["cod_mun_completo"].astype(str)
-
+    mapa = datos_mapa_muertes(casos, muertes)
     geojson = obtener_geojson_municipios_magdalena()
 
     fig = px.choropleth(
-        por_mun,
+        mapa,
         geojson=geojson,
         locations="cod_mun_str",
         featureidkey="properties.mpio_cdpmp",
-        color="muertes",
-        color_continuous_scale=["#f7f7f7", "#fdd49e", "#fdbb84", "#fc8d59", "#e34a33", "#b30000"],
-        title=f"Muertes por {etiqueta_tipos_tb(casos)} por municipio de ocurrencia",
+        color="semaforo",
+        color_discrete_map=COLORES_SEMAFORO,
+        category_orders={"semaforo": ORDEN_SEMAFORO},
+        hover_name="municipio",
+        hover_data={
+            "cod_mun_str": False,
+            "municipio": False,
+            "municipio_normalizado": False,
+            "subregion": False,
+            "casos": True,
+            "muertes": True,
+            "tasa_mortalidad": ":.1f",
+            "poblacion": ":,",
+            "semaforo": False,
+        },
+        labels={
+            "casos": "Casos",
+            "muertes": "Muertes",
+            "tasa_mortalidad": "Mortalidad por 100.000 hab.",
+            "poblacion": "Población",
+        },
+        title=f"Mortalidad por {etiqueta_tipos_tb(casos)} por municipio de ocurrencia",
     )
     fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
-    fig.update_geos(fitbounds="locations", visible=False)
+    fig.update_geos(fitbounds="locations", visible=False, bgcolor="rgba(0,0,0,0)")
     fig.update_layout(
         margin={"r": 0, "t": 40, "l": 0, "b": 0},
         height=360,
         legend=dict(**LEYENDA_SUPERIOR, title=None),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig, use_container_width=True)
+    st.caption(resumen_semaforo(mapa, "tasa_mortalidad", "muertes por 100.000 habitantes"))
 
 
 def _mostrar_letalidad_temporal(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:

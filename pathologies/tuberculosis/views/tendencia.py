@@ -12,9 +12,15 @@ import streamlit as st
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
 from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
 from core.geografia import obtener_geojson_municipios_magdalena, obtener_geojson_subregiones
-from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
-from pathologies.tuberculosis.poblacion import calcular_tasa_por_subregion
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
+from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
+from pathologies.tuberculosis.mapas import (
+    COLORES_SEMAFORO,
+    ORDEN_SEMAFORO,
+    datos_mapa_casos,
+    resumen_semaforo,
+)
+from pathologies.tuberculosis.poblacion import calcular_tasa_por_subregion
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -28,8 +34,6 @@ def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
     if codigos == {COD_RESISTENTE}:
         return datos
     return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
-
-ESCALA_INCIDENCIA = ["#9ecae1", "#5ba3d0", "#2a6db0", "#1b3a6b"]
 
 _LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
 
@@ -108,24 +112,43 @@ def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
 
 def _mostrar_mapa(casos: pd.DataFrame) -> None:
     geojson = obtener_geojson_municipios_magdalena()
+    mapa = datos_mapa_casos(casos)
 
-    por_zona = casos.groupby("cod_mun_completo").size().reset_index(name="casos")
-    por_zona["cod_mun_str"] = por_zona["cod_mun_completo"].astype(str)
-
-    fig = px.choropleth_map(
-        por_zona,
+    fig = px.choropleth(
+        mapa,
         geojson=geojson,
         locations="cod_mun_str",
         featureidkey="properties.mpio_cdpmp",
-        color="casos",
-        color_continuous_scale=ESCALA_INCIDENCIA,
-        map_style="carto-positron",
-        center={"lat": 10.4, "lon": -74.2},
-        zoom=7.5,
-        title=f"Casos de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia",
+        color="semaforo",
+        color_discrete_map=COLORES_SEMAFORO,
+        category_orders={"semaforo": ORDEN_SEMAFORO},
+        hover_name="municipio",
+        hover_data={
+            "cod_mun_str": False,
+            "municipio": False,
+            "municipio_normalizado": False,
+            "subregion": False,
+            "casos": True,
+            "incidencia": ":.1f",
+            "poblacion": ":,",
+            "semaforo": False,
+        },
+        labels={
+            "casos": "Casos",
+            "incidencia": "Incidencia por 100.000 hab.",
+            "poblacion": "Población",
+        },
+        title=f"Incidencia de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia",
     )
-    fig.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+    fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
+    fig.update_geos(fitbounds="locations", visible=False, bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=40, b=0),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
     st.plotly_chart(fig, use_container_width=True)
+    st.caption(resumen_semaforo(mapa, "incidencia", "casos por 100.000 habitantes"))
 
 
 def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:

@@ -19,8 +19,14 @@ from pathologies.tuberculosis.canal_endemico import (
     ZONA_EPIDEMIA,
     calcular_canal_endemico,
 )
-from pathologies.tuberculosis.indicators import calcular_indicadores
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
+from pathologies.tuberculosis.indicators import calcular_indicadores
+from pathologies.tuberculosis.mapas import (
+    COLORES_SEMAFORO,
+    ORDEN_SEMAFORO,
+    datos_mapa_casos,
+    resumen_semaforo,
+)
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -100,31 +106,49 @@ def _mostrar_kpis(datos: pd.DataFrame) -> None:
 
 def _mostrar_mapa_situacion(casos: pd.DataFrame) -> None:
     st.subheader(
-        f":material/map: Casos de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia"
+        f":material/map: Incidencia de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia"
         f"{resumen_filtros_activos()}"
     )
 
-    por_municipio = casos.groupby("cod_mun_completo").size().reset_index(name="casos")
-    por_municipio["cod_mun_str"] = por_municipio["cod_mun_completo"].astype(str)
-
+    mapa = datos_mapa_casos(casos)
     geojson = obtener_geojson_municipios_magdalena()
 
     fig = px.choropleth(
-        por_municipio,
+        mapa,
         geojson=geojson,
         locations="cod_mun_str",
         featureidkey="properties.mpio_cdpmp",
-        color="casos",
-        color_continuous_scale=["#9ecae1", "#5ba3d0", "#2a6db0", "#1b3a6b"],
+        color="semaforo",
+        color_discrete_map=COLORES_SEMAFORO,
+        category_orders={"semaforo": ORDEN_SEMAFORO},
+        hover_name="municipio",
+        hover_data={
+            "cod_mun_str": False,
+            "municipio": False,
+            "municipio_normalizado": False,
+            "subregion": False,
+            "casos": True,
+            "incidencia": ":.1f",
+            "poblacion": ":,",
+            "semaforo": False,
+        },
+        labels={
+            "casos": "Casos",
+            "incidencia": "Incidencia por 100.000 hab.",
+            "poblacion": "Población",
+        },
     )
     fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
-    fig.update_geos(fitbounds="locations", visible=False)
+    fig.update_geos(fitbounds="locations", visible=False, bgcolor="rgba(0,0,0,0)")
     fig.update_layout(
         margin={"r": 0, "t": 40, "l": 0, "b": 0},
         height=360,
         legend=dict(**LEYENDA_SUPERIOR, title=None),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     st.plotly_chart(fig, use_container_width=True)
+    st.caption(resumen_semaforo(mapa, "incidencia", "casos por 100.000 habitantes"))
 
 
 def _mostrar_tabla_priorizacion(casos: pd.DataFrame) -> None:
