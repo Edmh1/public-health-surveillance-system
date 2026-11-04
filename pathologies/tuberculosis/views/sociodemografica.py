@@ -15,6 +15,7 @@ from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
 from core.demografia import (
     ETIQUETAS_CURSO_VIDA,
     FUENTE_GRUPOS_CURSO_VIDA,
+    GRUPOS_CURSO_VIDA,
     clasificar_grupo_curso_vida,
 )
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
@@ -35,6 +36,11 @@ def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
     return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
 
 _LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0), title_font_size=TAMANO_TITULO)
+
+ETIQUETAS_CURSO_VIDA_RANGO = [
+    f"{etiqueta} ({minimo}-{maximo - 1})" if maximo != float("inf") else f"{etiqueta} ({minimo}+)"
+    for minimo, maximo, etiqueta in GRUPOS_CURSO_VIDA
+]
 
 
 def mostrar_sociodemografica(datos: pd.DataFrame) -> None:
@@ -90,9 +96,9 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 
     cols = st.columns(4)
     cols[0].metric("Casos totales", f"{total:,}")
-    cols[1].metric("Gestantes", f"{gestantes:,}", f"{gestantes / total * 100:.1f}%" if total else None)
-    cols[2].metric("Menores de 5", f"{menores_5:,}", f"{menores_5 / total * 100:.1f}%" if total else None)
-    cols[3].metric("Mayores de 65", f"{mayores_65:,}", f"{mayores_65 / total * 100:.1f}%" if total else None)
+    cols[1].metric("Gestantes", f"{gestantes:,}")
+    cols[2].metric("Menores de 5", f"{menores_5:,}")
+    cols[3].metric("Mayores de 65", f"{mayores_65:,}")
 
 
 def _mostrar_piramide_poblacional(casos: pd.DataFrame) -> None:
@@ -121,19 +127,19 @@ def _mostrar_piramide_poblacional(casos: pd.DataFrame) -> None:
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        y=etiquetas, x=valores_masc, orientation="h",
+        y=ETIQUETAS_CURSO_VIDA_RANGO, x=valores_masc, orientation="h",
         name="Masculino", marker_color=AZUL_INSTITUCIONAL,
         text=[abs(v) for v in valores_masc], textposition="inside",
     ))
     fig.add_trace(go.Bar(
-        y=etiquetas, x=valores_fem, orientation="h",
+        y=ETIQUETAS_CURSO_VIDA_RANGO, x=valores_fem, orientation="h",
         name="Femenino", marker_color=NARANJA_INSTITUCIONAL,
         text=valores_fem, textposition="inside",
     ))
     fig.update_layout(
         barmode="relative",
         xaxis_title="Casos",
-        yaxis_title="Curso de vida",
+        yaxis_title="Grupo etario",
         **_LAYOUT_BASE,
     )
     mostrar_grafica_tb(fig, use_container_width=True)
@@ -204,7 +210,7 @@ def _mostrar_eps(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         por_eps, x="casos", y="eps", orientation="h",
-        title=f"Top 10 EAPB (EPS) por casos de {etiqueta_tipos_tb(casos)}",
+        title=f"Principales EAPB (EPS) por casos de {etiqueta_tipos_tb(casos)}",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
         text="pct",
     )
@@ -228,7 +234,7 @@ def _mostrar_upgd(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         por_upgd, x="casos", y="upgd", orientation="h",
-        title=f"Top 10 UPGD notificadoras de casos de {etiqueta_tipos_tb(casos)}",
+        title=f"Principales UPGD notificadoras de casos de {etiqueta_tipos_tb(casos)}",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
         text="pct",
     )

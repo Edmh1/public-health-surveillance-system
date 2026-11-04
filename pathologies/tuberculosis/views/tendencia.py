@@ -89,19 +89,13 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
     por_anio = casos.groupby("ano").size()
     anios_ordenados = sorted(por_anio.index)
     anio_actual = anios_ordenados[-1] if anios_ordenados else None
-    anio_anterior = anios_ordenados[-2] if len(anios_ordenados) >= 2 else None
-
     casos_actual = int(por_anio[anio_actual]) if anio_actual else 0
-    casos_anterior = int(por_anio[anio_anterior]) if anio_anterior else 0
-    variacion = ((casos_actual - casos_anterior) / casos_anterior * 100) if casos_anterior else None
 
-    cols = st.columns(5)
+    cols = st.columns(4)
     cols[0].metric("Casos totales", f"{total:,}")
-    cols[1].metric("Pulmonar", f"{pulmonar:,}", f"{pulmonar / total * 100:.1f}%" if total else None)
-    cols[2].metric("Extrapulmonar", f"{extrapulmonar:,}", f"{extrapulmonar / total * 100:.1f}%" if total else None)
+    cols[1].metric("Pulmonar", f"{pulmonar:,}")
+    cols[2].metric("Extrapulmonar", f"{extrapulmonar:,}")
     cols[3].metric(f"Casos {anio_actual}", f"{casos_actual:,}")
-    if variacion is not None and anio_anterior:
-        cols[4].metric(f"vs {anio_anterior}", f"{variacion:+.1f}%")
 
 
 def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
@@ -232,57 +226,55 @@ def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
     semanal = casos_anio.groupby("semana").size().reindex(range(1, 54), fill_value=0).reset_index(name="casos")
     semanal.columns = ["semana", "casos"]
 
-    col_barras, col_variacion = st.columns(2)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=semanal["semana"], y=semanal["casos"],
+        name=str(anio_seleccionado),
+        marker_color=NARANJA_INSTITUCIONAL,
+    ))
 
-    with col_barras:
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            x=semanal["semana"], y=semanal["casos"],
-            name=str(anio_seleccionado),
-            marker_color=AZUL_INSTITUCIONAL,
+    if not casos_anterior.empty:
+        semanal_ant = casos_anterior.groupby("semana").size().reindex(range(1, 54), fill_value=0).reset_index(name="casos")
+        semanal_ant.columns = ["semana", "casos"]
+        fig.add_trace(go.Scatter(
+            x=semanal_ant["semana"], y=semanal_ant["casos"],
+            name=str(anio_seleccionado - 1), mode="lines+markers",
+            line=dict(color=AZUL_INSTITUCIONAL),
         ))
 
-        if not casos_anterior.empty:
-            semanal_ant = casos_anterior.groupby("semana").size().reindex(range(1, 54), fill_value=0).reset_index(name="casos")
-            semanal_ant.columns = ["semana", "casos"]
-            fig.add_trace(go.Scatter(
-                x=semanal_ant["semana"], y=semanal_ant["casos"],
-                name=str(anio_seleccionado - 1), mode="lines+markers",
-                line=dict(color=NARANJA_INSTITUCIONAL),
-            ))
+    fig.update_layout(
+        title=f"Casos semanales de {etiqueta_tipos_tb(casos)} — {anio_seleccionado} vs {anio_seleccionado - 1}",
+        **_LAYOUT_BASE,
+    )
+    mostrar_grafica_tb(fig, use_container_width=True)
 
-        fig.update_layout(
-            title=f"Casos semanales de {etiqueta_tipos_tb(casos)} — {anio_seleccionado} vs {anio_seleccionado - 1}",
-            **_LAYOUT_BASE,
+    st.space("small")
+
+    if not casos_anterior.empty:
+        variacion = []
+        for sem in range(1, 54):
+            c_act = semanal[semanal["semana"] == sem]["casos"].values
+            c_ant = semanal_ant[semanal_ant["semana"] == sem]["casos"].values
+            v_act = c_act[0] if len(c_act) > 0 else 0
+            v_ant = c_ant[0] if len(c_ant) > 0 else 0
+            denom = max(v_ant, 1)
+            vp = ((v_act - v_ant) / denom) * 100
+            variacion.append({"semana": sem, "variacion": vp})
+
+        df_var = pd.DataFrame(variacion)
+        colores = [NARANJA_INSTITUCIONAL if v >= 0 else "#c0392b" for v in df_var["variacion"]]
+        fig = px.bar(
+            df_var, x="semana", y="variacion",
+            title=(
+                f"Variación porcentual semanal de casos de {etiqueta_tipos_tb(casos)} — "
+                f"{anio_seleccionado} vs {anio_seleccionado - 1}"
+            ),
         )
+        fig.update_traces(marker_color=colores)
+        fig.update_layout(**_LAYOUT_BASE, yaxis_title="%")
         mostrar_grafica_tb(fig, use_container_width=True)
-
-    with col_variacion:
-        if not casos_anterior.empty:
-            variacion = []
-            for sem in range(1, 54):
-                c_act = semanal[semanal["semana"] == sem]["casos"].values
-                c_ant = semanal_ant[semanal_ant["semana"] == sem]["casos"].values
-                v_act = c_act[0] if len(c_act) > 0 else 0
-                v_ant = c_ant[0] if len(c_ant) > 0 else 0
-                denom = max(v_ant, 1)
-                vp = ((v_act - v_ant) / denom) * 100
-                variacion.append({"semana": sem, "variacion": vp})
-
-            df_var = pd.DataFrame(variacion)
-            colores = [NARANJA_INSTITUCIONAL if v >= 0 else "#c0392b" for v in df_var["variacion"]]
-            fig = px.bar(
-                df_var, x="semana", y="variacion",
-                title=(
-                    f"Variación porcentual semanal de casos de {etiqueta_tipos_tb(casos)} — "
-                    f"{anio_seleccionado} vs {anio_seleccionado - 1}"
-                ),
-            )
-            fig.update_traces(marker_color=colores)
-            fig.update_layout(**_LAYOUT_BASE, yaxis_title="%")
-            mostrar_grafica_tb(fig, use_container_width=True)
-        else:
-            st.info(f"Sin datos para {anio_seleccionado - 1}", icon=":material/info:")
+    else:
+        st.info(f"Sin datos para {anio_seleccionado - 1}", icon=":material/info:")
 
 
 def _mostrar_incidencia_por_territorio(casos: pd.DataFrame) -> None:

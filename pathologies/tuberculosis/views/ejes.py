@@ -38,6 +38,24 @@ def configurar_eje_x(fig):
 
     if numericos:
         numericos = sorted(set(numericos))
+
+        # Piramides: el lado masculino se dibuja con valores negativos, pero
+        # las marcas del eje deben leerse como cantidades positivas.
+        if numericos[0] < 0 < numericos[-1]:
+            max_abs = max(abs(numericos[0]), abs(numericos[-1]))
+            paso = max(1, int(max_abs // 4))
+            limite = paso * 4
+            tickvals = [-limite, -3 * paso, -2 * paso, -paso, 0, paso, 2 * paso, 3 * paso, limite]
+            fig.update_xaxes(
+                range=[-max(max_abs * 1.1, limite), max(max_abs * 1.1, limite)],
+                tickvals=tickvals,
+                ticktext=[str(abs(valor)) for valor in tickvals],
+                tickangle=0,
+                tickfont=dict(size=9),
+                automargin=True,
+            )
+            return fig
+
         rango = numericos[-1] - numericos[0]
         todos_enteros = all(numero.is_integer() for numero in numericos)
         horizontal = any(getattr(traza, "orientation", None) == "h" for traza in fig.data)

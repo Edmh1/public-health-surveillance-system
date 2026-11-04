@@ -179,30 +179,18 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
         st.metric(
             "Hospitalizados",
             f"{hosp:,}",
-            delta=_pct(hosp, total),
-            delta_color="off",
-            delta_arrow="off",
-            delta_description="del total",
             border=True,
         )
     with c4:
         st.metric(
             "Pulmonar",
             f"{pulmonar:,}",
-            delta=_pct(pulmonar, total),
-            delta_color="off",
-            delta_arrow="off",
-            delta_description="del total",
             border=True,
         )
     with c5:
         st.metric(
             "Extrapulmonar",
             f"{extrapulmonar:,}",
-            delta=_pct(extrapulmonar, total),
-            delta_color="off",
-            delta_arrow="off",
-            delta_description="del total",
             border=True,
         )
 
@@ -601,7 +589,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
         )
         fig_mun.update_traces(textposition="outside", texttemplate="%{text:,}")
         fig_mun.update_layout(
-            title=f"Top 15 municipios por hospitalizaciones de {etiqueta_tipos_tb(casos)}",
+            title=f"Principales municipios por hospitalizaciones de {etiqueta_tipos_tb(casos)}",
             margin=dict(l=0, r=0, t=40, b=0),
             title_font_size=TAMANO_TITULO,
         )
