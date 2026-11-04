@@ -20,13 +20,14 @@ from core.dashboard_base.estilos import (
     rango_con_margen,
 )
 from core.dashboard_base.filtros import resumen_filtros_activos
+from core.demografia import (
+    ETIQUETAS_CURSO_VIDA,
+    FUENTE_GRUPOS_CURSO_VIDA,
+    LIMITES_CURSO_VIDA,
+)
 
 CODIGOS_CASOS = {210, 220}
 _TOP_N = 10
-
-_BINS_EDAD   = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 200]
-_LABELS_EDAD = ["0-4","5-9","10-14","15-19","20-24","25-29","30-34",
-                "35-39","40-44","45-49","50-54","55-59","60-64","65+"]
 
 _AREA_MAP = {1: "Cabecera\nmunicipal", 2: "Centro\npoblado", 3: "Rural\ndisperso"}
 _AREA_MAP_FULL = {1: "Cabecera municipal", 2: "Centro poblado", 3: "Rural disperso"}
@@ -180,7 +181,11 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_piramide(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/groups: Pirámide por sexo y edad{resumen_filtros_activos()}")
+    st.subheader(
+        f":material/groups: Pirámide poblacional de casos de dengue por sexo y curso de vida"
+        f"{resumen_filtros_activos()}",
+        help=FUENTE_GRUPOS_CURSO_VIDA,
+    )
 
     if not {"edad_anios", "sexo"}.issubset(casos.columns):
         st.caption("Sin datos de edad o sexo.")
@@ -194,20 +199,20 @@ def _mostrar_piramide(casos: pd.DataFrame) -> None:
 
     df["grupo"] = pd.cut(
         df["edad_anios"].astype(float),
-        bins=_BINS_EDAD,
-        labels=_LABELS_EDAD,
+        bins=LIMITES_CURSO_VIDA,
+        labels=ETIQUETAS_CURSO_VIDA,
         right=False,
     )
 
     conteo = df.groupby(["grupo", "sexo"]).size().reset_index(name="n")
-    hombres = conteo[conteo["sexo"] == "m"].set_index("grupo")["n"].reindex(_LABELS_EDAD, fill_value=0)
-    mujeres = conteo[conteo["sexo"] == "f"].set_index("grupo")["n"].reindex(_LABELS_EDAD, fill_value=0)
+    hombres = conteo[conteo["sexo"] == "m"].set_index("grupo")["n"].reindex(ETIQUETAS_CURSO_VIDA, fill_value=0)
+    mujeres = conteo[conteo["sexo"] == "f"].set_index("grupo")["n"].reindex(ETIQUETAS_CURSO_VIDA, fill_value=0)
 
     max_val = max(int(hombres.max()), int(mujeres.max()), 1) * 1.2
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        y=_LABELS_EDAD,
+        y=ETIQUETAS_CURSO_VIDA,
         x=[-v for v in hombres.values],
         name="Masculino",
         orientation="h",
@@ -216,7 +221,7 @@ def _mostrar_piramide(casos: pd.DataFrame) -> None:
         customdata=hombres.values,
     ))
     fig.add_trace(go.Bar(
-        y=_LABELS_EDAD,
+        y=ETIQUETAS_CURSO_VIDA,
         x=list(mujeres.values),
         name="Femenino",
         orientation="h",
@@ -236,7 +241,7 @@ def _mostrar_piramide(casos: pd.DataFrame) -> None:
             ticktext=tick_text,
             title="Casos",
         ),
-        yaxis_title="Grupo etario",
+        yaxis_title="Curso de vida",
         legend=LEYENDA_SUPERIOR,
         height=420,
         **_LAYOUT,
@@ -258,7 +263,7 @@ _ICONOS_EXPLORADOR = {
 
 
 def _explorador_demografico(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/tune: Distribución demográfica{resumen_filtros_activos()}")
+    st.subheader(f":material/tune: Distribución demográfica de casos de dengue{resumen_filtros_activos()}")
 
     seleccion = st.segmented_control(
         "Ver distribución por",
@@ -280,6 +285,7 @@ def _explorador_demografico(casos: pd.DataFrame) -> None:
 
 
 def _chart_area(casos: pd.DataFrame, height: int = 300) -> None:
+    st.markdown("**Casos de dengue por área de ocurrencia**")
     if "area" not in casos.columns:
         st.caption("Sin datos de area.")
         return
@@ -310,6 +316,7 @@ def _chart_area(casos: pd.DataFrame, height: int = 300) -> None:
 
 
 def _chart_estrato(casos: pd.DataFrame, height: int = 300) -> None:
+    st.markdown("**Casos de dengue por estrato socioeconómico**")
     if "estrato" not in casos.columns:
         st.caption("Sin datos de estrato.")
         return
@@ -344,6 +351,7 @@ def _chart_estrato(casos: pd.DataFrame, height: int = 300) -> None:
 
 
 def _chart_etnia(casos: pd.DataFrame, height: int = 300) -> None:
+    st.markdown("**Casos de dengue por pertenencia étnica**")
     if "per_etn" not in casos.columns:
         st.caption("Sin datos de etnia.")
         return
@@ -378,6 +386,7 @@ def _chart_etnia(casos: pd.DataFrame, height: int = 300) -> None:
 
 
 def _chart_regimen(casos: pd.DataFrame, height: int = 300) -> None:
+    st.markdown("**Casos de dengue por régimen de afiliación**")
     if "tip_ss" not in casos.columns:
         st.caption("Sin datos de regimen.")
         return
@@ -416,7 +425,7 @@ def _chart_regimen(casos: pd.DataFrame, height: int = 300) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_pueblos_indigenas(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/forest: Pueblos indígenas afectados{resumen_filtros_activos()}")
+    st.subheader(f":material/forest: Pueblos indígenas con casos de dengue{resumen_filtros_activos()}")
 
     if "nom_grupo" not in casos.columns:
         st.caption("Sin datos de pueblo indigena.")
@@ -463,7 +472,7 @@ def _mostrar_pueblos_indigenas(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_eps(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/local_hospital: EPS de afiliación{resumen_filtros_activos()}")
+    st.subheader(f":material/local_hospital: Top 10 EPS por casos de dengue{resumen_filtros_activos()}")
     st.caption(f"Top {_TOP_N} por casos notificados")
 
     if "nom_ase" not in casos.columns:
@@ -502,7 +511,7 @@ def _mostrar_eps(casos: pd.DataFrame) -> None:
 
 
 def _mostrar_upgd(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/medical_services: UPGD notificadora{resumen_filtros_activos()}")
+    st.subheader(f":material/medical_services: Top 10 UPGD notificadoras de casos de dengue{resumen_filtros_activos()}")
     st.caption(f"Top {_TOP_N} unidades por casos reportados")
 
     if "nom_upgd" not in casos.columns:

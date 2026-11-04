@@ -10,9 +10,11 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
+from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
 from core.geografia import obtener_geojson_municipios_magdalena, obtener_geojson_subregiones
 from pathologies.tuberculosis.geografia import obtener_mapeo_subregion
 from pathologies.tuberculosis.poblacion import calcular_tasa_por_subregion
+from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -20,6 +22,8 @@ COD_RESISTENTE = 825
 
 
 def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    if st.session_state.get(CLAVE_FILTRO_EVENTO):
+        return datos
     codigos = set(datos["cod_eve"].unique())
     if codigos == {COD_RESISTENTE}:
         return datos
@@ -94,7 +98,7 @@ def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         por_anio, x="ano", y="casos",
-        title="Casos de tuberculosis por año",
+        title=f"Casos de {etiqueta_tipos_tb(casos)} por año",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
     )
     fig.update_traces(texttemplate="%{y:,}", textposition="outside")
@@ -118,7 +122,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
         map_style="carto-positron",
         center={"lat": 10.4, "lon": -74.2},
         zoom=7.5,
-        title="Distribución geográfica por municipio",
+        title=f"Casos de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia",
     )
     fig.update_layout(margin=dict(l=0, r=0, t=40, b=0))
     st.plotly_chart(fig, use_container_width=True)
@@ -161,7 +165,10 @@ def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
                 line=dict(color=NARANJA_INSTITUCIONAL),
             ))
 
-        fig.update_layout(title=f"Casos semanales — {anio_seleccionado} vs {anio_seleccionado - 1}", **_LAYOUT_BASE)
+        fig.update_layout(
+            title=f"Casos semanales de {etiqueta_tipos_tb(casos)} — {anio_seleccionado} vs {anio_seleccionado - 1}",
+            **_LAYOUT_BASE,
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     with col_variacion:
@@ -180,7 +187,10 @@ def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
             colores = [NARANJA_INSTITUCIONAL if v >= 0 else "#c0392b" for v in df_var["variacion"]]
             fig = px.bar(
                 df_var, x="semana", y="variacion",
-                title=f"Variación % semanal vs {anio_seleccionado - 1}",
+                title=(
+                    f"Variación porcentual semanal de casos de {etiqueta_tipos_tb(casos)} — "
+                    f"{anio_seleccionado} vs {anio_seleccionado - 1}"
+                ),
             )
             fig.update_traces(marker_color=colores)
             fig.update_layout(**_LAYOUT_BASE, yaxis_title="%")
@@ -214,7 +224,7 @@ def _mostrar_incidencia_por_territorio(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         df_tasas, x="tasa", y="subregion", orientation="h",
-        title="Tasa de incidencia por subregión (×100.000 hab.)",
+        title=f"Tasa de incidencia de {etiqueta_tipos_tb(casos)} por subregión (casos por 100.000 habitantes)",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
         text=df_tasas["tasa"].round(1),
     )

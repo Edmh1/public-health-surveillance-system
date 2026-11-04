@@ -287,7 +287,7 @@ Los porcentajes usan una precisión adaptativa para que nunca aparezca "0 %" cua
 
 #### Pirámide por sexo y edad
 
-Pirámide poblacional de barras horizontales: masculino a la izquierda (azul) y femenino a la derecha (naranja), en grupos quinquenales de 0-4 hasta 65 y más. La edad se construye en el procesamiento a partir de la unidad de medida reportada (años, meses, días, horas, minutos), descartando valores imposibles.
+Pirámide poblacional de barras horizontales: masculino a la izquierda (azul) y femenino a la derecha (naranja), agrupada por curso de vida según la Resolución 3208 de 2018: primera infancia (0 a 5 años), infancia (6 a 11), adolescencia (12 a 17), juventud (18 a 28), adultez (29 a 59) y vejez (60 y más). El icono de ayuda junto al título indica la fuente de la agrupación. La edad se construye en el procesamiento a partir de la unidad de medida reportada (años, meses, días, horas, minutos), descartando valores imposibles.
 
 #### Distribución demográfica (explorador interactivo)
 

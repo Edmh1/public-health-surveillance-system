@@ -21,6 +21,7 @@ from core.auth.permisos import (
 from core.dashboard_base import datos as modulo_datos
 from core.dashboard_base import filtros as modulo_filtros
 from core.dashboard_base import sesion as modulo_sesion
+from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
 from core.dashboard_base.banner import fragmento_banner_datos_nuevos
 from core.dashboard_base.bitacora_vista import mostrar_bitacora
 from core.dashboard_base.estilos import (
@@ -107,21 +108,21 @@ def _aplicar_filtro_cod_eve(plugin, datos: pd.DataFrame) -> pd.DataFrame:
         return datos
 
     pares = sorted(etiquetas.items(), key=lambda x: x[0])
-    codigos_legibles = [f"{label} ({cod})" for cod, label in pares]
+    etiquetas_legibles = [label for _, label in pares]
 
     seleccionadas = st.pills(
         "Tipo de evento",
-        options=codigos_legibles,
+        options=etiquetas_legibles,
         selection_mode="multi",
         default=[],
-        key="filtro_cod_eve_patologia",
+        key=CLAVE_FILTRO_EVENTO,
     )
 
     if not seleccionadas:
         return datos
 
     codigos_seleccionados = [
-        cod for cod, label in pares if f"{label} ({cod})" in seleccionadas
+        cod for cod, label in pares if label in seleccionadas
     ]
 
     return datos[datos["cod_eve"].isin(codigos_seleccionados)]

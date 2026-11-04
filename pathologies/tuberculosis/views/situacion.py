@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, LEYENDA_SUPERIOR, NARANJA_INSTITUCIONAL
+from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO, resumen_filtros_activos
 from core.geografia import obtener_geojson_municipios_magdalena
 from pathologies.tuberculosis.canal_endemico import (
     METODOS_DISPONIBLES,
@@ -19,6 +20,7 @@ from pathologies.tuberculosis.canal_endemico import (
     calcular_canal_endemico,
 )
 from pathologies.tuberculosis.indicators import calcular_indicadores
+from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -26,6 +28,8 @@ COD_RESISTENTE = 825
 
 
 def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    if st.session_state.get(CLAVE_FILTRO_EVENTO):
+        return datos
     codigos = set(datos["cod_eve"].unique())
     if codigos == {COD_RESISTENTE}:
         return datos
@@ -95,20 +99,12 @@ def _mostrar_kpis(datos: pd.DataFrame) -> None:
 
 
 def _mostrar_mapa_situacion(casos: pd.DataFrame) -> None:
-    anios_disponibles = sorted(int(a) for a in casos["ano"].dropna().unique())
-    if len(anios_disponibles) < 1:
-        return
-
-    anio_vigilancia = st.selectbox(
-        "Año de vigilancia",
-        options=anios_disponibles,
-        index=len(anios_disponibles) - 1,
-        key="situacion_mapa_anio",
+    st.subheader(
+        f":material/map: Casos de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia"
+        f"{resumen_filtros_activos()}"
     )
 
-    casos_anio = casos[casos["ano"] == anio_vigilancia]
-
-    por_municipio = casos_anio.groupby("cod_mun_completo").size().reset_index(name="casos")
+    por_municipio = casos.groupby("cod_mun_completo").size().reset_index(name="casos")
     por_municipio["cod_mun_str"] = por_municipio["cod_mun_completo"].astype(str)
 
     geojson = obtener_geojson_municipios_magdalena()
@@ -120,7 +116,6 @@ def _mostrar_mapa_situacion(casos: pd.DataFrame) -> None:
         featureidkey="properties.mpio_cdpmp",
         color="casos",
         color_continuous_scale=["#9ecae1", "#5ba3d0", "#2a6db0", "#1b3a6b"],
-        title=f"Casos por municipio — {anio_vigilancia}",
     )
     fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
     fig.update_geos(fitbounds="locations", visible=False)
@@ -268,8 +263,9 @@ def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
             name=f"Año {anio_vigilancia}",
         ))
 
+    metodo_legible = "Bortman (paramétrico)" if metodo == "bortman" else "Cuartiles (INS Colombia)"
     fig.update_layout(
-        title=f"Canal endémico — {anio_vigilancia} ({metodo})",
+        title=f"Canal endémico de {etiqueta_tipos_tb(casos)} — año {anio_vigilancia} (método {metodo_legible})",
         xaxis=dict(title="Semana epidemiológica", tickmode="linear", tick0=1, dtick=4),
         yaxis=dict(title="Casos"),
         margin=dict(l=0, r=0, t=40, b=0),

@@ -241,7 +241,7 @@ def _mostrar_kpis_principales(resultado: dict, anio_kpi: int | None) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/map: Situación actual por subregión{resumen_filtros_activos()}")
+    st.subheader(f":material/map: Situación actual de dengue por subregión{resumen_filtros_activos()}")
     st.caption(
         "Zona del canal endémico en la última semana reportada de cada subregión, "
         "comparada contra esa misma semana en años anteriores."
@@ -379,7 +379,7 @@ def _graficar_mapa_situacion(situacion: pd.DataFrame) -> go.Figure:
 def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
     col_titulo, col_metodologia = st.columns([5, 1.3], vertical_alignment="center")
     with col_titulo:
-        st.subheader(f":material/monitoring: Canal endémico{resumen_filtros_activos()}")
+        st.subheader(f":material/monitoring: Canal endémico de dengue{resumen_filtros_activos()}")
     with col_metodologia:
         if st.button(
             "Metodología",

@@ -109,7 +109,7 @@ def mostrar_pronostico(_datos_filtrados: pd.DataFrame) -> None:
 
     col_titulo, col_fundamentacion = st.columns([5, 1.6], vertical_alignment="center")
     with col_titulo:
-        st.subheader(":material/query_stats: Pronóstico de casos de dengue")
+        st.subheader(":material/query_stats: Pronóstico de casos de dengue a nivel departamental")
     with col_fundamentacion:
         if st.button(
             "Fundamentación", icon=":material/school:", key="pronostico_fundamentacion", width="stretch"
@@ -325,6 +325,7 @@ def _graficar_pronostico(
 
     inicio_visible = serie["fecha_semana"].iloc[-min(len(serie), _SEMANAS_HISTORIAL_VISIBLE_POR_DEFECTO)]
     fig.update_layout(
+        title=f"Pronóstico de casos de dengue — {etiqueta_eje}",
         xaxis=dict(title="Semana", range=[inicio_visible, fecha_fin_visible]),
         yaxis=dict(title=etiqueta_eje, rangemode="tozero", minallowed=0),
         margin=dict(l=0, r=0, t=40, b=0),

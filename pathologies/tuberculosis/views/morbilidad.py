@@ -12,9 +12,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
-from core.dashboard_base.filtros import CLAVE_FILTROS
+from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO, CLAVE_FILTROS
 from core.geografia import obtener_geojson_municipios_magdalena
 from pathologies.tuberculosis.indicators import calcular_indicadores
+from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -48,8 +49,8 @@ _FUENTE_MAP = {
 
 _TIPO_CASO_OPTS = {
     "Ambos": [COD_PULMONAR, COD_EXTRAPULMONAR],
-    "Pulmonar (820)": [COD_PULMONAR],
-    "Extrapulmonar (810)": [COD_EXTRAPULMONAR],
+    "Pulmonar": [COD_PULMONAR],
+    "Extrapulmonar": [COD_EXTRAPULMONAR],
 }
 
 _LAYOUT = dict(margin=dict(l=0, r=0, t=40, b=0))
@@ -69,6 +70,8 @@ def _pct(n: float, total: float) -> str:
 
 
 def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    if st.session_state.get(CLAVE_FILTRO_EVENTO):
+        return datos
     codigos = set(datos["cod_eve"].unique())
     if codigos == {COD_RESISTENTE}:
         return datos
@@ -167,7 +170,7 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
         st.metric(
             "Incidencia",
             incidencia_txt,
-            help="Casos (810+820) / población x 100.000. No disponible si el filtro está a nivel municipio o falta población DANE.",
+            help="Casos de tuberculosis pulmonar y extrapulmonar / población x 100.000. No disponible si el filtro está a nivel municipio o falta población DANE.",
             border=True,
         )
     with c3:
@@ -182,7 +185,7 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
         )
     with c4:
         st.metric(
-            "Pulmonar (820)",
+            "Pulmonar",
             f"{pulmonar:,}",
             delta=_pct(pulmonar, total),
             delta_color="off",
@@ -192,7 +195,7 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
         )
     with c5:
         st.metric(
-            "Extrapulmonar (810)",
+            "Extrapulmonar",
             f"{extrapulmonar:,}",
             delta=_pct(extrapulmonar, total),
             delta_color="off",
@@ -207,10 +210,10 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
-    st.subheader(":material/pie_chart: Tipo de caso")
+    st.subheader(f":material/pie_chart: Distribución de casos de {etiqueta_tipos_tb(casos)} por tipo")
 
     conteo = casos["cod_eve"].value_counts()
-    labels = {COD_PULMONAR: "Pulmonar (820)", COD_EXTRAPULMONAR: "Extrapulmonar (810)"}
+    labels = {COD_PULMONAR: "Pulmonar", COD_EXTRAPULMONAR: "Extrapulmonar"}
     df = pd.DataFrame({
         "tipo": [labels.get(k, str(k)) for k in conteo.index],
         "casos": conteo.values,
@@ -237,7 +240,7 @@ def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
-    st.subheader(":material/account_tree: Gráfico de Sankey")
+    st.subheader(f":material/account_tree: Flujo de clasificación de casos de {etiqueta_tipos_tb(casos)}: inicial → final")
 
     cols_req = {"tip_cas", "estado_final_de_caso"}
     if not cols_req.issubset(casos.columns):
@@ -407,7 +410,7 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_fuente(casos: pd.DataFrame) -> None:
-    st.subheader(":material/notification_important: Fuente")
+    st.subheader(f":material/notification_important: Casos de {etiqueta_tipos_tb(casos)} por fuente de notificación")
 
     if "fuente" not in casos.columns:
         st.caption("Sin datos de fuente.")
@@ -444,7 +447,7 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/show_chart: Casos semanales por tipo")
+    st.subheader(f":material/show_chart: Casos semanales de {etiqueta_tipos_tb(casos)} por tipo de caso")
 
     if "semana" not in casos.columns:
         return
@@ -461,8 +464,8 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
 
     subset = casos[casos["ano"] == anio].copy()
     subset["tipo"] = subset["cod_eve"].map({
-        COD_PULMONAR: "Pulmonar (820)",
-        COD_EXTRAPULMONAR: "Extrapulmonar (810)",
+        COD_PULMONAR: "Pulmonar",
+        COD_EXTRAPULMONAR: "Extrapulmonar",
     })
     semanal = subset.groupby(["semana", "tipo"]).size().reset_index(name="casos")
 
@@ -477,8 +480,8 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
         barmode="group",
         labels={"semana": "Semana epidemiológica", "casos": "Casos", "tipo": "Tipo"},
         color_discrete_map={
-            "Pulmonar (820)": AZUL_INSTITUCIONAL,
-            "Extrapulmonar (810)": NARANJA_INSTITUCIONAL,
+            "Pulmonar": AZUL_INSTITUCIONAL,
+            "Extrapulmonar": NARANJA_INSTITUCIONAL,
         },
     )
     fig.add_trace(go.Scatter(
@@ -503,7 +506,7 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/local_hospital: Hospitalización por semana")
+    st.subheader(f":material/local_hospital: Hospitalizaciones por {etiqueta_tipos_tb(casos)} por semana epidemiológica")
 
     if "pac_hos" not in casos.columns or "semana" not in casos.columns:
         st.caption("Sin datos.")
@@ -547,7 +550,7 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
-    st.subheader(":material/map: Hospitalización por territorio")
+    st.subheader(f":material/map: Hospitalizaciones por {etiqueta_tipos_tb(casos)} por territorio")
 
     if "pac_hos" not in casos.columns:
         st.caption("Sin datos de hospitalización.")
@@ -578,7 +581,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
         )
         fig_mun.update_traces(textposition="outside", texttemplate="%{text:,}")
         fig_mun.update_layout(
-            title="Por municipio — Top 15 (conteo)",
+            title=f"Top 15 municipios por hospitalizaciones de {etiqueta_tipos_tb(casos)}",
             margin=dict(l=0, r=0, t=40, b=0),
         )
         st.plotly_chart(fig_mun, width="stretch")
@@ -594,7 +597,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
-    st.subheader(":material/fact_check: Clasificación final")
+    st.subheader(f":material/fact_check: Distribución de casos de {etiqueta_tipos_tb(casos)} por clasificación final")
 
     if "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")
@@ -640,7 +643,7 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(":material/stacked_bar_chart: Clasificación final por semana")
+    st.subheader(f":material/stacked_bar_chart: Casos de {etiqueta_tipos_tb(casos)} por clasificación final y semana epidemiológica")
 
     if "semana" not in casos.columns or "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")

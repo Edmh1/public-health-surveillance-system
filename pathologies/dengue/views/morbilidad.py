@@ -222,7 +222,7 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/pie_chart: Tipo de caso{resumen_filtros_activos()}")
+    st.subheader(f":material/pie_chart: Distribución de casos por tipo: dengue y dengue grave{resumen_filtros_activos()}")
 
     conteo = casos["cod_eve"].value_counts()
     labels = {COD_DENGUE: "Dengue (210)", COD_DENGUE_GRAVE: "Dengue grave (220)"}
@@ -261,7 +261,7 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/account_tree: Gráfico de Sankey{resumen_filtros_activos()}")
+    st.subheader(f":material/account_tree: Flujo de clasificación de casos de dengue: inicial → final{resumen_filtros_activos()}")
 
     cols_req = {"tip_cas", "estado_final_de_caso"}
     if not cols_req.issubset(casos.columns):
@@ -460,7 +460,7 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
     Se prefiere barra sobre dona: la dona dificulta comparar magnitudes entre
     categorias cuando hay grandes diferencias (ej. Rutinaria vs. BAC).
     """
-    st.subheader(f":material/notification_important: Fuente{resumen_filtros_activos()}")
+    st.subheader(f":material/notification_important: Casos de dengue por fuente de notificación{resumen_filtros_activos()}")
 
     if "fuente" not in casos.columns:
         st.caption("Sin datos de fuente.")
@@ -515,7 +515,7 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/show_chart: Casos semanales por tipo{resumen_filtros_activos(incluir_periodo=False)}")
+    st.subheader(f":material/show_chart: Casos semanales de dengue por tipo de caso{resumen_filtros_activos(incluir_periodo=False)}")
 
     if "semana" not in casos.columns:
         st.caption("Sin datos de semana.")
@@ -588,7 +588,7 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/local_hospital: Hospitalización por semana{resumen_filtros_activos(incluir_periodo=False)}")
+    st.subheader(f":material/local_hospital: Hospitalizaciones por dengue por semana epidemiológica{resumen_filtros_activos(incluir_periodo=False)}")
 
     if "pac_hos" not in casos.columns or "semana" not in casos.columns:
         st.caption("Sin datos.")
@@ -641,7 +641,7 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/map: Hospitalización por territorio{resumen_filtros_activos()}")
+    st.subheader(f":material/map: Hospitalizaciones por dengue por territorio{resumen_filtros_activos()}")
 
     if "pac_hos" not in casos.columns:
         st.caption("Sin datos de hospitalización.")
@@ -685,7 +685,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
                 showlegend=True,
             )
             fig_sub.update_layout(
-                title="Por subregión (tasa x100.000 hab.)",
+                title="Hospitalizaciones por dengue por subregión (tasa por 100.000 habitantes)",
                 margin=dict(l=0, r=0, t=70, b=0),
                 xaxis={"range": rango_con_margen(sub["tasa"].max())},
                 legend=LEYENDA_SUPERIOR,
@@ -726,7 +726,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
                 showlegend=True,
             )
             fig_mun.update_layout(
-                title="Por municipio — Top 15 (tasa x100.000 hab.)",
+                title="Top 15 municipios por hospitalizaciones de dengue (tasa por 100.000 habitantes)",
                 margin=dict(l=0, r=0, t=70, b=0),
                 xaxis={"range": rango_con_margen(mun["tasa"].max())},
                 legend=LEYENDA_SUPERIOR,
@@ -740,7 +740,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/bar_chart: Incidencia por subregión{resumen_filtros_activos()}")
+    st.subheader(f":material/bar_chart: Incidencia de dengue por subregión{resumen_filtros_activos()}")
 
     if "subregion" not in casos.columns:
         st.caption("Sin datos de subregión.")
@@ -780,7 +780,7 @@ def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/fact_check: Clasificación final{resumen_filtros_activos()}")
+    st.subheader(f":material/fact_check: Distribución de casos de dengue por clasificación final{resumen_filtros_activos()}")
 
     if "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")
@@ -827,7 +827,7 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/stacked_bar_chart: Clasificación final por semana{resumen_filtros_activos(incluir_periodo=False)}")
+    st.subheader(f":material/stacked_bar_chart: Casos de dengue por clasificación final y semana epidemiológica{resumen_filtros_activos(incluir_periodo=False)}")
 
     if "semana" not in casos.columns or "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")

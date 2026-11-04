@@ -212,7 +212,7 @@ def _mostrar_kpis(
 # ---------------------------------------------------------------------------
 
 def _mostrar_temporal(muertes: pd.DataFrame) -> None:
-    st.subheader(f":material/calendar_month: Muertes por semana epidemiologica{resumen_filtros_activos(incluir_periodo=False)}")
+    st.subheader(f":material/calendar_month: Muertes por dengue por semana epidemiológica{resumen_filtros_activos(incluir_periodo=False)}")
 
     if "semana" not in muertes.columns:
         st.caption("Sin datos de semana.")
@@ -264,7 +264,7 @@ def _mostrar_temporal(muertes: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_edad_sexo(muertes: pd.DataFrame) -> None:
-    st.subheader(f":material/groups: Muertes por sexo y edad{resumen_filtros_activos()}")
+    st.subheader(f":material/groups: Muertes por dengue por sexo y grupo de edad{resumen_filtros_activos()}")
 
     if not {"edad_anios", "sexo"}.issubset(muertes.columns):
         st.caption("Sin datos de edad o sexo.")
@@ -317,7 +317,7 @@ def _mostrar_edad_sexo(muertes: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_regimen(muertes: pd.DataFrame) -> None:
-    st.subheader(f":material/health_and_safety: Régimen SGSSS{resumen_filtros_activos()}")
+    st.subheader(f":material/health_and_safety: Muertes por dengue por régimen de afiliación al SGSSS{resumen_filtros_activos()}")
 
     if "tip_ss" not in muertes.columns:
         st.caption("Sin datos.")
@@ -353,7 +353,7 @@ def _mostrar_regimen(muertes: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_eps(muertes: pd.DataFrame) -> None:
-    st.subheader(f":material/local_hospital: EPS de afiliación{resumen_filtros_activos()}")
+    st.subheader(f":material/local_hospital: Top 10 EPS por muertes por dengue{resumen_filtros_activos()}")
 
     if "nom_ase" not in muertes.columns:
         st.caption("Sin datos.")
@@ -389,7 +389,7 @@ def _mostrar_eps(muertes: pd.DataFrame) -> None:
 def _mostrar_tabla_territorial(
     muertes: pd.DataFrame, casos: pd.DataFrame, graves: pd.DataFrame
 ) -> None:
-    st.subheader(f":material/table_chart: Indicadores por territorio{resumen_filtros_activos()}")
+    st.subheader(f":material/table_chart: Indicadores de mortalidad por dengue por territorio{resumen_filtros_activos()}")
     st.caption(
         "Letalidad = muertes / (casos 210+220). "
         "Letalidad grave = muertes / casos 220."
@@ -461,7 +461,7 @@ def _mostrar_tabla_territorial(
 def _mostrar_tasas_subregion(
     muertes: pd.DataFrame, casos: pd.DataFrame, graves: pd.DataFrame
 ) -> None:
-    st.subheader(f":material/bar_chart: Indicadores por subregión{resumen_filtros_activos()}")
+    st.subheader(f":material/bar_chart: Indicadores de mortalidad por dengue por subregión{resumen_filtros_activos()}")
 
     col_sub = "subregion"
     if col_sub not in muertes.columns or col_sub not in casos.columns:
@@ -470,7 +470,7 @@ def _mostrar_tasas_subregion(
 
     indicador = st.segmented_control(
         "Indicador",
-        ["Muertes (conteo)", "Letalidad (%)", "Letalidad grave (%)", "Tasa de mortalidad (x100.000)"],
+        ["Muertes", "Letalidad (%)", "Letalidad grave (%)", "Tasa de mortalidad (x100.000)"],
         default="Letalidad (%)",
         required=True,
         key="mort_indicador_sub",
@@ -497,7 +497,7 @@ def _mostrar_tasas_subregion(
     ref_c   = len(casos)
     ref_g   = len(graves)
 
-    if indicador == "Muertes (conteo)":
+    if indicador == "Muertes":
         df["valor"] = df["muertes"]
         ref_val = ref_m
         etiqueta_eje = "Muertes"
@@ -573,7 +573,7 @@ def _mostrar_tasas_subregion(
 # ---------------------------------------------------------------------------
 
 def _mostrar_cie10(muertes: pd.DataFrame) -> None:
-    st.subheader(f":material/medical_information: Causas de muerte asociadas (CIE-10){resumen_filtros_activos()}")
+    st.subheader(f":material/medical_information: Causas de muerte asociadas a dengue (CIE-10){resumen_filtros_activos()}")
 
     col_cod  = "cbmte"
     col_nom  = "nom_cbmte"

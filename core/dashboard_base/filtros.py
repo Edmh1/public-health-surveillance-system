@@ -19,6 +19,7 @@ import pandas as pd
 import streamlit as st
 
 CLAVE_FILTROS = "filtros_globales"
+CLAVE_FILTRO_EVENTO = "filtro_cod_eve_patologia"
 _CLAVE_ANIOS_DISPONIBLES = "_filtro_anios_disponibles"
 _CLAVE_SEMANAS_DISPONIBLES = "_filtro_semanas_disponibles"
 
@@ -51,6 +52,7 @@ CLAVES_REINICIABLES = (
     "filtro_semana_rango",
     "filtro_nivel_riesgo",
     "filtro_clasificacion",
+    CLAVE_FILTRO_EVENTO,
 )
 
 

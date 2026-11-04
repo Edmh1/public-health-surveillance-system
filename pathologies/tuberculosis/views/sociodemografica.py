@@ -11,6 +11,13 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
+from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
+from core.demografia import (
+    ETIQUETAS_CURSO_VIDA,
+    FUENTE_GRUPOS_CURSO_VIDA,
+    clasificar_grupo_curso_vida,
+)
+from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -18,24 +25,14 @@ COD_RESISTENTE = 825
 
 
 def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    if st.session_state.get(CLAVE_FILTRO_EVENTO):
+        return datos
     codigos = set(datos["cod_eve"].unique())
     if codigos == {COD_RESISTENTE}:
         return datos
     return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
 
 _LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
-
-GRUPOS_ETARIOS = [
-    (0, 4, "0-4"), (5, 14, "5-14"), (15, 24, "15-24"),
-    (25, 44, "25-44"), (45, 64, "45-64"), (65, 200, "65+"),
-]
-
-
-def _clasificar_grupo_etario(edad):
-    for minimo, maximo, etiqueta in GRUPOS_ETARIOS:
-        if pd.notna(edad) and minimo <= edad <= maximo:
-            return etiqueta
-    return "Sin dato"
 
 
 def mostrar_sociodemografica(datos: pd.DataFrame) -> None:
@@ -97,12 +94,17 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 
 
 def _mostrar_piramide_poblacional(casos: pd.DataFrame) -> None:
+    st.subheader(
+        f":material/groups: Pirámide poblacional de {etiqueta_tipos_tb(casos)} por sexo y curso de vida",
+        help=FUENTE_GRUPOS_CURSO_VIDA,
+    )
+
     if "edad_anios" not in casos.columns or "sexo" not in casos.columns:
         st.info("Datos insuficientes para la pirámide poblacional.", icon=":material/info:")
         return
 
     copia = casos.copy()
-    copia["grupo_etario"] = copia["edad_anios"].apply(_clasificar_grupo_etario)
+    copia["grupo_etario"] = copia["edad_anios"].apply(clasificar_grupo_curso_vida)
 
     masc = copia[copia["sexo"].isin(["m", "masculino"])]
     fem = copia[copia["sexo"].isin(["f", "femenino"])]
@@ -110,7 +112,7 @@ def _mostrar_piramide_poblacional(casos: pd.DataFrame) -> None:
     por_edad_masc = masc.groupby("grupo_etario").size()
     por_edad_fem = fem.groupby("grupo_etario").size()
 
-    etiquetas = [g[2] for g in GRUPOS_ETARIOS]
+    etiquetas = ETIQUETAS_CURSO_VIDA
     valores_masc = [-por_edad_masc.get(e, 0) for e in etiquetas]
     valores_fem = [por_edad_fem.get(e, 0) for e in etiquetas]
 
@@ -126,9 +128,9 @@ def _mostrar_piramide_poblacional(casos: pd.DataFrame) -> None:
         text=valores_fem, textposition="inside",
     ))
     fig.update_layout(
-        title="Pirámide poblacional",
         barmode="relative",
         xaxis_title="Casos",
+        yaxis_title="Curso de vida",
         **_LAYOUT_BASE,
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -149,7 +151,7 @@ def _mostrar_etnia(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         por_etnia, x="casos", y="etnia_nombre", orientation="h",
-        title="Casos por pertenencia étnica",
+        title=f"Casos de {etiqueta_tipos_tb(casos)} por pertenencia étnica",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
         text="pct",
     )
@@ -175,7 +177,7 @@ def _mostrar_regimen(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         por_reg, x="casos", y="regimen", orientation="h",
-        title="Casos por régimen de afiliación",
+        title=f"Casos de {etiqueta_tipos_tb(casos)} por régimen de afiliación al SGSSS",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
         text="pct",
     )
@@ -199,7 +201,7 @@ def _mostrar_eps(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         por_eps, x="casos", y="eps", orientation="h",
-        title="Top 10 EAPB (EPS)",
+        title=f"Top 10 EAPB (EPS) por casos de {etiqueta_tipos_tb(casos)}",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
         text="pct",
     )
@@ -223,7 +225,7 @@ def _mostrar_upgd(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         por_upgd, x="casos", y="upgd", orientation="h",
-        title="Top 10 UPGD notificadoras",
+        title=f"Top 10 UPGD notificadoras de casos de {etiqueta_tipos_tb(casos)}",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
         text="pct",
     )
@@ -257,7 +259,7 @@ def _mostrar_poblaciones_vulnerables(casos: pd.DataFrame) -> None:
 
     fig = px.bar(
         df, x="casos", y="grupo", orientation="h",
-        title="Poblaciones vulnerables",
+        title=f"Casos de {etiqueta_tipos_tb(casos)} en poblaciones vulnerables",
         color_discrete_sequence=[AZUL_INSTITUCIONAL],
     )
     fig.update_layout(**_LAYOUT_BASE, xaxis_title=None, yaxis_title=None)

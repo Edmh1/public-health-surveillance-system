@@ -162,7 +162,7 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_casos_por_anio(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/bar_chart: Casos por año{resumen_filtros_activos()}")
+    st.subheader(f":material/bar_chart: Casos de dengue y dengue grave por año{resumen_filtros_activos()}")
 
     por_anio = casos.groupby("ano").size().reset_index(name="casos")
 
@@ -210,7 +210,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
     subregion; clic en un municipio -> division por zona (cabecera municipal,
     centro poblado, rural disperso).
     """
-    st.subheader(f":material/map: Mapa del Magdalena{resumen_filtros_activos()}")
+    st.subheader(f":material/map: Mapa de incidencia de dengue en el Magdalena{resumen_filtros_activos()}")
 
     subregion_activa = st.session_state.get("mapa_subregion_seleccionada")
     municipio_activo = st.session_state.get("mapa_municipio_seleccionado")
@@ -231,6 +231,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
         _mostrar_mapa_overview(con_geo)
 
 def _mostrar_mapa_overview(con_geo: pd.DataFrame) -> None:
+    st.markdown("**Incidencia de dengue por subregión**")
     st.caption(":material/touch_app: Haz clic en una subregión para ver el detalle por municipio.")
 
     anios_en_alcance = sorted(int(a) for a in con_geo["ano"].dropna().unique())
@@ -280,6 +281,7 @@ def _mostrar_mapa_overview(con_geo: pd.DataFrame) -> None:
     )
 
 def _mostrar_mapa_drilldown(con_geo: pd.DataFrame, subregion_activa: str) -> None:
+    st.markdown(f"**Incidencia de dengue por municipio — subregión {subregion_activa}**")
     col_volver, col_titulo = st.columns([1, 4], vertical_alignment="center")
     with col_volver:
         if st.button("Volver", icon=":material/arrow_back:", key="mapa_volver", width="stretch"):
@@ -365,15 +367,17 @@ def _mostrar_mapa_zonas(con_geo: pd.DataFrame, subregion_activa: str, codigo_mun
     if "nom_mun_o" in datos_municipio.columns and not datos_municipio["nom_mun_o"].dropna().empty:
         nombre_municipio = str(datos_municipio["nom_mun_o"].dropna().iloc[0]).title()
 
+    st.markdown(
+        f"**Incidencia de dengue por zona — {nombre_municipio} (subregión {subregion_activa})**"
+    )
+
     col_volver, col_titulo = st.columns([1, 4], vertical_alignment="center")
     with col_volver:
         if st.button("Volver", icon=":material/arrow_back:", key="mapa_volver_zona", width="stretch"):
             st.session_state["mapa_municipio_seleccionado"] = None
             st.rerun()
     with col_titulo:
-        st.caption(
-            f":material/location_on: {nombre_municipio} (subregión {subregion_activa}) — incidencia por zona"
-        )
+        st.caption("Detalle por cabecera municipal, centro poblado y rural disperso.")
 
     if datos_municipio.empty:
         st.info("Sin casos para este municipio con los filtros actuales.", icon=":material/info:")
@@ -385,6 +389,7 @@ def _mostrar_mapa_zonas(con_geo: pd.DataFrame, subregion_activa: str, codigo_mun
     col_mapa, col_zonas = st.columns([1, 1])
 
     with col_mapa:
+        st.markdown("**Incidencia de dengue en el municipio**")
         # El poligono del municipio como referencia visual del territorio elegido.
         incidencia_municipio = calcular_tasa_por_municipio(
             datos_municipio, anios_en_alcance, [codigo_int]
@@ -416,6 +421,7 @@ def _mostrar_mapa_zonas(con_geo: pd.DataFrame, subregion_activa: str, codigo_mun
         st.plotly_chart(fig, width="stretch", key="mapa_zona")
 
     with col_zonas:
+        st.markdown("**Incidencia de dengue por zona de ocurrencia**")
         conteo = pd.Series(dtype=int)
         if "area" in datos_municipio.columns:
             conteo = (
@@ -462,7 +468,7 @@ def _mostrar_mapa_zonas(con_geo: pd.DataFrame, subregion_activa: str, codigo_mun
 # ---------------------------------------------------------------------------
 
 def _mostrar_seccion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/show_chart: Análisis semanal{resumen_filtros_activos(incluir_periodo=False)}")
+    st.subheader(f":material/show_chart: Análisis semanal de casos de dengue{resumen_filtros_activos(incluir_periodo=False)}")
 
     anios = sorted(casos["ano"].dropna().unique().tolist(), reverse=True)
     if not anios:
@@ -503,7 +509,7 @@ def _grafica_semanal_anio(casos: pd.DataFrame, anio: int) -> None:
     fig = px.bar(
         semanal, x="semana", y="casos",
         labels={"semana": "Semana epidemiológica", "casos": "Casos"},
-        title=f"Casos semanales {anio}",
+        title=f"Casos semanales de dengue — {anio}",
     )
     fig.update_traces(name="Casos", showlegend=True)
     fig.add_hline(
@@ -557,7 +563,7 @@ def _grafica_comparacion_vs_anterior(casos: pd.DataFrame, anio: int) -> None:
         ))
 
     fig.update_layout(
-        title=f"Comparación {anio} vs {anio_prev}",
+        title=f"Casos semanales de dengue: {anio} vs {anio_prev}",
         xaxis_title="Semana epidemiológica",
         yaxis_title="Casos",
         legend=LEYENDA_SUPERIOR,
@@ -606,7 +612,7 @@ def _grafica_variacion_porcentual(casos: pd.DataFrame, anio: int) -> None:
             "Disminución": NARANJA_INSTITUCIONAL,
         },
         labels={"semana": "Semana epidemiológica", "variacion": "Variación (%)", "signo": ""},
-        title=f"Variación porcentual semanal: {anio} vs {anio_prev}",
+        title=f"Variación porcentual semanal de casos de dengue: {anio} vs {anio_prev}",
     )
     fig.add_hline(y=0, line_color="#9ca3af", line_width=1)
     fig.update_layout(**_LAYOUT_BASE, legend=LEYENDA_SUPERIOR)
@@ -618,7 +624,7 @@ def _grafica_variacion_porcentual(casos: pd.DataFrame, anio: int) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_evolucion_temporal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/timeline: Evolución temporal{resumen_filtros_activos()}")
+    st.subheader(f":material/timeline: Evolución temporal de la incidencia de dengue{resumen_filtros_activos()}")
 
     nivel = st.segmented_control(
         "Agrupar por",
@@ -684,6 +690,7 @@ def _mostrar_evolucion_temporal(casos: pd.DataFrame) -> None:
         labels={"ano": "Año", "incidencia": "Incidencia x100.000 hab.", col_nivel: nivel},
     )
     fig.update_layout(
+        title="Incidencia de dengue por año según territorio",
         **_LAYOUT_BASE,
         legend=LEYENDA_SUPERIOR,
     )

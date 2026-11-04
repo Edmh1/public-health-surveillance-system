@@ -11,7 +11,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, LEYENDA_SUPERIOR, NARANJA_INSTITUCIONAL
+from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO
 from core.geografia import obtener_geojson_municipios_magdalena
+from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -34,6 +36,8 @@ def _clasificar_grupo_etario(edad):
 
 
 def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
+    if st.session_state.get(CLAVE_FILTRO_EVENTO):
+        return datos
     codigos = set(datos["cod_eve"].unique())
     if codigos == {COD_RESISTENTE}:
         return datos
@@ -110,7 +114,7 @@ def _mostrar_muertes_por_anio(muertes: pd.DataFrame, casos: pd.DataFrame) -> Non
         name="Muertes", marker_color="#c0392b",
     ))
     fig.update_layout(
-        title="Casos y muertes por TB (anual)",
+        title=f"Casos y muertes por {etiqueta_tipos_tb(casos)} por año",
         barmode="overlay",
         **_LAYOUT_BASE, xaxis_title=None, yaxis_title=None,
     )
@@ -149,7 +153,7 @@ def _mostrar_muertes_sexo_edad(muertes: pd.DataFrame) -> None:
         name="Femenino", marker_color=NARANJA_INSTITUCIONAL,
     ))
     fig.update_layout(
-        title="Muertes por grupo etario y sexo",
+        title=f"Muertes por {etiqueta_tipos_tb(muertes)} por grupo de edad y sexo",
         barmode="relative",
         xaxis_title="Muertes",
         **_LAYOUT_BASE,
@@ -173,7 +177,7 @@ def _mostrar_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:
         featureidkey="properties.mpio_cdpmp",
         color="muertes",
         color_continuous_scale=["#f7f7f7", "#fdd49e", "#fdbb84", "#fc8d59", "#e34a33", "#b30000"],
-        title="Muertes por TB — municipio",
+        title=f"Muertes por {etiqueta_tipos_tb(casos)} por municipio de ocurrencia",
     )
     fig.update_traces(marker_line_color="#ffffff", marker_line_width=1)
     fig.update_geos(fitbounds="locations", visible=False)
@@ -195,7 +199,7 @@ def _mostrar_letalidad_temporal(casos: pd.DataFrame, muertes: pd.DataFrame) -> N
 
     fig = px.line(
         por_anio, x="ano", y="letalidad",
-        title="Letalidad por TB en el tiempo",
+        title=f"Letalidad de {etiqueta_tipos_tb(casos)} por año",
         markers=True,
         color_discrete_sequence=[NARANJA_INSTITUCIONAL],
     )
