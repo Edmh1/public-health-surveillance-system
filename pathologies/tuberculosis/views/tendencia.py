@@ -28,6 +28,7 @@ from pathologies.tuberculosis.mapas import (
     resumen_semaforo,
 )
 from pathologies.tuberculosis.poblacion import calcular_tasa_por_subregion
+from pathologies.tuberculosis.views.titulos import TAMANO_TITULO
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -42,7 +43,7 @@ def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
         return datos
     return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
 
-_LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
+_LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0), title_font_size=TAMANO_TITULO)
 
 
 def mostrar_tendencia(datos: pd.DataFrame) -> None:
@@ -179,6 +180,7 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
     fig.update_geos(fitbounds="locations", visible=False, bgcolor="rgba(0,0,0,0)")
     fig.update_layout(
         margin=dict(l=0, r=0, t=40, b=0),
+        title_font_size=TAMANO_TITULO,
         showlegend=not seleccion_unica,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",

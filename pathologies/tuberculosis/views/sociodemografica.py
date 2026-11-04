@@ -18,6 +18,7 @@ from core.demografia import (
     clasificar_grupo_curso_vida,
 )
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
+from pathologies.tuberculosis.views.titulos import TAMANO_TITULO, titulo_tb
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -32,7 +33,7 @@ def _casos_total(datos: pd.DataFrame) -> pd.DataFrame:
         return datos
     return datos[datos["cod_eve"].isin({COD_PULMONAR, COD_EXTRAPULMONAR})]
 
-_LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
+_LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0), title_font_size=TAMANO_TITULO)
 
 
 def mostrar_sociodemografica(datos: pd.DataFrame) -> None:
@@ -94,8 +95,9 @@ def _mostrar_kpis(casos: pd.DataFrame) -> None:
 
 
 def _mostrar_piramide_poblacional(casos: pd.DataFrame) -> None:
-    st.subheader(
+    titulo_tb(
         f":material/groups: Pirámide poblacional de {etiqueta_tipos_tb(casos)} por sexo y curso de vida",
+        clave="tb_titulo_piramide",
         help=FUENTE_GRUPOS_CURSO_VIDA,
     )
 

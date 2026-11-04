@@ -34,6 +34,7 @@ from pathologies.tuberculosis.mapas import (
     municipio_desde_seleccion,
     resumen_semaforo,
 )
+from pathologies.tuberculosis.views.titulos import TAMANO_TITULO, titulo_tb
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -116,21 +117,10 @@ def _mostrar_mapa_situacion(casos: pd.DataFrame) -> None:
     boton_volver_municipio(clave_base)
     seleccion_unica = len(st.session_state.get("filtro_municipio", [])) == 1
 
-    with st.container(key="titulo_mapa_situacion"):
-        st.subheader(
-            f":material/map: Incidencia de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia"
-            f"{resumen_filtros_activos()}"
-        )
-
-    st.html(
-        """
-        <style>
-        .st-key-titulo_mapa_situacion h3,
-        .st-key-titulo_mapa_situacion [data-testid="stHeading"] {
-            font-size: 1.05rem !important;
-        }
-        </style>
-        """
+    titulo_tb(
+        f":material/map: Incidencia de {etiqueta_tipos_tb(casos)} por municipio de ocurrencia"
+        f"{resumen_filtros_activos()}",
+        clave="titulo_mapa_situacion",
     )
 
     mapa = datos_mapa_casos(casos)
@@ -341,6 +331,7 @@ def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
         xaxis=dict(title="Semana epidemiológica", tickmode="linear", tick0=1, dtick=4),
         yaxis=dict(title="Casos"),
         margin=dict(l=0, r=0, t=40, b=0),
+        title_font_size=TAMANO_TITULO,
     )
     st.plotly_chart(fig, use_container_width=True)
 

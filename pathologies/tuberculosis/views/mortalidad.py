@@ -23,13 +23,14 @@ from pathologies.tuberculosis.mapas import (
     municipio_desde_seleccion,
     resumen_semaforo,
 )
+from pathologies.tuberculosis.views.titulos import TAMANO_TITULO
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
 COD_RESISTENTE = 825
 CODIGOS_BASE = {COD_PULMONAR, COD_EXTRAPULMONAR}
 
-_LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0))
+_LAYOUT_BASE = dict(margin=dict(l=0, r=0, t=40, b=0), title_font_size=TAMANO_TITULO)
 
 GRUPOS_ETARIOS = [
     (0, 4, "0-4"), (5, 14, "5-14"), (15, 24, "15-24"),
@@ -213,6 +214,7 @@ def _mostrar_mapa_muertes(casos: pd.DataFrame, muertes: pd.DataFrame) -> None:
         height=360,
         legend=dict(**LEYENDA_SUPERIOR, title=None),
         showlegend=not seleccion_unica,
+        title_font_size=TAMANO_TITULO,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )

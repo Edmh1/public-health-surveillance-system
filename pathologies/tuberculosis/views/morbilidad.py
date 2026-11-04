@@ -14,8 +14,9 @@ import streamlit as st
 from core.dashboard_base.estilos import AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL
 from core.dashboard_base.filtros import CLAVE_FILTRO_EVENTO, CLAVE_FILTROS
 from core.geografia import obtener_geojson_municipios_magdalena
-from pathologies.tuberculosis.indicators import calcular_indicadores
 from pathologies.tuberculosis.etiquetas import etiqueta_tipos_tb
+from pathologies.tuberculosis.indicators import calcular_indicadores
+from pathologies.tuberculosis.views.titulos import TAMANO_TITULO, titulo_tb
 
 COD_PULMONAR = 820
 COD_EXTRAPULMONAR = 810
@@ -53,7 +54,7 @@ _TIPO_CASO_OPTS = {
     "Extrapulmonar": [COD_EXTRAPULMONAR],
 }
 
-_LAYOUT = dict(margin=dict(l=0, r=0, t=40, b=0))
+_LAYOUT = dict(margin=dict(l=0, r=0, t=40, b=0), title_font_size=TAMANO_TITULO)
 
 
 def _pct(n: float, total: float) -> str:
@@ -210,7 +211,10 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/pie_chart: Distribución de casos de {etiqueta_tipos_tb(casos)} por tipo")
+    titulo_tb(
+        f":material/pie_chart: Distribución de casos de {etiqueta_tipos_tb(casos)} por tipo",
+        clave="tb_titulo_tipo_caso",
+    )
 
     conteo = casos["cod_eve"].value_counts()
     labels = {COD_PULMONAR: "Pulmonar", COD_EXTRAPULMONAR: "Extrapulmonar"}
@@ -240,7 +244,10 @@ def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/account_tree: Flujo de clasificación de casos de {etiqueta_tipos_tb(casos)}: inicial → final")
+    titulo_tb(
+        f":material/account_tree: Flujo de clasificación de casos de {etiqueta_tipos_tb(casos)}: inicial → final",
+        clave="tb_titulo_sankey",
+    )
 
     cols_req = {"tip_cas", "estado_final_de_caso"}
     if not cols_req.issubset(casos.columns):
@@ -410,7 +417,10 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_fuente(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/notification_important: Casos de {etiqueta_tipos_tb(casos)} por fuente de notificación")
+    titulo_tb(
+        f":material/notification_important: Casos de {etiqueta_tipos_tb(casos)} por fuente de notificación",
+        clave="tb_titulo_fuente",
+    )
 
     if "fuente" not in casos.columns:
         st.caption("Sin datos de fuente.")
@@ -447,7 +457,10 @@ def _mostrar_fuente(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/show_chart: Casos semanales de {etiqueta_tipos_tb(casos)} por tipo de caso")
+    titulo_tb(
+        f":material/show_chart: Casos semanales de {etiqueta_tipos_tb(casos)} por tipo de caso",
+        clave="tb_titulo_semanal_tipo",
+    )
 
     if "semana" not in casos.columns:
         return
@@ -506,7 +519,10 @@ def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/local_hospital: Hospitalizaciones por {etiqueta_tipos_tb(casos)} por semana epidemiológica")
+    titulo_tb(
+        f":material/local_hospital: Hospitalizaciones por {etiqueta_tipos_tb(casos)} por semana epidemiológica",
+        clave="tb_titulo_hosp_semanal",
+    )
 
     if "pac_hos" not in casos.columns or "semana" not in casos.columns:
         st.caption("Sin datos.")
@@ -550,7 +566,10 @@ def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/map: Hospitalizaciones por {etiqueta_tipos_tb(casos)} por territorio")
+    titulo_tb(
+        f":material/map: Hospitalizaciones por {etiqueta_tipos_tb(casos)} por territorio",
+        clave="tb_titulo_hosp_territorio",
+    )
 
     if "pac_hos" not in casos.columns:
         st.caption("Sin datos de hospitalización.")
@@ -583,6 +602,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
         fig_mun.update_layout(
             title=f"Top 15 municipios por hospitalizaciones de {etiqueta_tipos_tb(casos)}",
             margin=dict(l=0, r=0, t=40, b=0),
+            title_font_size=TAMANO_TITULO,
         )
         st.plotly_chart(fig_mun, width="stretch")
 
@@ -597,7 +617,10 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/fact_check: Distribución de casos de {etiqueta_tipos_tb(casos)} por clasificación final")
+    titulo_tb(
+        f":material/fact_check: Distribución de casos de {etiqueta_tipos_tb(casos)} por clasificación final",
+        clave="tb_titulo_clasificacion_final",
+    )
 
     if "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")
@@ -643,7 +666,10 @@ def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/stacked_bar_chart: Casos de {etiqueta_tipos_tb(casos)} por clasificación final y semana epidemiológica")
+    titulo_tb(
+        f":material/stacked_bar_chart: Casos de {etiqueta_tipos_tb(casos)} por clasificación final y semana epidemiológica",
+        clave="tb_titulo_clasificacion_semanal",
+    )
 
     if "semana" not in casos.columns or "estado_final_de_caso" not in casos.columns:
         st.caption("Sin datos.")
