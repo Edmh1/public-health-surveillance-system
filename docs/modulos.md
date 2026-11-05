@@ -23,7 +23,7 @@ Fuente de datos: archivos Excel de microdatos del portal SIVIGILA del INS (Insti
 
 Alcance geográfico: exclusivamente el departamento del Magdalena (código DANE 47, 30 municipios), por territorio de ocurrencia del caso. No hay vista nacional ni comparación con otros departamentos (para eso existe el propio SIVIGILA).
 
-Tecnologías: Streamlit y Plotly (interfaz y gráficos), Keycloak (identidad), Redis y RQ (cola de procesamiento), SQLite (estado, bitácora, registro de archivos), Parquet (datos de casos), Prophet (pronóstico), orquestación con docker-compose.
+Tecnologías: Streamlit y Plotly (interfaz y gráficos), Keycloak (identidad), Redis y RQ (cola de procesamiento), SQLite (estado, bitácora, registro de archivos), Parquet (datos de casos), Prophet, XGBoost y TensorFlow/Keras (pronóstico), orquestación con docker-compose.
 
 ### Pantalla de inicio de sesión
 
@@ -42,7 +42,7 @@ Keycloak solo entrega la identidad y la etiqueta del rol; qué puede hacer cada 
 |---|---|---|
 | Visor | Estudiantes | Ver las seis pestañas de análisis. No ve la pestaña Gestión. |
 | Editor | Personal CITES | Todo lo del Visor, más subir, reemplazar (editar) y enviar a papelera archivos; restaurar desde la papelera; ver Procesamientos y Bitácora. Alcance global: gestiona cualquier patología. |
-| Admin | Administración | Todo lo del Editor, más eliminar para siempre desde la papelera. |
+| Admin | Administración | Todo lo del Editor, más eliminar para siempre desde la papelera y reentrenar el pronóstico (apartado Pronóstico de Gestión). |
 
 ### Barra superior y encabezado
 
@@ -71,7 +71,20 @@ Todos los filtros operan sobre los datos ya cargados en memoria de la sesión; m
 
 No existe filtro de departamento: el Magdalena es el techo fijo del sistema.
 
-Resumen de filtros en cada gráfica: junto al título de cada gráfica aparece entre paréntesis un resumen de los filtros activos, por ejemplo "Casos por año (Centro · 2022-2024)". Así cada gráfica se explica sola en una captura sin necesidad de ver la barra lateral. Las secciones que tienen selector de año propio omiten el año y la semana del resumen para no inducir a error.
+Título y contexto de cada gráfica: el criterio es el de la epidemiología descriptiva, un título está bien cuando permite identificar tiempo, lugar y persona. Se reparte en dos piezas:
+
+- Título fijo, encima de la tarjeta: la métrica y la persona o dimensión ("Muertes por régimen de afiliación (SGSSS)", "Casos hospitalizados por semana epidemiológica").
+- Dentro de la propia figura se repite el título en negrita y debajo va el contexto: patología, lugar y período, por ejemplo "Dengue · Magdalena · 2007-2025" o "Dengue · Subregión Río · 2022-2024 · Sem. 1-20". Nunca queda vacío: sin filtros, el lugar es el Magdalena y el período es el rango completo de años cargados. Va dentro de la figura para que se vea en pantalla completa y en la imagen descargada con el botón de cámara.
+
+Las gráficas que analizan un año concreto (las semanales) declaran ese año, y las comparativas los dos años que comparan ("2025 frente a 2024").
+
+Presentación común: letra de 15 en las gráficas, con la misma tipografía del tablero (ninguna etiqueta por debajo de 12), mapas sin fondo blanco, ejes de conteos que no bajan de cero, barra de herramientas de Plotly solo al pasar el cursor y solo con descargar imagen, zoom, mover y restablecer, leyenda arriba a la izquierda para que la barra de herramientas no la tape, y una gráfica por fila salvo los pares complementarios.
+
+Sin filtros propios dentro de las gráficas: manda la barra lateral. Se conservan solo los selectores de representación (eligen qué variable se dibuja, no recortan los casos) y los parámetros de método del canal endémico.
+
+Datos insuficientes: si con los filtros actuales una gráfica quedaría con una sola barra (o una serie con menos de 4 puntos, o una comparación entre años con menos de 2 años), no se dibuja. En su lugar aparece un mensaje que dice cuántos registros hay y qué ampliar, por ejemplo "Con los filtros actuales hay 2 muertes en una sola semana epidemiológica. Amplía el período para ver la distribución temporal".
+
+Filtro cruzado en los pares: en tres pares de gráficas (Tendencia, Sociodemográfica y Mortalidad) seleccionar en una gráfica filtra la otra. En la gráfica donde se hizo clic, lo elegido queda a color pleno y lo demás atenuado. Sobre el par aparece "Mostrando solo: ..." con un botón "Quitar selección", y la selección se borra sola al cambiar cualquier filtro de la barra lateral.
 
 ### Avisos y notificaciones
 
@@ -126,17 +139,15 @@ Deslizador de un solo año que por defecto se ubica en el año más reciente. Af
 #### Canal endémico
 
 - Título con botón "Metodología" a la derecha.
-- Controles superiores:
-  - Escala: control segmentado "Subregión" / "Municipio" (el canal se ofrece en ambas escalas).
-  - Territorio: lista desplegable con las subregiones o los municipios, según la escala.
-- Dos gráficas lado a lado, una por método, como recomienda el INS para confirmar señales de alerta:
-  - Cuartiles / medianas (INS Colombia): líneas Cuartil inferior (P25), Mediana (P50), Cuartil superior (P75).
-  - Bortman (media geométrica): líneas Límite inferior IC 95 %, Umbral estacional, Límite superior IC 95 %.
-  - En ambas: el área bajo la curva se divide en zonas sombreadas (Éxito, Seguridad, Alerta; lo que queda por encima del límite superior es Epidemia). Los casos semanales del año de vigilancia se dibujan como puntos, cada uno coloreado según la zona en que cae. Eje X: semana epidemiológica; eje Y: casos. Si no hay datos del año de vigilancia, aparece la anotación "Sin datos notificados para N".
-- Parámetros del canal (debajo de las gráficas, para no desplazarlas):
+- Obedece el filtro territorial de la barra lateral: sin filtro es el canal de todo el Magdalena; con una subregión o un municipio filtrado, el de ese territorio. Ya no tiene selectores propios de escala ni de territorio.
+- Control segmentado "Metodología": Cuartiles (por defecto) o Bortman (media geométrica). Se dibuja una sola gráfica a ancho completo; con los dos métodos en paralelo cada canal quedaba a media pantalla y no se leía.
+  - Cuartiles: líneas Cuartil inferior (P25), Mediana (P50), Cuartil superior (P75).
+  - Bortman: líneas Límite inferior IC 95 %, Umbral estacional, Límite superior IC 95 %.
+  - El área bajo la curva se divide en zonas sombreadas (Éxito, Seguridad, Alerta; lo que queda por encima del límite superior es Epidemia). Los casos semanales del año de vigilancia se dibujan como puntos, cada uno coloreado según la zona en que cae. Si no hay datos del año de vigilancia, aparece la anotación "Sin datos notificados para N".
+- Parámetros del canal, debajo de la gráfica, en el panel desplegable "Ajustar año de vigilancia y línea base histórica" (colapsado por defecto). El panel aclara que son parámetros del método, no filtros de la vista:
   - Año de vigilancia: lista desplegable.
   - Años hacia atrás en la línea base: deslizador de 5 a 7 años (recomendación INS: menos de 5 no es confiable; más de 7 diluye el comportamiento reciente). Si solo hay 5 años disponibles se usan todos y se informa.
-  - Excluir años de la línea base: selección múltiple para retirar años atípicos (por ejemplo un año de brote que inflaría el canal). Al excluir un año, la ventana se extiende automáticamente con el siguiente año más antiguo disponible para mantener el tamaño elegido. La exclusión es manual a propósito: un brote real y un año con datos incompletos se ven parecidos en las cifras y solo una persona con contexto puede distinguirlos.
+  - Excluir años de la línea base: selección múltiple para retirar años atípicos. Al excluir un año, la ventana se extiende automáticamente con el siguiente año más antiguo disponible. La exclusión es manual a propósito: un brote real y un año con datos incompletos se ven parecidos en las cifras.
   - Leyenda final: "Línea base: N años (lista de años)".
   - Si no hay al menos 5 años anteriores al año de vigilancia (o quedan menos de 5 tras las exclusiones), se muestra una advertencia que explica la recomendación del INS y cómo resolverlo.
 
@@ -154,68 +165,90 @@ Ventana emergente amplia con:
 
 ### Propósito
 
-Estimar cuántos casos de dengue se esperan en las próximas 1 a 4 semanas en el Magdalena, como apoyo a la alerta temprana. Es "qué se espera" a continuación de "cómo estamos ahora".
+Estimar cuántos casos de dengue se esperan en las próximas 1 a 6 semanas en el Magdalena, como apoyo a la alerta temprana. Es "qué se espera" a continuación de "cómo estamos ahora".
 
 ### Datos y filtros
 
 - Serie semanal departamental única (todo el Magdalena) de casos 210+220, construida con todas las semanas del rango (las semanas sin casos se registran como cero, porque son un dato real).
-- No depende de ningún filtro global. El modelo se validó a escala departamental, sin desagregación territorial. Si la persona tiene activo un filtro de subregión o municipio, aparece el aviso "Tienes un filtro de subregión o municipio activo: no afecta a esta pestaña, el pronóstico siempre es departamental".
+- No depende de ningún filtro global. Los modelos se validaron a escala departamental. Si la persona tiene activo un filtro de subregión o municipio, aparece el aviso "Tienes un filtro de subregión o municipio activo: no afecta a esta pestaña, el pronóstico siempre es departamental".
 
-### Modelo
+### Modelos
 
-- Prophet con componente autorregresivo (Prophet-AR), sin variables climáticas: estacionalidad anual más regresores con los casos (en escala log1p) de 1, 2, 4 y 8 semanas atrás.
-- Elegido entre 6 familias evaluadas (SARIMAX, Prophet, XGBoost, LightGBM, LSTM, N-BEATS) en un documento técnico de modelado aparte, por ser el de menor dependencia del clima y el de mejor desempeño sin clima desde 2 semanas de horizonte.
+Tres modelos sin variables climáticas, uno por familia. De cada familia va el que mejor desempeño tuvo a multipaso y sin clima en el notebook 05 del repositorio de modelado:
+
+| Familia | Modelo | Configuración | Descartado de la misma familia |
+|---|---|---|---|
+| Estadístico | Prophet-AR (por defecto) | Estacionalidad anual y regresores con log1p(casos) de 1, 2, 4 y 8 semanas atrás | SARIMAX |
+| Aprendizaje automático | XGBoost | Rezagos 1, 2, 4 y 8 en casos (escala original); learning_rate 0,04, max_depth 2, min_child_weight 5, 300 árboles | LightGBM |
+| Aprendizaje profundo | LSTM | Ventana de 12 semanas de log1p(casos) con MinMaxScaler; capas LSTM de 64 y 16 unidades, tanh, dropout 0,2, salida Dense(1); rmsprop, pérdida MAE, lotes de 16, 40 épocas | N-BEATS |
+
+- Prophet queda por defecto: es el único que se sostiene en todo el rango de horizontes y el mejor a 4 semanas, el horizonte operativo.
 - Pronóstico recursivo: para semanas más allá de la primera, los rezagos que caen dentro del horizonte se completan con la propia predicción del modelo.
-- Horizonte máximo: 4 semanas.
-- Se entrena en vivo dentro del dashboard con todo el histórico cargado y se reentrena automáticamente cuando cambia ese histórico (por ejemplo al subir un año nuevo). No hay un modelo congelado que mantener a mano. El entrenamiento tarda menos de un segundo y queda en caché.
-- Requisito mínimo: 120 semanas de histórico (aproximadamente 2,3 años) para estimar la estacionalidad anual. Si no se cumple, se muestra una advertencia con las semanas disponibles.
+- Sin banda de incertidumbre: solo Prophet la produce de forma nativa, y mostrarla en uno solo de los tres modelos los haría ver de distinta calidad. La incertidumbre se expresa como el error esperado por horizonte.
+- Requisito mínimo: 120 semanas de histórico (aproximadamente 2,3 años).
+
+### Entrenamiento
+
+- La pestaña no entrena en el pronóstico en vivo: carga la versión de modelos exportada que el perfil de administración generó desde Gestión (ver Gestión, subpestaña Pronóstico).
+- Cada reentrenamiento es una versión nueva; las anteriores se conservan y se puede volver a cualquiera.
+- Única excepción: los modos históricos entrenan en el momento con datos hasta la fecha elegida, porque ahí el punto es que el modelo no vea lo que vino después.
 
 ### Componentes (en orden de aparición)
 
 #### Encabezado
 
-Título "Pronóstico de casos de dengue" con el botón "Fundamentación" a la derecha, y la leyenda "Pronóstico a nivel departamental (todo el Magdalena). No depende de los filtros de la barra lateral...".
+Título "Pronóstico de casos de dengue" con el botón "Fundamentación" a la derecha, y la leyenda "Pronóstico a nivel departamental (todo el Magdalena)...".
 
 #### Selector "Modo"
 
-Lista desplegable con cuatro opciones:
-
-- Pronóstico en vivo (hoy): el pronóstico real de las próximas 4 semanas a partir de la última semana con datos.
+- Pronóstico en vivo (hoy): el pronóstico desde la última semana con datos, con el modelo exportado activo.
 - Ejemplo histórico: inicio del brote de octubre 2018 (subida real hacia el pico de 177 casos por semana de diciembre de 2018).
 - Ejemplo histórico: descenso tras el pico de enero 2019 (bajada real tras ese mismo pico).
-- Elegir otra semana...: habilita un selector de fecha para usar cualquier semana del histórico como punto de partida; la fecha se ajusta al inicio de la semana epidemiológica correspondiente.
+- Elegir otra semana...: selector de fecha para usar cualquier semana del histórico como punto de partida.
 
-En los modos históricos el mismo modelo de producción se entrena solo con datos hasta esa fecha (nunca ve lo que pasó después) y la gráfica superpone lo que realmente ocurrió. Aparece un aviso destacado: "Estás viendo un EJEMPLO HISTÓRICO, no el pronóstico de hoy...". Los dos ejemplos fijos van en direcciones opuestas a propósito, y la opción de elegir cualquier semana permite que cualquier persona verifique el modelo con la fecha que quiera: es una validación honesta, no un caso seleccionado a conveniencia.
+En los modos históricos aparece el aviso "Estás viendo un EJEMPLO HISTÓRICO, no el pronóstico de hoy...". Los dos ejemplos fijos van en direcciones opuestas a propósito, y la opción de elegir cualquier semana permite que cualquier persona verifique el modelo con la fecha que quiera.
 
-#### Leyenda de entrenamiento
+#### Selectores de modelo, horizonte y métrica
 
-"Modelo entrenado con N semanas de histórico (año inicial - año final)".
+- Modelo: "Prophet (estadístico)" (por defecto), "XGBoost (aprendizaje automático)", "LSTM (aprendizaje profundo)" o "Comparar los tres", que superpone las tres líneas sobre la misma serie real. Al cambiar de modelo cambian la línea pronosticada y las métricas, no el histórico.
+- Horizonte (semanas): de 1 a 6, por defecto 4. A partir de la quinta semana aparece un aviso: el documento técnico recomienda hasta 4 y más allá el error crece de forma notoria (en la sexta, MAPE del 35 % y R² de 0,62 contra 0,87 en la primera).
+- Métrica: "Casos" (por defecto) o "Tasa semanal (x100.000 hab.)". La tasa usa la población total del Magdalena (30 municipios), no la población en riesgo.
 
-#### Selector "Métrica"
+#### Procedencia del modelo y aviso de datos nuevos
 
-Control segmentado: "Casos" o "Tasa semanal (x100.000 hab.)" (por defecto, tasa). La tasa usa la población total del Magdalena (30 municipios), no la población en riesgo, porque el pronóstico es una serie departamental no filtrable. Es una tasa semanal y por eso no es comparable con la incidencia anual de Situación.
+- En modo en vivo, en texto visible: "Modelo entrenado el 12 de noviembre de 2026 con 2007-2025 (N semanas, hasta la semana S de AAAA)".
+- Si el consolidado tiene datos más recientes que los que vio el modelo, aparece un aviso que lo dice y explica que hay que reentrenar desde Gestión. Para el perfil de administración incluye el botón "Reentrenar ahora".
+- Si todavía no hay ningún modelo exportado, la pestaña lo explica y dice quién puede generarlo; los modos históricos siguen funcionando.
+
+#### Métricas de error
+
+Se distinguen dos cosas en pantalla:
+
+- Modo en vivo: "Error esperado a N semana(s), medido en validación histórica": el RMSE, MAE, MAPE y R² que el modelo obtuvo, para ese horizonte, en la validación walk-forward que el sistema corrió al entrenar esa versión. Nunca se presenta como el error de esta predicción. Con "Comparar los tres", una tarjeta por modelo.
+- Modo histórico: el error real de ese ejemplo, comparando el pronóstico contra lo que ocurrió en las semanas siguientes con las mismas cuatro métricas (RMSE, MAE, MAPE y R²).
 
 #### Gráfica de pronóstico
 
-- Línea azul: histórico.
-- Línea naranja punteada con marcadores: pronóstico, conectada visualmente con la última semana real.
-- Banda naranja translúcida: banda de incertidumbre (intervalo del 80 % de cada semana).
-- Línea vertical punteada: última semana con datos reales.
-- En modo histórico, línea gris sólida: lo que realmente pasó en las 8 semanas siguientes (más allá de las 4 del horizonte, para ver la tendencia real).
-- Vista inicial ampliada en los últimos 3 meses; el histórico completo está disponible alejando el zoom.
+- Línea negra continua: casos reales. En modo histórico, lo que ocurrió después del corte también es dato real y sigue en negro, como continuación.
+- Líneas punteadas con marcadores: el pronóstico, con un color fijo por modelo (Prophet azul, XGBoost naranja, LSTM verde azulado), conectadas a la última semana real.
+- Línea vertical punteada: el corte, "Último dato que vio el modelo".
+- Eje X con barra de desplazamiento (rangeslider): la vista inicial muestra los últimos dos años y se puede acercar y alejar sobre todo el histórico.
 
-#### Tarjetas por semana
+#### Semanas pronosticadas
 
-Una tarjeta por cada semana pronosticada ("Semana 23 · 2026: 45 casos"), bajo el rótulo "Próximas semanas" (o "Semanas siguientes al ejemplo histórico"). El texto de ayuda de cada tarjeta muestra la banda de incertidumbre en casos, la tasa semanal y el horizonte (a cuántas semanas de la última semana real está).
+Con un modelo, una tarjeta por semana ("Sem. 23 · 2026: 45 casos") con la tasa semanal en la ayuda. Con "Comparar los tres", una tabla con una columna por modelo (y los casos reales, en modo histórico).
 
 #### Diálogo "Fundamentación del pronóstico"
 
-Resumen del documento técnico en cuatro pestañas:
+Resumen del documento técnico en cinco pestañas:
 
-- Resumen: las 6 familias evaluadas con evaluación walk-forward multi-paso (origen móvil) y las tres razones de la elección de Prophet sin clima (pérdida de R2 entre 0,006 y 0,026 al quitar el clima, la menor de todas; mejor desempeño sin clima desde 2 semanas; a 4 semanas R2 0,73 sin clima frente a 0,77 de los mejores modelos con clima).
-- ¿Por qué sin clima?: tabla de pérdida de R2 al quitar humedad, precipitación y temperatura, por modelo y horizonte (Prophet, ARIMA/SARIMA, XGBoost, LightGBM, LSTM, N-BEATS); justificación operativa (costo de mantener series climáticas actualizadas).
-- ¿Por qué 4 semanas?: tabla de R2 y RMSE por horizonte (1 semana: R2 0,87, RMSE 12,3; 4 semanas: R2 0,73, RMSE 17,5; 6 semanas: R2 0,62, RMSE 20,8) y comparación contra la línea base de persistencia.
-- Datos y validación: serie de referencia de 940 semanas (2007-2024), partición cronológica 70/15/15; aclaración de que el modelo del dashboard se reentrena con el histórico cargado en cada momento y que las métricas citadas son las de la validación del documento técnico, no un recálculo en vivo.
+- Resumen: las 6 familias evaluadas y por qué se despliega el mejor de cada una, con Prophet por defecto.
+- Tres familias: la tabla de desempeño por horizonte del notebook 05 (Prophet, XGBoost, LSTM y la persistencia como línea base), rotulada como evaluación del estudio de modelado, con dos lecturas: XGBoost es el mejor en la segunda y la tercera semana y Prophet en la primera, la cuarta y la sexta; la LSTM apenas supera a la persistencia a partir de la cuarta semana (19,815 contra 19,942).
+- ¿Por qué sin clima?: tabla de pérdida de R² al quitar las variables climáticas, por modelo y horizonte.
+- Horizonte: por qué se recomienda hasta 4 semanas y de dónde sale el error de la quinta.
+- Datos y validación: la serie de investigación (940 semanas, 2007-2024) y cómo se entrenan y versionan los modelos del tablero.
+
+La tabla del diálogo justifica la elección de las familias; el error que acompaña al pronóstico es el de la validación del propio sistema. No se mezclan en el mismo panel.
 
 ## Tendencia
 
@@ -226,42 +259,47 @@ Describir la evolución de los casos en el tiempo y en el territorio: cuántos c
 ### Datos y filtros
 
 - Casos 210+220 (la mortalidad vive en su propia pestaña).
-- Responde a todos los filtros globales, salvo la sección de análisis semanal, que tiene selector de año propio e ignora el filtro temporal global (sí respeta los filtros territoriales y de clasificación).
+- Responde a todos los filtros globales. La sección semanal analiza el último año del filtro de años; el año de comparación es el inmediatamente anterior en los datos, esté o no dentro del filtro.
 
 ### Componentes (en orden de aparición)
 
-#### KPI (4 tarjetas)
+#### KPI (3 tarjetas)
 
 Leyenda previa: los casos totales cubren todo el periodo filtrado; semana pico y municipio más afectado corresponden al año más reciente.
 
-- Casos totales: casos 210+220 en todos los años filtrados.
-- Casos del año más reciente (por ejemplo "Casos 2024"), con la variación porcentual frente al año anterior como indicador de cambio con flecha ("+12,3 % vs 2023").
-- Semana pico del año más reciente (ayuda: número de casos de esa semana).
-- Municipio más afectado del año más reciente (ayuda: número de casos).
+- Casos totales.
+- Semana pico del año más reciente.
+- Municipio más afectado del año más reciente.
 
-#### Casos por año
+El alza frente al año anterior ya no es una tarjeta: va anotada sobre la gráfica comparativa semanal.
 
-Gráfica de barras por año con el número de casos sobre cada barra y una línea punteada naranja con el promedio anual, que sirve como referencia de "año alto" o "año bajo".
+#### Par: Casos por año + Incidencia por subregión en el Magdalena
 
-#### Mapa del Magdalena (tres niveles de detalle, todos en incidencia)
+Las dos gráficas van juntas porque el mapa filtra la serie: al entrar a una subregión, a un municipio o a una zona, "Casos por año" muestra solo ese territorio y sobre el par aparece "Mostrando solo: Subregión Río" con el botón "Quitar selección".
 
-- Nivel 1, subregiones: mapa coroplético de las 5 subregiones coloreadas en escala azul según la incidencia (x100.000 hab.). Al pasar el cursor: subregión, casos e incidencia. Indicación "Haz clic en una subregión para ver el detalle por municipio".
-- Nivel 2, municipios: al hacer clic en una subregión, el mapa muestra sus municipios coloreados por incidencia (población en riesgo del municipio), con botón "Volver". Indicación "Haz clic en un municipio para ver sus zonas".
-- Nivel 3, zonas: al hacer clic en un municipio, a la izquierda aparece su polígono con la incidencia y a la derecha una gráfica de barras horizontales con la incidencia por zona de ocurrencia: cabecera municipal, centro poblado y rural disperso (el DANE publica población de cabecera por un lado y de centro poblado más rural disperso por otro; estas dos últimas zonas comparten denominador). Botón "Volver".
-- Notas al pie: fórmula de la incidencia y aclaración de que los territorios en gris no tienen población DANE para el periodo filtrado.
+- Casos por año: barras por año con el número de casos. La línea punteada del promedio anual solo se dibuja con dos años o más.
+- Incidencia por subregión en el Magdalena, en tres niveles, todos en incidencia (x100.000 hab.) y con la misma escala de color:
+  - Nivel 1, subregiones. Clic en una subregión para ver sus municipios.
+  - Nivel 2, municipios de la subregión, con botón "Volver". Clic en un municipio para ver sus zonas.
+  - Nivel 3, zonas: el municipio en sus dos zonas con dato, cabecera municipal y resto rural (centros poblados y rural disperso unidos en una sola figura), como coropleto con la incidencia de cada una. Son las dos únicas tasas válidas: el DANE publica una sola población para centros poblados y rural disperso juntos, y así agrupa también la población en riesgo el lineamiento MSPS/INS. Los centros poblados no se dibujan por separado porque no hay datos a ese nivel (SIVIGILA no registra en cuál ocurrió el caso). Al lado, las barras con las dos tasas y debajo el número de casos en cabecera, centros poblados y rural disperso. Una zona sin población de referencia se pinta en gris. Clic en una zona para filtrar la serie anual a la cabecera o al resto rural.
+  - Al pie del tercer nivel, la fuente de la capa (DANE, Marco Geoestadístico Nacional 2020 y Censo Nacional de Población y Vivienda 2018; nombres de DIVIPOLA) y un panel con sus límites: los centros poblados son la unión de manzanas censales de 2018, no un perímetro normativo; las tres clases suman entre el 100 % y el 101,2 % del área municipal por la diferencia de años entre capas; dos centros poblados no tienen nombre en la DIVIPOLA (47570008 y 47660015).
 
-#### Análisis semanal (selector de año propio)
+#### Casos por semana epidemiológica
 
-- Selector "Año de análisis" con la nota "El año de análisis es un selector propio de esta sección e ignora el filtro temporal global".
-- Casos semanales del año: barras por semana epidemiológica con línea de promedio semanal.
-- Comparación año vs año anterior: barras naranjas del año anterior y línea azul del año seleccionado, semana por semana. Al pasar el cursor: "Semana X · Y casos (año)".
-- Variación porcentual semanal frente al año anterior: barras azules para aumentos y naranjas para disminuciones, con línea de referencia en cero.
+Par complementario con el año resuelto por el filtro global ("Semana a semana, 2025 frente a 2024"):
 
-#### Evolución temporal
+- Casos de cada semana del año de análisis, con la línea del promedio semanal.
+- Comparación con el año anterior: barras naranjas del año anterior y línea azul del año de análisis, con la anotación del alza o baja del año frente a las mismas semanas del anterior.
+- Si los datos no tienen un año anterior, se dibuja solo el año de análisis y se dice por qué.
 
-- Control segmentado "Agrupar por": Subregión o Municipio.
-- Gráfica de líneas con marcadores: incidencia por año (x100.000 hab.), una línea por territorio, con paleta de alto contraste para distinguir hasta 30 municipios.
-- Nota: incidencia = casos / población en riesgo x 100.000.
+#### Variación porcentual semanal frente al año anterior
+
+Sola, a ancho completo: barras azules para aumentos y naranjas para disminuciones, con línea de referencia en cero.
+
+#### Evolución de la incidencia por territorio
+
+- Control segmentado "Agrupar por": Subregión o Municipio (selector de representación).
+- Líneas con la incidencia por año (x100.000 hab.), una por territorio. Necesita al menos dos años.
 
 ## Sociodemográfica
 
@@ -285,33 +323,22 @@ Caracterizar a la población afectada: quiénes enferman (sexo, edad, grupos vul
 
 Los porcentajes usan una precisión adaptativa para que nunca aparezca "0 %" cuando hay casos reales.
 
-#### Pirámide por sexo y edad
+#### Par: Pirámide de casos por sexo y edad + Distribución demográfica de casos
 
-Pirámide poblacional de barras horizontales: masculino a la izquierda (azul) y femenino a la derecha (naranja), en grupos quinquenales de 0-4 hasta 65 y más. La edad se construye en el procesamiento a partir de la unidad de medida reportada (años, meses, días, horas, minutos), descartando valores imposibles.
-
-#### Distribución demográfica (explorador interactivo)
-
-Panel a la derecha de la pirámide con un control segmentado "Ver distribución por" y cuatro opciones:
-
-- Área: gráfica de anillo con cabecera municipal, centro poblado y rural disperso (casos y porcentaje).
-- Estrato: barras horizontales por estrato socioeconómico.
-- Etnia: barras horizontales por pertenencia étnica (Indígena, ROM, Raizal, Palenquero, Afrocolombiano, Ninguno o sin dato).
-- Régimen: barras horizontales por régimen de afiliación al SGSSS (Subsidiado, Contributivo, No asegurado, Excepción, Especial, Indígena).
-
-Todas las barras muestran casos y porcentaje.
+- Pirámide de casos por sexo y edad: masculino a la izquierda (azul) y femenino a la derecha (naranja), en grupos quinquenales de 0-4 hasta 65 y más (la agrupación de los boletines del INS). Al hacer clic en una barra (un grupo de edad y sexo), esa barra queda resaltada y la distribución de al lado se recalcula solo con esos casos ("Mostrando solo: Femenino de 20-24 años", con "Quitar selección").
+- Distribución demográfica de casos: control segmentado "Ver distribución por" (selector de representación) con Área, Estrato, Etnia y Régimen, todas en barras horizontales. Al hacer clic en una categoría, la pirámide muestra solo esos casos (filtro en ambos sentidos).
 
 #### Pueblos indígenas afectados (condicional)
 
 Solo aparece si en los datos filtrados hay casos con pertenencia étnica indígena. Barras horizontales con los 10 pueblos indígenas con más casos (excluye registros sin información).
 
-#### EPS de afiliación y UPGD notificadora
+#### Casos por EPS de afiliación
 
-Dos gráficas lado a lado:
+Barras horizontales con las 10 EPS con más casos de sus afiliados en el período filtrado. El título dice "de afiliación" y no "notificados" a propósito: la EPS no notifica, notifica la UPGD.
 
-- EPS de afiliación: 10 aseguradoras con más casos notificados.
-- UPGD notificadora: 10 unidades primarias generadoras de datos con más casos reportados.
+#### Casos notificados por UPGD
 
-Los nombres largos se recortan en el eje y se muestran completos al pasar el cursor.
+Debajo de la anterior, a ancho completo: las 10 unidades con más casos notificados en el período filtrado.
 
 ## Morbilidad
 
@@ -322,59 +349,52 @@ Analizar el comportamiento clínico y de notificación de los casos: gravedad, h
 ### Datos y filtros
 
 - Casos 210+220.
-- Responde a los filtros globales; las gráficas semanales tienen selector de año propio que ignora el filtro temporal global.
+- Responde a los filtros globales. Las gráficas semanales muestran el último año del filtro de años, declarado en su contexto.
 - A diferencia de Situación (un solo año), aquí la incidencia sigue el filtro global de años y permite ver tasas de un rango de años.
+- Las etiquetas dicen "Dengue" y "Dengue grave", sin el código numérico; los códigos quedan en las notas metodológicas.
 
 ### Componentes (en orden de aparición)
 
 #### KPI (5 tarjetas)
 
-Leyenda previa: "Indicadores del período filtrado (año inicial-año final). La incidencia es una tasa anual por 100.000 habitantes."
-
 - Casos totales.
 - Incidencia (o "No disponible", con explicación).
 - Hospitalizados: número y porcentaje del total.
-- Dengue grave (220): número y porcentaje del total.
+- Dengue grave: número y porcentaje del total (es donde vive la proporción de graves).
 - Hospitalizados graves: número y porcentaje sobre los casos graves.
 
-#### Tipo de caso
+#### Par: Casos por tipo + Casos por clasificación final
 
-Gráfica de anillo: dengue (210) frente a dengue grave (220), con casos y porcentaje.
+Composición inicial y final del mismo universo, lado a lado: anillo de dengue frente a dengue grave y anillo de la clasificación final.
 
-#### Gráfico de Sankey (flujo de clasificación)
+#### Gráfico de Sankey de flujo de clasificación de casos
 
-Diagrama de flujo en tres columnas: Total, Clasificación inicial y Clasificación final. Muestra cómo se distribuyen los casos según su clasificación inicial (Sospechoso, Probable, Confirmado por laboratorio, por clínica o por nexo epidemiológico) y, de ellos, cuáles cambiaron de clasificación al cierre (por ejemplo de Probable a Confirmado por laboratorio o a Descartado). Solo se dibujan los cambios de clasificación; un caso que empieza y termina igual no genera flujo. Cada estado conserva el mismo color en ambas columnas y los flujos toman el color de la clasificación inicial. Tiene encabezados por columna, leyenda de colores y, al pasar el cursor, "origen -> destino: N casos". Los nodos se ordenan para minimizar cruces.
+A ancho completo, justo debajo del par: Total, Clasificación inicial y Clasificación final. Solo se dibujan los cambios de clasificación. Se lee la composición al notificar, la composición después del ajuste y luego el flujo que conecta las dos.
 
-#### Incidencia por subregión
+#### Casos por semana epidemiológica y tipo
 
-Barras horizontales con la incidencia (x100.000 hab.) de cada subregión, ordenadas de menor a mayor.
+Barras apiladas por semana: dengue y dengue grave. Ya no lleva la serie de porcentaje de graves ni el eje secundario.
 
-#### Fuente de notificación
+#### Clasificación final de los casos por semana epidemiológica
 
-Barras horizontales por fuente: Rutinaria, Búsqueda activa institucional, Vigilancia intensificada, Búsqueda activa comunitaria e Investigación, con casos y porcentaje. Se usan barras y no anillo porque la diferencia entre la notificación rutinaria y las demás es muy grande.
+Barras apiladas por semana según la clasificación final.
 
-#### Casos semanales por tipo (selector de año propio)
+#### Casos hospitalizados por semana epidemiológica
 
-Barras agrupadas por semana (dengue en azul, dengue grave en naranja) y una línea punteada gris sobre un segundo eje con el porcentaje de casos graves de cada semana.
+Barras apiladas por semana con los casos hospitalizados, por tipo.
 
-#### Clasificación final por semana (selector de año propio)
+#### Tasa de hospitalización por territorio
 
-Barras apiladas por semana epidemiológica según la clasificación final del caso.
+- Control segmentado "Tipo de caso": Ambos, Dengue o Dengue grave (selector de representación).
+- Tasa de hospitalizados por subregión y los 15 municipios de mayor tasa (x100.000 hab.).
 
-#### Clasificación final
+#### Incidencia de dengue por subregión
 
-Gráfica de anillo con la distribución de la clasificación final (Confirmado por laboratorio, por nexo, Probable, Descartado, etc.).
+Barras horizontales con la incidencia de cada subregión dentro del alcance del filtro.
 
-#### Hospitalización por territorio
+#### Casos por fuente de notificación
 
-- Control segmentado "Tipo de caso": Ambos, Dengue (210) o Dengue grave (220).
-- Barras horizontales con la tasa de hospitalizados por subregión (x100.000 hab.).
-- Barras horizontales con los 15 municipios de mayor tasa de hospitalización.
-- Nota: tasa = hospitalizados / población en riesgo x 100.000 en ambos niveles.
-
-#### Hospitalización por semana (selector de año propio)
-
-Barras agrupadas por semana con cuatro categorías: Dengue hospitalizado, Dengue no hospitalizado, Grave hospitalizado y Grave no hospitalizado (tonos sólidos y suaves de azul y naranja).
+Barras horizontales por fuente, con casos y porcentaje.
 
 ## Mortalidad
 
@@ -385,52 +405,47 @@ Analizar las muertes por dengue: cuántas, cuándo, quiénes, dónde y si la let
 ### Datos y filtros
 
 - Muertes (580), cruzadas con casos 210+220 y graves 220 para las letalidades.
-- Responde a los filtros globales; la gráfica de muertes por semana tiene selector de año propio.
+- Responde a los filtros globales. La gráfica de muertes por semana cubre todo el período filtrado.
 - Si no hay muertes para los filtros actuales, la pestaña muestra solo el mensaje "No hay muertes por dengue registradas para los filtros actuales".
 
 ### Componentes (en orden de aparición)
 
 #### KPI (5 tarjetas)
 
-Leyenda previa: "Indicadores del período filtrado (años). La letalidad se compara con la meta anual del INS."
-
 - Muertes por dengue.
 - Mortalidad: muertes / población en riesgo x 100.000 (o "No disponible").
-- Menores de 15 años: número y porcentaje del total de muertes (grupo de atención prioritaria).
-- Letalidad: con 4 decimales; si supera la meta INS de 0,10 % aparece "Supera la meta INS" en color de alerta. El texto de ayuda explica la meta ("cada 1.000 casos de dengue debería haber menos de 1 muerte") e indica si el periodo la cumple o la supera.
+- Menores de 15 años: número y porcentaje del total de muertes.
+- Letalidad: con 4 decimales; si supera la meta INS de 0,10 % aparece "Supera la meta INS" en color de alerta.
 - Letalidad grave: muertes / casos graves x 100.
 
-#### Indicadores por subregión
+#### Par: Muertes por semana epidemiológica + Muertes por régimen de afiliación (SGSSS)
 
-- Control segmentado "Indicador" con cuatro opciones: Muertes (conteo), Letalidad (%), Letalidad grave (%) y Tasa de mortalidad (x100.000). Por defecto, Letalidad.
-- Barras horizontales por subregión con una línea vertical punteada naranja que marca el valor departamental de referencia ("Dpto: valor").
-- Si la letalidad departamental supera la meta, aparece la advertencia "La letalidad departamental acumulada de [periodo] supera la meta nacional INS de 0,10 %".
+Se filtran en ambos sentidos: hacer clic en semanas filtra el régimen, y hacer clic en un régimen filtra la serie semanal. Sobre el par aparece lo que está seleccionado, con "Quitar selección".
+
+- Muertes por semana epidemiológica: muertes de cada semana del año epidemiológico (1 a 53), sumadas sobre todos los años del filtro; muestra en qué parte del año se concentran.
+- Muertes por régimen de afiliación (SGSSS): barras horizontales con número y porcentaje.
+
+#### Indicadores de mortalidad por subregión
+
+- Control segmentado "Indicador": Muertes (conteo), Letalidad (%), Letalidad grave (%) y Tasa de mortalidad (x100.000). Por defecto, Letalidad.
+- Barras por subregión con una línea punteada naranja con el valor del Magdalena. Con una sola subregión en el filtro, se pide ampliarlo para poder comparar.
 
 #### Muertes por sexo y edad
 
-Barras horizontales agrupadas por grupo quinquenal de edad, masculino y femenino, con número y porcentaje sobre el total.
+Barras horizontales agrupadas por grupo quinquenal de edad, masculino y femenino.
 
-#### Muertes por semana epidemiológica (selector de año propio)
-
-Barras por semana con el número de muertes sobre cada barra.
-
-#### Régimen SGSSS
-
-Barras horizontales de muertes por régimen de afiliación, con número y porcentaje.
-
-#### Indicadores por territorio (tabla con niveles)
+#### Indicadores de mortalidad por territorio
 
 - Control segmentado "Nivel de agregación": Magdalena, Subregión o Municipio.
-- Tabla con columnas Territorio, Muertes, Casos (210+220), Casos graves (220), Letalidad (%) y Letalidad grave (%), ordenada por muertes y con una fila TOTAL al final.
-- Es la única vista que baja a nivel municipio en mortalidad, y por eso se queda en conteos y letalidad (que no dependen de población), no en tasas.
+- Tabla con Territorio, Muertes, Casos (210+220), Casos graves (220), Letalidad (%) y Letalidad grave (%), con fila TOTAL. Se queda en conteos y letalidad (no dependen de población), no en tasas.
 
-#### EPS de afiliación
+#### Muertes por EPS de afiliación
 
-Barras horizontales con las 10 EPS con más muertes.
+Barras horizontales con las 10 EPS con más muertes de sus afiliados.
 
-#### Causas de muerte asociadas (CIE-10)
+#### Diagnóstico que ocasionó la muerte relacionado con el evento
 
-Barras horizontales con las 10 causas básicas de muerte más frecuentes según CIE-10, con número y porcentaje; cada causa con su color y su nombre en la leyenda. Los códigos CIE-10 se corrigen y enriquecen con la tabla de referencia durante el procesamiento.
+Barras horizontales con los 10 diagnósticos más frecuentes (codificación CIE-10), con número y porcentaje y el nombre junto a cada barra.
 
 ## Gestión
 
@@ -442,7 +457,7 @@ Administrar los datos del sistema desde la propia interfaz, sin tocar archivos n
 
 - Solo aparece para Editor y Admin. El Visor no la ve.
 - Encabezado: nota "Piezas, papelera e historial no se actualizan automáticamente" y botón "Actualizar".
-- Cuatro subpestañas: Subir, Piezas activas, Papelera e Historial.
+- Subpestañas: Subir, Piezas activas, Papelera e Historial; para el perfil de administración, además, Pronóstico (solo en las patologías que tienen pronóstico).
 
 ### Concepto de pieza
 
@@ -509,3 +524,13 @@ La papelera guarda una versión por año y código: si una pieza se edita dos ve
 
 - Procesamientos: tres métricas (Exitosos, Con error, Total), buscador por archivo, año, código o usuario, y tarjetas paginadas con archivo, año, código, fecha, usuario y una insignia "Procesado" (azul) o "Error" (roja). Los fallidos tienen un panel desplegable "Ver motivo del error". Es el registro permanente: sirve para consultar un fallo cuya notificación se cerró sin leer, o para que un colega revise desde otro equipo un error que quien subió no entiende.
 - Bitácora de movimientos: filtros por tipo de acción (píldoras: Agregar, Editar, Eliminar, Restaurar, Eliminar para siempre) y por usuario (lista desplegable), contador "N de M movimientos" y tabla con Fecha, Acción, Año, Código y Usuario. Responde a "quién hizo qué, sobre qué pieza y cuándo".
+
+### Subpestaña Pronóstico (solo Admin)
+
+Reentrenar cambia lo que el tablero pronostica para todo el mundo, por eso es un nivel más restrictivo que el resto de Gestión. Solo aparece en las patologías cuyo plugin declara un pronóstico (hoy dengue).
+
+- Estado actual: versión activa, cuándo y quién la entrenó, con qué datos (año y semana de inicio y fin) y cuántas semanas; aviso si el consolidado ya tiene datos más recientes; tabla desplegable con el error por horizonte de esa versión.
+- Botón "Reentrenar con el histórico cargado", con confirmación. El trabajo va a la misma cola que las cargas de archivos y la persona puede seguir usando el tablero; al terminar recibe una notificación emergente con el resultado.
+- Qué hace el trabajo, en orden: valida walk-forward los tres modelos y la persistencia en los horizontes de 1 a 6 semanas (último 15 % de la serie como prueba), entrena los tres modelos con todo el histórico, exporta los modelos (Prophet en su JSON nativo, XGBoost en JSON, la LSTM en .keras con su escalador aparte) y un manifest.json con fecha, usuario, rango de datos, hiperparámetros, la tabla de error y la versión del código, y deja la versión nueva como activa. Si algo falla, la versión activa anterior sigue intacta y el fallo queda registrado con su motivo.
+- Versiones: tabla con todas las versiones; ninguna se sobrescribe. "Volver a una versión anterior" + "Usar esta versión", con confirmación.
+- Historial de reentrenamientos: fecha, acción (reentrenamiento o cambio de versión activa), estado, usuario, datos usados, duración, versión y motivo del fallo si lo hubo.

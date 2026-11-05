@@ -20,9 +20,3 @@ def guardar_pieza(directorio_piezas: Path, anio: int, codigo: int, dataframe: pd
     escribir_parquet_atomico(dataframe, destino, columnas_esperadas, filas_esperadas)
     return destino
 
-
-def leer_pieza(directorio_piezas: Path, anio: int, codigo: int) -> pd.DataFrame:
-    """Lee el Parquet de una pieza existente."""
-    origen = ruta_pieza(directorio_piezas, anio, codigo)
-    datos_pieza = pd.read_parquet(origen)
-    return datos_pieza

@@ -106,18 +106,10 @@ def _panel_contexto() -> None:
             max-width: 430px;
             margin-left: 20px;
         ">
-            <!-- Icono en contenedor blanco para que sea visible sobre el fondo oscuro -->
-            <div style="
-                width: 60px; height: 60px;
-                background: rgba(255,255,255,0.92);
-                border-radius: 14px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin-bottom: 24px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-            ">
-                <img src="{escudo_uri}" style="height: 48px;">
+            <!-- Escudo de la universidad directo sobre el fondo oscuro: es la
+                 version con el texto en blanco, que en un recuadro blanco no se veria -->
+            <div style="margin-bottom: 22px;">
+                <img src="{escudo_uri}" alt="Universidad del Magdalena" style="height: 72px; display: block;">
             </div>
 
             <h1 style="
@@ -130,8 +122,8 @@ def _panel_contexto() -> None:
             ">SIVIDEM</h1>
 
             <p style="
-                color: rgba(255,255,255,0.6);
-                font-size: 11.5px;
+                color: rgba(255,255,255,0.72);
+                font-size: 13.5px;
                 margin: 0 0 22px;
                 letter-spacing: 1.2px;
                 text-transform: uppercase;
@@ -148,8 +140,8 @@ def _panel_contexto() -> None:
 
             <p style="
                 color: rgba(255,255,255,0.72);
-                font-size: 14.5px;
-                line-height: 1.8;
+                font-size: 16.5px;
+                line-height: 1.75;
                 max-width: 460px;
                 margin: 0 0 36px;
             ">
@@ -162,23 +154,23 @@ def _panel_contexto() -> None:
             <div style="display: flex; flex-direction: column; gap: 11px;">
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width:7px; height:7px; border-radius:50%; background:{NARANJA_INSTITUCIONAL}; flex-shrink:0;"></div>
-                    <span style="color:rgba(255,255,255,0.73); font-size:13.5px;">Análisis de tendencias y ciclos epidemicos</span>
+                    <span style="color:rgba(255,255,255,0.8); font-size:15.5px;">Análisis de tendencias y ciclos epidemicos</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width:7px; height:7px; border-radius:50%; background:{NARANJA_INSTITUCIONAL}; flex-shrink:0;"></div>
-                    <span style="color:rgba(255,255,255,0.73); font-size:13.5px;">Situación epidemiológica actual por subregión</span>
+                    <span style="color:rgba(255,255,255,0.8); font-size:15.5px;">Situación epidemiológica actual por subregión</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width:7px; height:7px; border-radius:50%; background:{NARANJA_INSTITUCIONAL}; flex-shrink:0;"></div>
-                    <span style="color:rgba(255,255,255,0.73); font-size:13.5px;">Perfil sociodemográfico de la población afectada</span>
+                    <span style="color:rgba(255,255,255,0.8); font-size:15.5px;">Perfil sociodemográfico de la población afectada</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width:7px; height:7px; border-radius:50%; background:{NARANJA_INSTITUCIONAL}; flex-shrink:0;"></div>
-                    <span style="color:rgba(255,255,255,0.73); font-size:13.5px;">Indicadores de morbilidad, mortalidad y letalidad</span>
+                    <span style="color:rgba(255,255,255,0.8); font-size:15.5px;">Indicadores de morbilidad, mortalidad y letalidad</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <div style="width:7px; height:7px; border-radius:50%; background:{NARANJA_INSTITUCIONAL}; flex-shrink:0;"></div>
-                    <span style="color:rgba(255,255,255,0.73); font-size:13.5px;">Canal endémico y pronóstico de corto plazo</span>
+                    <span style="color:rgba(255,255,255,0.8); font-size:15.5px;">Canal endémico y pronóstico de corto plazo</span>
                 </div>
             </div>
         </div>
@@ -196,10 +188,10 @@ def _panel_contexto() -> None:
         ">
             <img src="{icono_uri}" style="height: 56px; opacity: 0.85;">
             <div>
-                <div style="color: rgba(255,255,255,0.88); font-size: 13px; font-weight: 600;">
+                <div style="color: rgba(255,255,255,0.9); font-size: 15px; font-weight: 600;">
                     CITES &mdash; Centro de Innovación y Transferencia en Salud
                 </div>
-                <div style="color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 1px;">
+                <div style="color: rgba(255,255,255,0.68); font-size: 13.5px; margin-top: 2px;">
                     Universidad del Magdalena &middot; Santa Marta, Colombia
                 </div>
             </div>
@@ -219,7 +211,7 @@ def _panel_formulario() -> bool:
         <div style="padding: 0 2rem;">
             <p style="
                 color: {NARANJA_INSTITUCIONAL};
-                font-size: 12px;
+                font-size: 13.5px;
                 font-weight: 600;
                 letter-spacing: 1.5px;
                 text-transform: uppercase;
@@ -227,12 +219,12 @@ def _panel_formulario() -> bool:
             ">Acceso restringido</p>
             <h2 style="
                 color: {AZUL_INSTITUCIONAL};
-                font-size: 28px;
+                font-size: 32px;
                 font-weight: 700;
                 margin: 0 0 8px;
                 letter-spacing: -0.4px;
             ">Bienvenido</h2>
-            <p style="color: #6b7280; font-size: 14px; margin: 0 0 32px; line-height: 1.5;">
+            <p style="color: #6b7280; font-size: 16px; margin: 0 0 32px; line-height: 1.5;">
                 Ingresa con tus credenciales institucionales de la
                 Universidad del Magdalena.
             </p>
@@ -270,7 +262,7 @@ def _panel_formulario() -> bool:
 
     st.markdown(
         """
-        <div style="display: flex; align-items: center; gap: 8px; padding: 12px 0px; color: #6b7280; font-size: 13px; border-top: 1px solid #eceff3; line-height: 1;">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 12px 0px; color: #6b7280; font-size: 15px; border-top: 1px solid #eceff3; line-height: 1;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; display: inline-block; vertical-align: middle; margin-left: 20px; margin-top: 8px">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                 <path d="m9 12 2 2 4-4"/>
@@ -359,14 +351,14 @@ def _aplicar_estilos_login() -> None:
 
     /* Labels mas fuertes en el formulario */
     .st-key-panel_form_login label p {
-        font-size: 0.88rem !important;
+        font-size: 1.08rem !important;
         font-weight: 500 !important;
         color: #374151 !important;
     }
 
     /* Inputs mas confortables */
     .st-key-panel_form_login input {
-        font-size: 1rem !important;
+        font-size: 1.1rem !important;
         padding: 0.6rem 0.75rem !important;
     }
     </style>

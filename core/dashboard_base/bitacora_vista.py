@@ -19,14 +19,6 @@ ETIQUETAS_ACCION = {
     "eliminar_permanente": "Eliminar para siempre",
 }
 
-ICONOS_ACCION = {
-    "agregar":            ":material/add_circle:",
-    "editar":             ":material/edit:",
-    "eliminar":           ":material/delete:",
-    "restaurar":          ":material/restore:",
-    "eliminar_permanente": ":material/delete_forever:",
-}
-
 COLUMNAS_TABLA = {
     "fecha":   "Fecha",
     "accion":  "Acción",

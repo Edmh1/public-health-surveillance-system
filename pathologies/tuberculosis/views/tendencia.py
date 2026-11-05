@@ -108,14 +108,16 @@ def _mostrar_mapa(casos: pd.DataFrame) -> None:
     por_zona = casos.groupby("cod_mun_completo").size().reset_index(name="casos")
     por_zona["cod_mun_str"] = por_zona["cod_mun_completo"].astype(str)
 
-    fig = px.choropleth_mapbox(
+    # choropleth_map (MapLibre) y no choropleth_mapbox: Plotly retiro las funciones
+    # *_mapbox en versiones recientes y la imagen de Docker instala la ultima.
+    fig = px.choropleth_map(
         por_zona,
         geojson=geojson,
         locations="cod_mun_str",
         featureidkey="properties.mpio_cdpmp",
         color="casos",
         color_continuous_scale=ESCALA_INCIDENCIA,
-        mapbox_style="carto-positron",
+        map_style="carto-positron",
         center={"lat": 10.4, "lon": -74.2},
         zoom=7.5,
         title="Distribución geográfica por municipio",

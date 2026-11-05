@@ -15,6 +15,7 @@ import streamlit as st
 
 from core.audit.procesamientos import listar_procesamientos
 from core.audit.registro_piezas import obtener_pieza_activa
+from core.dashboard_base.gestion_entrenamiento import verificar_entrenamientos_pendientes
 from core.ingestion.cola import encolar_procesamiento
 from core.ingestion.nombres_archivo import NombreArchivoInvalido, analizar_nombre_archivo
 from core.storage import rutas
@@ -39,17 +40,39 @@ def _limpiar_zona_subida(patologia: str) -> None:
 
 
 def mostrar_banner_confirmacion(patologia: str) -> None:
-    """Banner persistente de "archivo enviado a procesar". Se queda visible hasta
-    que el usuario lo cierra con la X. Se llama desde _mostrar_seccion_gestion.
+    """Aviso persistente del ultimo archivo que esta persona envio a procesar, con su
+    estado (en proceso, procesado o fallo). Va arriba de las pestanas de Gestion
+    para que se vea igual si la subida se hizo desde Subir, desde Editar en Piezas
+    activas o desde la matriz. El estado se consulta en SQLite en cada render; el
+    aviso emergente de fin de procesamiento lo sigue dando fragmento_avisos_subida.
+    Se queda visible hasta que la persona lo cierra con la X.
     """
     banners = st.session_state.setdefault(CLAVE_BANNER_CONFIRMACION, {})
-    nombre_archivo = banners.get(patologia)
-    if not nombre_archivo:
+    envio = banners.get(patologia)
+    if not isinstance(envio, dict):
         return
+
+    resultado = _buscar_resultado(envio)
+    descripcion = f"{envio['archivo_original']} (año {envio['anio']}, código {envio['codigo']})"
 
     columna_mensaje, columna_cerrar = st.columns([10, 1])
     with columna_mensaje:
-        st.info(f":material/check_circle: {nombre_archivo} se envio a procesar correctamente.")
+        if resultado is None:
+            st.info(
+                f"{descripcion} se envió y está en la fila de procesamiento. Puedes seguir "
+                "usando el tablero: te llegará un aviso cuando termine, y el estado queda "
+                "en Historial. Pulsa Actualizar para ver si ya terminó.",
+                icon=":material/hourglass_top:",
+            )
+        elif resultado["estado"] == "listo":
+            st.success(f"{descripcion} se procesó correctamente.", icon=":material/check_circle:")
+        else:
+            motivo = resultado.get("motivo_fallo") or "motivo desconocido"
+            motivo = motivo.rstrip(".")
+            st.error(
+                f"{descripcion} no se pudo procesar: {motivo}. Los datos anteriores no se tocaron.",
+                icon=":material/error:",
+            )
     with columna_cerrar:
         if st.button("", icon=":material/close:", help="Cerrar este aviso", key=f"cerrar_banner_subida_{patologia}"):
             banners.pop(patologia, None)
@@ -155,18 +178,19 @@ def encolar_subida(patologia: str, anio: int, codigo: int, nombre_archivo: str, 
         usuario=usuario.nombre_usuario,
     )
 
+    envio = {
+        "patologia": patologia,
+        "anio": anio,
+        "codigo": codigo,
+        "usuario": usuario.nombre_usuario,
+        "momento_envio": momento_envio,
+    }
     pendientes = st.session_state.setdefault(CLAVE_SUBIDAS_PENDIENTES, [])
-    pendientes.append(
-        {
-            "patologia": patologia,
-            "anio": anio,
-            "codigo": codigo,
-            "usuario": usuario.nombre_usuario,
-            "momento_envio": momento_envio,
-        }
-    )
+    pendientes.append(envio)
 
-    st.session_state.setdefault(CLAVE_BANNER_CONFIRMACION, {})[patologia] = nombre_archivo
+    envio_para_banner = dict(envio)
+    envio_para_banner["archivo_original"] = nombre_archivo
+    st.session_state.setdefault(CLAVE_BANNER_CONFIRMACION, {})[patologia] = envio_para_banner
 
 
 def _buscar_resultado(pendiente: dict) -> dict | None:
@@ -221,5 +245,9 @@ def fragmento_avisos_subida(usuario_nombre: str) -> None:
     Su fragment_id nunca cambia porque no hay widgets condicionales antes de el
     en el flujo principal de ejecutar_dashboard(). Cuando el worker termina,
     notifica al usuario via st.toast() sin renderizar nada en el arbol de la pagina.
+
+    Tambien avisa cuando termina un reentrenamiento del pronostico que lanzo esta
+    persona (mismo patron, ver gestion_entrenamiento.py).
     """
     verificar_y_resolver_pendientes(usuario_nombre)
+    verificar_entrenamientos_pendientes(usuario_nombre)

@@ -22,6 +22,12 @@ DIR_REFERENCIAS = Path(__file__).parent / "config" / "referencias"
 # variables administrativas, codigos sin uso analitico).
 COLUMNAS_SIN_VALOR_ANALITICO = [
     "CONSECUTIVE",
+    "CONSECUTIVE2",
+    "consecutive_origen",
+    "CONSECUTIVE_12",
+    "Partición",
+    "Particion",
+    "Separación",
     "COD_SUB",
     "COD_PRE",
     "FEC_ARC_XL",
@@ -39,6 +45,7 @@ COLUMNAS_NO_TRANSITIVAS = [
     "nombre_nacionalidad",
     "nom_est_f_caso",
     "Nombre_evento",
+    "COD_EVE.1",
     "Pais_ocurrencia",
     "Departamento_ocurrencia",
     "Municipio_ocurrencia",
@@ -117,8 +124,15 @@ class DescartarColumnasSinValorAnalitico(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, datos):
-        columnas_a_descartar = COLUMNAS_SIN_VALOR_ANALITICO + COLUMNAS_NO_TRANSITIVAS
-        datos_descartados = datos.drop(columns=columnas_a_descartar, errors="ignore")
+        # Se compara en minusculas porque el encabezado del Excel de SIVIGILA
+        # cambia de mayusculas segun el anio (ej. CONSECUTIVE2 vs consecutive2).
+        nombres_a_descartar = COLUMNAS_SIN_VALOR_ANALITICO + COLUMNAS_NO_TRANSITIVAS
+        nombres_a_descartar_minusculas = {nombre.lower() for nombre in nombres_a_descartar}
+        columnas_a_descartar = [
+            columna for columna in datos.columns
+            if str(columna).strip().lower() in nombres_a_descartar_minusculas
+        ]
+        datos_descartados = datos.drop(columns=columnas_a_descartar)
         return datos_descartados
 
 

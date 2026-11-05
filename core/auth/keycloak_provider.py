@@ -52,6 +52,10 @@ class KeycloakAuthProvider(AuthProvider):
         client_id: str | None = None,
         client_secret_key: str | None = None,
     ):
+        # max_retries=1 (el default de la libreria) duplica la espera real ante una
+        # caida de Keycloak: cada intento agota el timeout completo antes de reintentar
+        # una vez, asi que el congelamiento real es timeout x 2. Se fija en 0 para que
+        # timeout sea el limite real de espera (corrige el bug del login congelado).
         self.cliente_keycloak = KeycloakOpenID(
             server_url=server_url or os.environ["KEYCLOAK_SERVER_URL"],
             realm_name=realm_name or os.environ["KEYCLOAK_REALM"],
@@ -67,8 +71,13 @@ class KeycloakAuthProvider(AuthProvider):
         except KeycloakAuthenticationError:
             return None
 
+        # El id_token es opcional: un cliente sin scope openid no lo emite. El
+        # access token va primero porque es el que trae realm_access (el rol).
         info_acceso = self.cliente_keycloak.decode_token(token["access_token"])
-        info_id = self.cliente_keycloak.decode_token(token["id_token"])
+        info_id = {}
+        id_token = token.get("id_token")
+        if id_token:
+            info_id = self.cliente_keycloak.decode_token(id_token)
 
         informacion = {**info_acceso, **info_id}
         usuario = _usuario_desde_token(informacion, token["access_token"], token.get("refresh_token"))

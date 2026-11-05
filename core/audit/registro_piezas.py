@@ -113,14 +113,6 @@ def marcar_activa_por_id(id_pieza: int) -> None:
     conexion.close()
 
 
-def marcar_inactiva_por_id(id_pieza: int) -> None:
-    """Marca inactiva una fila puntual por su id. Ver marcar_activa_por_id."""
-    conexion = conectar()
-    with conexion:
-        conexion.execute("UPDATE registro_piezas SET activa = 0 WHERE id = ?", (id_pieza,))
-    conexion.close()
-
-
 def eliminar_registro_pieza_por_id(id_pieza: int) -> None:
     """Elimina una fila puntual por su id: se usa cuando esa fila ya no representa
     ningun archivo real (ej. la pieza activa que se descarto al restaurar reemplazando).

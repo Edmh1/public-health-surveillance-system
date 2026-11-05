@@ -21,6 +21,7 @@ import streamlit as st
 CLAVE_FILTROS = "filtros_globales"
 _CLAVE_ANIOS_DISPONIBLES = "_filtro_anios_disponibles"
 _CLAVE_SEMANAS_DISPONIBLES = "_filtro_semanas_disponibles"
+_CLAVE_MAPEOS = "_filtro_mapeos_vigentes"
 
 # Mapeo de codigos de clasificacion a nombres legibles.
 # Aplica tanto a TIP_CAS (clasificacion inicial) como a AJUSTE / Estado_final_de_caso.
@@ -135,6 +136,7 @@ def mostrar_filtros_globales(
     # que recibir el dataframe completo en cada grafica que llama esa funcion.
     st.session_state[_CLAVE_ANIOS_DISPONIBLES] = anios_disponibles
     st.session_state[_CLAVE_SEMANAS_DISPONIBLES] = semanas_disponibles
+    st.session_state[_CLAVE_MAPEOS] = (mapeo_subregion, mapeo_estratificacion_riesgo)
 
     # ----- Header: titulo + badge de activos + boton limpiar -----
     n_activos = _contar_activos(anios_disponibles, semanas_disponibles)
@@ -285,61 +287,113 @@ def aplicar_filtros(
 
 # Claves fijas del dict de filtros (ver mostrar_filtros_globales); la unica que
 # varia por patologia es la del anio (PathologyPlugin.columna_anio), asi que
-# resumen_filtros_activos() la identifica como "la que sobra" del dict.
+# columna_anio_de_filtros() la identifica como "la que sobra" del dict.
 _CLAVES_FILTRO_CONOCIDAS = {"semana", "subregion", "nom_mun_o", "nivel_riesgo", "estado_final_de_caso"}
 
+# Clave del selector de patologia de la barra superior (layout.py).
+_CLAVE_SELECTOR_PATOLOGIA = "selector_patologia"
 
-def resumen_filtros_activos(incluir_periodo: bool = True) -> str:
-    """Texto corto con los filtros globales activos ahora mismo (ej.
-    " (Centro · 2022-2024)"), listo para pegar directo despues del titulo de
-    una grafica: asi la grafica se explica sola sin tener que mirar la barra
-    lateral para saber que esta filtrado. Cadena vacia si no hay ningun
-    filtro activo (el titulo queda igual que antes).
+LUGAR_POR_DEFECTO = "Magdalena"
 
-    Compara el anio/semana elegidos contra el rango COMPLETO disponible (ver
-    _CLAVE_ANIOS_DISPONIBLES / _CLAVE_SEMANAS_DISPONIBLES, que
-    mostrar_filtros_globales deja en session_state): el slider siempre trae
-    algun valor por defecto (el rango completo), asi que "hay un valor" no
-    alcanza para saber si la persona de verdad acoto el filtro.
 
-    incluir_periodo=False para las secciones con selector de anio PROPIO que
-    ignora el filtro temporal global (ver los "Selector propio" de tendencia.py
-    /morbilidad.py/mortalidad.py): ahi mostrar el anio/semana del filtro global
-    seria enganoso, porque esa seccion no le hace caso.
-    """
+def columna_anio_de_filtros(filtros: dict) -> str | None:
+    """Nombre de la columna de anio dentro del dict de filtros globales."""
+    return next((clave for clave in filtros if clave not in _CLAVES_FILTRO_CONOCIDAS), None)
+
+
+def anios_del_filtro() -> list[int]:
+    """Anios que deja pasar el filtro temporal global ahora mismo. Sin filtro
+    acotado, son todos los anios del consolidado cargado."""
     filtros = st.session_state.get(CLAVE_FILTROS, {})
-    if not filtros:
-        return ""
+    columna_anio = columna_anio_de_filtros(filtros)
+    anios_elegidos = filtros.get(columna_anio) if columna_anio else None
+    if anios_elegidos:
+        return sorted(int(anio) for anio in anios_elegidos)
+    anios_disponibles = st.session_state.get(_CLAVE_ANIOS_DISPONIBLES, [])
+    return sorted(int(anio) for anio in anios_disponibles)
 
-    partes = []
+
+def ultimo_anio_del_filtro() -> int | None:
+    """Anio de analisis de las graficas que necesitan UN anio concreto (las
+    semanales y las comparativas): el ultimo anio del filtro temporal global.
+    Reemplaza los antiguos selectores de anio propios de cada grafica."""
+    anios = anios_del_filtro()
+    if not anios:
+        return None
+    return anios[-1]
+
+
+def _formatear_rango(valores: list[int]) -> str:
+    valor_minimo = min(valores)
+    valor_maximo = max(valores)
+    if valor_minimo == valor_maximo:
+        return str(valor_minimo)
+    return f"{valor_minimo}-{valor_maximo}"
+
+
+def _describir_lugar(filtros: dict) -> str:
+    """Lugar del contexto: municipios si se eligieron (es lo mas especifico),
+    si no las subregiones, y si no el departamento completo."""
+    municipios = filtros.get("nom_mun_o")
+    if municipios:
+        nombres = ", ".join(str(municipio).title() for municipio in municipios)
+        return nombres
 
     subregiones = filtros.get("subregion")
     if subregiones:
-        partes.append(", ".join(subregiones))
+        if len(subregiones) == 1:
+            return f"Subregión {subregiones[0]}"
+        return f"Subregiones {', '.join(subregiones)}"
 
-    municipios = filtros.get("nom_mun_o")
-    if municipios:
-        partes.append(", ".join(municipios))
+    return LUGAR_POR_DEFECTO
 
-    if incluir_periodo:
-        columna_anio = next((clave for clave in filtros if clave not in _CLAVES_FILTRO_CONOCIDAS), None)
-        anios_elegidos = filtros.get(columna_anio) if columna_anio else None
-        anios_disponibles = st.session_state.get(_CLAVE_ANIOS_DISPONIBLES, [])
-        if (
-            anios_elegidos and len(anios_disponibles) >= 2
-            and (min(anios_elegidos), max(anios_elegidos)) != (min(anios_disponibles), max(anios_disponibles))
-        ):
-            anio_min, anio_max = min(anios_elegidos), max(anios_elegidos)
-            partes.append(str(anio_min) if anio_min == anio_max else f"{anio_min}-{anio_max}")
 
-        semanas_elegidas = filtros.get("semana")
-        semanas_disponibles = st.session_state.get(_CLAVE_SEMANAS_DISPONIBLES, [])
-        if (
-            semanas_elegidas and len(semanas_disponibles) >= 2
-            and (min(semanas_elegidas), max(semanas_elegidas)) != (min(semanas_disponibles), max(semanas_disponibles))
-        ):
-            semana_min, semana_max = int(min(semanas_elegidas)), int(max(semanas_elegidas))
-            partes.append(f"Sem. {semana_min}" if semana_min == semana_max else f"Sem. {semana_min}-{semana_max}")
+def resumen_filtros_activos(periodo: str | None = None, lugar: str | None = None) -> str:
+    """Sufijo de contexto de toda grafica: patologia, lugar y periodo, mas los
+    demas filtros que esten acotados. Ej. "Dengue · Magdalena · 2007-2024" o
+    "Dengue · Subregión Río · 2022-2024 · Sem. 1-20".
+
+    Nunca devuelve vacio. Es el criterio de la epidemiologia descriptiva (un
+    titulo identifica tiempo, lugar y persona, ver regla 1.3 de DESIGN.md): sin
+    filtros activos el contexto no desaparece, se vuelve explicito. El lugar por
+    defecto es el Magdalena (techo fijo del sistema) y el periodo por defecto es
+    el rango completo de anios del consolidado cargado, leido de session_state
+    (mostrar_filtros_globales lo deja ahi en cada rerun), nunca escrito a mano:
+    cambia cada vez que se carga un anio nuevo.
+
+    periodo reemplaza el periodo del filtro global en las graficas que analizan
+    un anio concreto (las semanales y las comparativas): ahi el sufijo declara el
+    anio o los dos anios que de verdad se estan comparando, ej. "2024 frente a
+    2023", en vez del rango del filtro.
+
+    lugar reemplaza el lugar del filtro global cuando la grafica muestra un
+    territorio mas acotado por la seleccion cruzada de su par (ej. la serie de
+    Tendencia despues de hacer clic en una subregion del mapa).
+    """
+    filtros = st.session_state.get(CLAVE_FILTROS, {})
+    partes = []
+
+    patologia = st.session_state.get(_CLAVE_SELECTOR_PATOLOGIA)
+    if patologia:
+        partes.append(str(patologia).capitalize())
+
+    partes.append(lugar or _describir_lugar(filtros))
+
+    if periodo:
+        partes.append(periodo)
+    else:
+        anios = anios_del_filtro()
+        if anios:
+            partes.append(_formatear_rango(anios))
+
+    semanas_elegidas = filtros.get("semana")
+    semanas_disponibles = st.session_state.get(_CLAVE_SEMANAS_DISPONIBLES, [])
+    if semanas_elegidas and len(semanas_disponibles) >= 2:
+        rango_elegido = (min(semanas_elegidas), max(semanas_elegidas))
+        rango_completo = (min(semanas_disponibles), max(semanas_disponibles))
+        if rango_elegido != rango_completo:
+            semanas_enteras = [int(semana) for semana in semanas_elegidas]
+            partes.append(f"Sem. {_formatear_rango(semanas_enteras)}")
 
     niveles_riesgo = filtros.get("nivel_riesgo")
     if niveles_riesgo:
@@ -349,4 +403,31 @@ def resumen_filtros_activos(incluir_periodo: bool = True) -> str:
     if clasificaciones:
         partes.append(", ".join(_etiquetar_clasificacion(valor) for valor in clasificaciones))
 
-    return f" ({' · '.join(partes)})" if partes else ""
+    return " · ".join(partes)
+
+
+def firma_filtros_globales() -> str:
+    """Huella de los filtros globales vigentes. La usa la seleccion cruzada de
+    los pares de graficas (seleccion_cruzada.py) para borrarse sola cuando la
+    persona cambia cualquier filtro de la barra lateral."""
+    filtros = st.session_state.get(CLAVE_FILTROS, {})
+    patologia = st.session_state.get(_CLAVE_SELECTOR_PATOLOGIA)
+    partes = [str(patologia)]
+    for clave in sorted(filtros):
+        valores = filtros[clave]
+        partes.append(f"{clave}={sorted(str(valor) for valor in valores)}")
+    return "|".join(partes)
+
+
+def aplicar_filtros_sin_periodo(datos: pd.DataFrame) -> pd.DataFrame:
+    """Aplica los filtros globales vigentes MENOS el de anio. Lo usan las
+    comparativas semanales: el anio de comparacion es el inmediatamente anterior
+    en los datos, este o no dentro del filtro temporal, asi que no puede salir
+    del dataframe ya filtrado por anio. Usa los mismos mapeos que la barra
+    lateral (mostrar_filtros_globales los deja en session_state).
+    """
+    filtros = st.session_state.get(CLAVE_FILTROS, {})
+    columna_anio = columna_anio_de_filtros(filtros)
+    filtros_sin_anio = {clave: valores for clave, valores in filtros.items() if clave != columna_anio}
+    mapeo_subregion, mapeo_estratificacion_riesgo = st.session_state.get(_CLAVE_MAPEOS, ({}, {}))
+    return aplicar_filtros(datos, filtros_sin_anio, mapeo_subregion, mapeo_estratificacion_riesgo)

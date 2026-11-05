@@ -218,14 +218,20 @@ def obtener_poblacion_por_municipio_anio() -> pd.DataFrame:
 _AREA_DANE_CABECERA = "Cabecera Municipal"
 _AREA_DANE_RESTO = "Centros Poblados y Rural Disperso"
 
-# El dato SIVIGILA distingue 3 zonas de ocurrencia (cabecera municipal, centro
-# poblado, rural disperso: ver _ZONA_AREA_MAP en tendencia.py) pero el DANE
-# solo publica 2 categorias no-Total (cabecera vs el resto combinado); centro
-# poblado y rural disperso comparten esa misma poblacion.
+# Zonas con tasa valida dentro de un municipio. El dato SIVIGILA distingue 3
+# areas de ocurrencia (1 cabecera municipal, 2 centro poblado, 3 rural disperso)
+# pero el DANE solo publica 2 categorias de poblacion: cabecera, y centros
+# poblados y rural disperso JUNTOS. Una tasa necesita casos y poblacion a la
+# misma escala, asi que la escala mas fina valida es cabecera frente a resto
+# rural. Antes se calculaban tres tasas, dividiendo los casos de centro poblado y
+# los de rural disperso entre la MISMA poblacion combinada: ninguna de esas dos
+# era una tasa real (solo su suma lo es). Centro poblado y rural disperso se
+# muestran por separado unicamente como conteo de casos.
+ZONA_CABECERA = "Cabecera municipal"
+ZONA_RESTO_RURAL = "Resto rural (centros poblados y rural disperso)"
 ZONA_A_AREA_DANE = {
-    "Cabecera municipal": _AREA_DANE_CABECERA,
-    "Centro poblado": _AREA_DANE_RESTO,
-    "Rural disperso": _AREA_DANE_RESTO,
+    ZONA_CABECERA: _AREA_DANE_CABECERA,
+    ZONA_RESTO_RURAL: _AREA_DANE_RESTO,
 }
 
 
@@ -375,13 +381,16 @@ def calcular_tasa_por_zona_municipio(
     codigo_municipio: int,
     anios_en_alcance: list[int],
 ) -> dict[str, float | None]:
-    """Tasa por 100.000 hab. de cada zona (cabecera municipal, centro poblado,
-    rural disperso) DENTRO de un solo municipio (mapa, 3er nivel de detalle).
+    """Tasa por 100.000 hab. de las dos zonas con tasa valida DENTRO de un solo
+    municipio (mapa, 3er nivel de detalle): cabecera municipal y resto rural
+    (centros poblados y rural disperso juntos). Ver ZONA_A_AREA_DANE: el DANE no
+    separa la poblacion de centro poblado y la de rural disperso, asi que esas
+    dos no tienen tasa propia.
 
-    Centro poblado y rural disperso comparten denominador porque el DANE no
-    los separa (ver ZONA_A_AREA_DANE / obtener_poblacion_por_zona_municipio_
-    anio); cabecera usa su propio denominador. None si falta poblacion DANE del
-    municipio para alguno de los anios pedidos, nunca en cero.
+    casos_por_zona: {ZONA_CABECERA: n, ZONA_RESTO_RURAL: n}; el area de ocurrencia
+    1 es la cabecera y las areas 2 y 3 son el resto rural. None si
+    falta poblacion DANE del municipio para alguno de los anios pedidos, nunca
+    en cero.
     """
     if not anios_en_alcance:
         return {zona: None for zona in ZONA_A_AREA_DANE}

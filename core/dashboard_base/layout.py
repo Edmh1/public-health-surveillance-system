@@ -12,6 +12,7 @@ import streamlit as st
 
 from core.auth.permisos import (
     PERMISO_ELIMINAR_PIEZA,
+    PERMISO_REENTRENAR_PRONOSTICO,
     PERMISO_SUBIR_PIEZA,
     PERMISO_VER_BITACORA,
     PERMISO_VER_PAPELERA,
@@ -30,6 +31,7 @@ from core.dashboard_base.estilos import (
     aplicar_estilos,
     imagen_a_data_uri,
 )
+from core.dashboard_base.gestion_entrenamiento import mostrar_reentrenamiento
 from core.dashboard_base.gestion_papelera import mostrar_papelera
 from core.dashboard_base.gestion_piezas import mostrar_piezas_activas
 from core.dashboard_base.gestion_subida import (
@@ -97,11 +99,11 @@ def ejecutar_dashboard() -> None:
         fragmento_banner_datos_nuevos(patologia)
         fragmento_avisos_subida(usuario.nombre_usuario)
 
-    datos_filtrados = _aplicar_filtro_cod_eve(plugin, datos_filtrados)
+    datos_filtrados = _aplicar_filtro_cod_eve(patologia, plugin, datos_filtrados)
     _mostrar_pestanas(patologia, usuario, plugin, datos_filtrados)
 
 
-def _aplicar_filtro_cod_eve(plugin, datos: pd.DataFrame) -> pd.DataFrame:
+def _aplicar_filtro_cod_eve(patologia: str, plugin, datos: pd.DataFrame) -> pd.DataFrame:
     etiquetas = plugin.manifest.get("etiquetas_cod_eve")
     if not etiquetas or "cod_eve" not in datos.columns:
         return datos
@@ -109,12 +111,13 @@ def _aplicar_filtro_cod_eve(plugin, datos: pd.DataFrame) -> pd.DataFrame:
     pares = sorted(etiquetas.items(), key=lambda x: x[0])
     codigos_legibles = [f"{label} ({cod})" for cod, label in pares]
 
+    # La clave lleva la patologia para que la seleccion de una no se arrastre a otra.
     seleccionadas = st.pills(
         "Tipo de evento",
         options=codigos_legibles,
         selection_mode="multi",
         default=[],
-        key="filtro_cod_eve_patologia",
+        key=f"filtro_cod_eve_{patologia}",
     )
 
     if not seleccionadas:
@@ -206,7 +209,7 @@ def _mostrar_barra_superior(usuario, patologias_disponibles: list[str]) -> str:
                         <div style="color:{AZUL_INSTITUCIONAL}; font-size:18px; font-weight:500; letter-spacing:0.3px;">
                             SIVIDEM
                         </div>
-                        <div style="color:#666666; font-size:12px;">CITES - Universidad del Magdalena</div>
+                        <div style="color:#666666; font-size:13.5px;">CITES - Universidad del Magdalena</div>
                     </div>
                 </div>
                 """,
@@ -261,6 +264,7 @@ def _tiene_algo_que_gestionar(usuario) -> bool:
             PERMISO_VER_PAPELERA,
             PERMISO_VER_BITACORA,
             PERMISO_VER_PROCESAMIENTOS,
+            PERMISO_REENTRENAR_PRONOSTICO,
         )
     )
 
@@ -285,22 +289,35 @@ def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
         tiene_permiso(usuario.rol, PERMISO_VER_PROCESAMIENTOS)
         or tiene_permiso(usuario.rol, PERMISO_VER_BITACORA)
     )
+    # Reentrenar solo aparece si el rol lo permite (Admin) Y la patologia declara
+    # un pronostico en su plugin: el nucleo no pregunta por el nombre de la
+    # patologia (ver PathologyPlugin.obtener_pronostico).
+    plugin = obtener_patologia(patologia)
+    tiene_pronostico = (
+        tiene_permiso(usuario.rol, PERMISO_REENTRENAR_PRONOSTICO)
+        and plugin.obtener_pronostico() is not None
+    )
 
     entradas = []
     if tiene_subir:     entradas.append(":material/upload_file: Subir")
     if tiene_piezas:    entradas.append(":material/folder_open: Piezas activas")
     if tiene_papelera:  entradas.append(":material/delete: Papelera")
     if tiene_historial: entradas.append(":material/history: Historial")
+    if tiene_pronostico: entradas.append(":material/model_training: Pronóstico")
 
     if not entradas:
         return
+
+    # Arriba de las pestanas y no dentro de Subir: una subida tambien se puede
+    # lanzar desde Editar en Piezas activas o desde la matriz, y el aviso con su
+    # estado tiene que verse desde donde se hizo.
+    mostrar_banner_confirmacion(patologia)
 
     tabs = st.tabs(entradas)
     i = 0
 
     if tiene_subir:
         with tabs[i]:
-            mostrar_banner_confirmacion(patologia)
             mostrar_formulario_subida(patologia, usuario)
         i += 1
 
@@ -322,3 +339,8 @@ def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
                 if tiene_permiso(usuario.rol, PERMISO_VER_PROCESAMIENTOS):
                     st.divider()
                 mostrar_bitacora(patologia)
+        i += 1
+
+    if tiene_pronostico:
+        with tabs[i]:
+            mostrar_reentrenamiento(patologia, usuario)

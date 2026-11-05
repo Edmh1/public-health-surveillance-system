@@ -6,9 +6,10 @@ from typing import Any
 import pandas as pd
 import yaml
 
-from core.registry import PathologyPlugin
+from core.registry import ModuloPronostico, PathologyPlugin
 from pathologies.dengue.canal_endemico import calcular_canal_endemico as calcular_canal_endemico_dengue
 from pathologies.dengue.clean import limpiar as limpiar_dengue
+from pathologies.dengue.entrenamiento import PronosticoDengue
 from pathologies.dengue.geografia import obtener_mapeo_subregion as obtener_mapeo_subregion_dengue
 from pathologies.dengue.indicators import calcular_indicadores as calcular_indicadores_dengue
 from pathologies.dengue.poblacion import obtener_mapeo_estratificacion_riesgo as obtener_mapeo_estratificacion_riesgo_dengue
@@ -70,3 +71,6 @@ class DenguePathologyPlugin(PathologyPlugin):
 
     def obtener_mapeo_estratificacion_riesgo(self, datos: pd.DataFrame) -> dict[int, str]:
         return obtener_mapeo_estratificacion_riesgo_dengue(datos)
+
+    def obtener_pronostico(self) -> ModuloPronostico | None:
+        return PronosticoDengue()
