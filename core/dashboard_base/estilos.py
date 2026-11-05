@@ -12,6 +12,7 @@ no una decoracion.
 import base64
 from pathlib import Path
 
+import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as componentes_v1
 
@@ -101,15 +102,34 @@ def eje_semanal(ultima_semana: int, dtick: int = 1) -> dict:
     )
 
 
+def agregar_linea_referencia(fig, valor: float, nombre: str, eje: str = "y") -> None:
+    """Linea punteada naranja de referencia (un promedio, el valor del Magdalena)
+    que cruza TODA el area de dibujo. eje="y": horizontal a la altura valor;
+    eje="x": vertical en valor (barras horizontales).
+
+    Se dibuja como forma de borde a borde y no como traza entre la primera y la
+    ultima barra: la traza empezaba y terminaba en el centro de esas barras y se
+    veia desalineada. La entrada de la leyenda es una traza sin datos con el
+    mismo estilo, y el valor va en ese nombre y no como texto sobre la linea.
+    """
+    estilo = dict(color=NARANJA_INSTITUCIONAL, dash="dot", width=2)
+    if eje == "x":
+        fig.add_vline(x=valor, line=estilo, layer="above")
+    else:
+        fig.add_hline(y=valor, line=estilo, layer="above")
+    fig.add_trace(go.Scatter(
+        x=[None], y=[None], mode="lines", line=estilo, name=nombre, hoverinfo="skip",
+    ))
+
+
 # Alturas aproximadas (px) de lo que va encima del area de dibujo, para que el
 # margen superior alcance justo y no quede ni apinado ni con un hueco grande.
 _ALTO_TITULO_DOS_LINEAS = 62
 _ALTO_FILA_LEYENDA = 34
-_RESPIRO_SUPERIOR = 10
-_CENTRO_TITULO_DESDE_ARRIBA = 38
-# Altura con que st.plotly_chart dibuja una figura que no declara la suya. El
-# tema la fija explicitamente: la posicion del titulo se calcula en pixeles y
-# tiene que coincidir con la altura real en cualquier pantalla.
+# Aire (px) entre el borde superior de la figura y el titulo. Con menos, en
+# pantalla completa el borde de arriba de la primera linea quedaba cortado.
+_RESPIRO_SUPERIOR = 24
+# Altura con que st.plotly_chart dibuja una figura que no declara la suya.
 _ALTURA_POR_DEFECTO = 450
 
 # Ancho que se supone para una grafica a ancho completo y para una de media
@@ -195,6 +215,10 @@ def _impedir_valores_negativos(fig) -> None:
             else:
                 ejes_y_positivos.append(_valores_no_negativos(traza.y))
         elif traza.type == "scatter":
+            # Una traza sin datos (solo entrada de leyenda, ver
+            # agregar_linea_referencia) no dice nada sobre el signo del eje.
+            if traza.y is None or all(valor is None for valor in traza.y):
+                continue
             ejes_y_positivos.append(_valores_no_negativos(traza.y))
     if ejes_x_positivos and all(ejes_x_positivos):
         fig.update_xaxes(minallowed=0)
@@ -232,11 +256,13 @@ def aplicar_tema(fig, titulo: str | None = None, contexto: str | None = None, an
     lleva_titulo = bool(titulo or contexto)
     lleva_leyenda = _tiene_leyenda(fig)
 
-    margen_necesario = _RESPIRO_SUPERIOR
+    alto_leyenda = 0
+    if lleva_leyenda:
+        alto_leyenda = _ALTO_FILA_LEYENDA * _filas_de_leyenda(fig, ancho)
+
+    margen_necesario = _RESPIRO_SUPERIOR + alto_leyenda
     if lleva_titulo:
         margen_necesario += _ALTO_TITULO_DOS_LINEAS
-    if lleva_leyenda:
-        margen_necesario += _ALTO_FILA_LEYENDA * _filas_de_leyenda(fig, ancho)
     margen_actual = fig.layout.margin.t or 0
     margen_superior = max(margen_actual, margen_necesario)
 
@@ -244,15 +270,14 @@ def aplicar_tema(fig, titulo: str | None = None, contexto: str | None = None, an
     # chocaba con la leyenda. Se deja aire entre el anillo y la leyenda.
     fig.update_traces(domain=dict(y=[0, 0.88]), selector=dict(type="pie"))
 
-    posicion_leyenda = fig.layout.legend.y
-    if posicion_leyenda is None or posicion_leyenda < 1:
-        posicion_leyenda = 1.02
-
+    # La leyenda va pegada al borde superior del area de dibujo (y=1 exacto) y
+    # no a una fraccion por encima: una fraccion son mas pixeles en pantalla
+    # completa, y la leyenda subia hasta montarse sobre el titulo.
     fig.update_layout(
         font=FUENTE_GRAFICA,
         margin=dict(t=margen_superior),
         legend=dict(
-            orientation="h", yanchor="bottom", y=posicion_leyenda, xanchor="left", x=0,
+            orientation="h", yanchor="bottom", y=1, xanchor="left", x=0,
             title_text="", font=dict(size=FUENTE_GRAFICA["size"]),
         ),
         hoverlabel=dict(font=dict(size=14)),
@@ -282,27 +307,32 @@ def aplicar_tema(fig, titulo: str | None = None, contexto: str | None = None, an
         _impedir_valores_negativos(fig)
 
     if lleva_titulo:
-        partes = []
-        if titulo:
-            partes.append(f"<b>{titulo}</b>")
-        if contexto:
-            partes.append(
-                f"<span style='font-size:{TAMANO_FUENTE_CONTEXTO}px;color:{COLOR_TEXTO_CONTEXTO}'>{contexto}</span>"
-            )
-        # Se ancla el CENTRO del bloque de dos lineas a una distancia fija del
-        # borde superior: con yanchor="top" Plotly ubica mal un titulo de varias
-        # lineas y la primera quedaba recortada arriba.
-        altura = fig.layout.height or _ALTURA_POR_DEFECTO
+        texto_titulo = f"<b>{titulo}</b>" if titulo else ""
+        # El contexto va como subtitulo nativo de Plotly y no como segunda linea
+        # con <br>: Plotly ancla un titulo de varias lineas por su primera linea,
+        # y la segunda quedaba colgando sobre la leyenda.
+        texto_subtitulo = f"<b>{contexto}</b>" if contexto else ""
+        subtitulo = dict(
+            text=texto_subtitulo,
+            font=dict(size=TAMANO_FUENTE_CONTEXTO, color=COLOR_TEXTO_CONTEXTO),
+        )
+        # El bloque se ancla por ARRIBA al borde superior de la figura
+        # (yref="container", y=1) con un respiro fijo en pixeles. Asi su posicion
+        # no depende de la altura: antes se ubicaba como fraccion de la altura
+        # total y en pantalla completa (figura mas alta) bajaba hasta montarse
+        # sobre la leyenda. La leyenda, a su vez, va pegada al area de dibujo, y
+        # el margen superior reserva el alto de los dos.
         fig.update_layout(
             title=dict(
-                text="<br>".join(partes),
+                text=texto_titulo,
+                subtitle=subtitulo,
                 x=0,
                 xanchor="left",
                 xref="container",
-                y=1 - _CENTRO_TITULO_DESDE_ARRIBA / altura,
-                yanchor="middle",
+                y=1,
+                yanchor="top",
                 yref="container",
-                pad=dict(t=0, l=6),
+                pad=dict(t=_RESPIRO_SUPERIOR, l=6),
                 font=dict(size=TAMANO_FUENTE_TITULO),
             )
         )

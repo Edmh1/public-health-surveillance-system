@@ -34,6 +34,7 @@ from core.dashboard_base.estilos import (
     ANCHO_MEDIA_COLUMNA,
     NARANJA_INSTITUCIONAL,
     OPACIDAD_ATENUADA,
+    agregar_linea_referencia,
     avisar_datos_insuficientes,
     describir_cantidad,
     eje_semanal,
@@ -302,16 +303,7 @@ def _mostrar_casos_por_anio(casos: pd.DataFrame, lugar_seleccion: str | None) ->
     # solo anio el promedio es ese mismo anio y la linea no aporta nada.
     if len(por_anio) >= 2:
         promedio = float(por_anio["casos"].mean())
-        # La referencia va en la leyenda y no como texto sobre la linea: el
-        # texto se montaba sobre las etiquetas del eje y sobre las barras.
-        fig.add_trace(go.Scatter(
-            x=por_anio["ano"],
-            y=[promedio] * len(por_anio),
-            mode="lines",
-            line=dict(color=NARANJA_INSTITUCIONAL, dash="dot", width=2),
-            name=f"Promedio anual ({promedio:,.0f})",
-            hoverinfo="skip",
-        ))
+        agregar_linea_referencia(fig, promedio, f"Promedio anual ({promedio:,.0f})")
     fig.update_layout(
         **_LAYOUT_BASE,
         yaxis={"range": rango_con_margen(por_anio["casos"].max())},
@@ -761,14 +753,7 @@ def _grafica_semanal_anio(casos_anio: pd.DataFrame, anio: int) -> None:
         labels={"semana": "Semana epidemiológica", "casos": "Casos"},
     )
     fig.update_traces(name=f"Casos {anio}", showlegend=True, marker_color=AZUL_INSTITUCIONAL)
-    fig.add_trace(go.Scatter(
-        x=semanal["semana"],
-        y=[promedio] * len(semanal),
-        mode="lines",
-        line=dict(color=NARANJA_INSTITUCIONAL, dash="dot", width=2),
-        name=f"Promedio semanal ({promedio:,.0f})",
-        hoverinfo="skip",
-    ))
+    agregar_linea_referencia(fig, promedio, f"Promedio semanal ({promedio:,.0f})")
     fig.update_layout(**_LAYOUT_BASE)
     fig.update_xaxes(**eje_semanal(int(semanal["semana"].max()), dtick=2))
     mostrar_grafica(fig, "Casos por semana epidemiológica", resumen_filtros_activos(periodo=str(anio)), ancho=ANCHO_MEDIA_COLUMNA)

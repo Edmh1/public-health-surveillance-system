@@ -514,6 +514,8 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
 
     fig = go.Figure(go.Sankey(
         arrangement="snap",
+        # Deja libre la franja de arriba para los encabezados de columna.
+        domain=dict(y=[0, 0.92]),
         node=dict(
             label=etiquetas,
             x=posiciones_x,
@@ -542,9 +544,12 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
         (0.5, "center", "Clasificación inicial"),
         (0.99, "right", "Clasificación final"),
     ]
+    # Van por DENTRO del borde superior del area de dibujo (y=1, yanchor top) y
+    # el Sankey baja un poco su dominio para dejarles sitio: asi la leyenda y el
+    # titulo del tema quedan encima sin pisarse, tambien en pantalla completa.
     for pos_x, ancla, texto in encabezados:
         fig.add_annotation(
-            x=pos_x, y=1.03, xref="paper", yref="paper",
+            x=pos_x, y=1, xref="paper", yref="paper", yanchor="top",
             text=f"<b>{texto}</b>", showarrow=False,
             xanchor=ancla, font=dict(color="#374151"),
         )
@@ -568,13 +573,12 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
 
     fig.update_layout(
         height=660,
-        margin=dict(l=10, r=10, t=190, b=20),
+        margin=dict(l=10, r=10, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
         showlegend=True,
-        legend=dict(y=1.10),
     )
     mostrar_grafica(fig, "Gráfico de Sankey de flujo de clasificación de casos", resumen_filtros_activos())
 

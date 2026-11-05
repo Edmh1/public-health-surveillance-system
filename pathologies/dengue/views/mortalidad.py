@@ -40,6 +40,7 @@ from core.dashboard_base.estilos import (
     ANCHO_MEDIA_COLUMNA,
     NARANJA_INSTITUCIONAL,
     OPACIDAD_ATENUADA,
+    agregar_linea_referencia,
     avisar_datos_insuficientes,
     describir_cantidad,
     eje_semanal,
@@ -699,16 +700,7 @@ def _mostrar_tasas_subregion(
     )
     fig.update_traces(textposition="outside", marker_color=AZUL_INSTITUCIONAL, name=etiqueta_eje, showlegend=True)
     if ref_val is not None:
-        # El valor del Magdalena va en la leyenda y no como texto sobre la linea:
-        # ese texto se montaba sobre la barra de arriba.
-        fig.add_trace(go.Scatter(
-            x=[ref_val, ref_val],
-            y=[df["subregion"].iloc[0], df["subregion"].iloc[-1]],
-            mode="lines",
-            line=dict(color=NARANJA_INSTITUCIONAL, dash="dot", width=2),
-            name=f"Magdalena: {ref_val:{formato}}",
-            hoverinfo="skip",
-        ))
+        agregar_linea_referencia(fig, ref_val, f"Magdalena: {ref_val:{formato}}", eje="x")
     if indicador == "Muertes (conteo)":
         suma_subregiones = int(df["valor"].sum())
         sin_subregion = ref_m - suma_subregiones
