@@ -297,6 +297,10 @@ def _mostrar_formulario_editar(patologia: str, pieza: dict, usuario, clave_pieza
     encolar_subida(patologia, anio, codigo, archivo.name, archivo.getvalue(), usuario)
     st.session_state.setdefault(CLAVE_EDITANDO, {})[clave_pieza] = False
     contadores[clave_pieza] = contador + 1
+    # Sin este rerun el formulario seguia dibujado con el archivo puesto despues de
+    # encolar, y parecia que la subida se habia quedado pegada. El aviso con el
+    # estado del procesamiento aparece arriba de las pestanas de Gestion.
+    st.rerun()
 
 
 def _eliminar(patologia: str, anio: int, codigo: int, usuario) -> None:
