@@ -10,4 +10,54 @@ rutas:
   piezas: data/dengue/piezas
   consolidado: data/dengue/consolidado/dengue_consolidado.parquet
   papelera: data/dengue/papelera
+# Columnas OBLIGATORIAS del Excel de SIVIGILA: todas las que el sistema usa en
+# alguna parte (graficas, indicadores, filtros, entrenamiento del pronostico,
+# cruces con tablas de referencia y variables calculadas a partir de ellas).
+# Si una falta, el archivo se rechaza: la parte que la usa diria "sin datos"
+# cuando si los hay.
+#
+# A la izquierda, el nombre interno: con el que se guarda en las piezas y en la
+# consolidada, y el que lee el codigo. NO se cambia.
+# A la derecha, el encabezado tal como viene hoy en el Excel (las mayusculas no
+# importan). Si SIVIGILA renombra una columna, solo se cambia este lado.
+#
+# Las columnas que no estan aqui no son obligatorias: si vienen se guardan, si
+# faltan se crean vacias sin error. Un encabezado que el sistema no conoce se
+# descarta sin error, y solo se menciona cuando falta una obligatoria, como pista
+# de cual renombrar. Para volver obligatoria una columna, se agrega una linea.
 columnas_esperadas:
+  # Serie de tiempo, entrenamiento, canal endemico y todo el tablero
+  cod_eve: COD_EVE
+  ano: ANO
+  semana: SEMANA
+  confirmados: CONFIRMADOS
+  # Territorio: codigo DIVIPOLA completo y recorte a Magdalena
+  cod_dpto_o: COD_DPTO_O
+  cod_mun_o: COD_MUN_O
+  # Cruce con la tabla de paises
+  cod_pais_o: COD_PAIS_O
+  # Mapa por zona y estratificacion de riesgo
+  area: AREA
+  # Edad en anios (calculada de edad + uni_med) y piramide
+  sexo: SEXO
+  edad: EDAD
+  uni_med: UNI_MED
+  # Etnia: nom_grupo se completa desde gru_pob con la tabla de grupos etnicos
+  per_etn: PER_ETN
+  nom_grupo: NOM_GRUPO
+  gru_pob: GRU_POB
+  # EPS (cruce con aseguradoras), regimen, estrato, UPGD y gestantes
+  cod_ase: COD_ASE
+  tip_ss: TIP_SS
+  estrato: ESTRATO
+  nom_upgd: NOMBRE_UPGD
+  gp_gestan: GP_GESTAN
+  # Cruce con la tabla de ocupaciones
+  ocupacion: OCUPACION
+  # Morbilidad: fuente, clasificacion inicial y final, hospitalizacion
+  fuente: FUENTE
+  tip_cas: TIP_CAS
+  estado_final_de_caso: ESTADO_FINAL_DE_CASO
+  pac_hos: PAC_HOS
+  # Cruce con CIE-10 y causas de muerte
+  cbmte: CBMTE

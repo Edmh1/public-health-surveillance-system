@@ -9,12 +9,16 @@ de grupo etnico.
 from pathlib import Path
 
 import pandas as pd
+import yaml
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 
+from pathologies.dengue.fechas import convertir_columna_fecha, detectar_ordenes
+
 DIR_REFERENCIAS = Path(__file__).parent / "config" / "referencias"
+RUTA_MANIFEST = Path(__file__).parent / "manifest.yaml"
 
 # Paso 1, bloque 1: columnas sin valor analitico (identificadores de exportacion,
 # variables administrativas, codigos sin uso analitico).
@@ -119,6 +123,127 @@ REEMPLAZOS_CODIGO_CIE10 = {
 }
 
 
+def leer_columnas_esperadas():
+    """Columnas obligatorias declaradas en columnas_esperadas de manifest.yaml, como
+    {nombre interno: encabezado en el Excel}, todo en minuscula. Se lee en cada
+    limpieza para que un cambio en el manifest aplique en la siguiente subida sin
+    reiniciar nada.
+    """
+    with open(RUTA_MANIFEST, encoding="utf-8") as archivo_manifest:
+        manifest = yaml.safe_load(archivo_manifest) or {}
+    declaradas = manifest.get("columnas_esperadas") or {}
+    columnas_esperadas = {}
+    for nombre_interno, encabezado_excel in declaradas.items():
+        columnas_esperadas[str(nombre_interno).lower()] = str(encabezado_excel).lower()
+    return columnas_esperadas
+
+
+def _columnas_procesadas():
+    """Nombres internos de todas las columnas que la limpieza convierte y guarda,
+    obligatorias o no."""
+    columnas = COLUMNAS_FECHA + ["ocupacion"] + COLUMNAS_ENTERAS + COLUMNAS_TEXTO_A_MINUSCULAS + ["gru_pob"]
+    return list(dict.fromkeys(columnas))
+
+
+def _columnas_no_obligatorias(columnas_esperadas):
+    """Columnas que la limpieza procesa pero que no estan en columnas_esperadas del
+    manifest: hoy no las usa ninguna parte del sistema. En el Excel vienen con su
+    nombre interno; si faltan se crean vacias."""
+    no_obligatorias = []
+    for columna in _columnas_procesadas():
+        if columna not in columnas_esperadas:
+            no_obligatorias.append(columna)
+    return no_obligatorias
+
+
+def _encabezados_conocidos(columnas_esperadas):
+    """Todo encabezado del Excel que el sistema reconoce (en minuscula): los
+    obligatorios con el nombre que declara el manifest, los no obligatorios y los
+    que el paso 1 descarta."""
+    obligatorios = list(columnas_esperadas.values())
+    no_obligatorios = _columnas_no_obligatorias(columnas_esperadas)
+    descartables = [columna.lower() for columna in COLUMNAS_SIN_VALOR_ANALITICO + COLUMNAS_NO_TRANSITIVAS]
+    return set(obligatorios + no_obligatorios + descartables)
+
+
+class ValidarEncabezados(BaseEstimator, TransformerMixin):
+    """Paso 0: el Excel debe traer todas las columnas obligatorias de
+    columnas_esperadas del manifest, con el encabezado que ahi se declara (las
+    mayusculas no importan). Son las que el sistema usa en alguna parte; si una
+    falta, la parte que la usa diria "sin datos" cuando si los hay, asi que el
+    archivo se rechaza.
+
+    Cuando falta una obligatoria, el mensaje tambien lista los encabezados que el
+    sistema no reconoce: es la pista de cual renombrar (asi se detecto Nom_upgd ->
+    Nombre_upgd). Si no falta ninguna obligatoria, los encabezados desconocidos no
+    impiden nada: los descarta el paso AlinearColumnas.
+    """
+
+    def fit(self, datos, y=None):
+        return self
+
+    def transform(self, datos):
+        columnas_esperadas = leer_columnas_esperadas()
+        nombre_original_por_minuscula = {str(columna).lower(): str(columna) for columna in datos.columns}
+        encabezados = set(nombre_original_por_minuscula)
+
+        faltantes = []
+        for encabezado_excel in columnas_esperadas.values():
+            if encabezado_excel not in encabezados:
+                faltantes.append(encabezado_excel)
+        if not faltantes:
+            return datos
+
+        nombres_faltantes = ", ".join(encabezado.upper() for encabezado in faltantes)
+        partes_mensaje = [f"Faltan columnas obligatorias: {nombres_faltantes}."]
+
+        desconocidas = sorted(encabezados - _encabezados_conocidos(columnas_esperadas))
+        if desconocidas:
+            nombres_desconocidas = ", ".join(nombre_original_por_minuscula[columna] for columna in desconocidas)
+            partes_mensaje.append(f"El archivo trae columnas que el sistema no reconoce: {nombres_desconocidas}.")
+            partes_mensaje.append(
+                "Si SIVIGILA le cambio el nombre a una columna, renombre el encabezado en el Excel "
+                "al nombre esperado y vuelva a subir; si el cambio es definitivo, avise al equipo "
+                "tecnico para actualizar columnas_esperadas en el manifest."
+            )
+        raise ValueError(" ".join(partes_mensaje))
+
+
+class AlinearColumnas(BaseEstimator, TransformerMixin):
+    """Paso 1b: deja el archivo con un solo esquema, sin importar como lo exporte
+    SIVIGILA ese anio.
+    - Descarta los encabezados que el sistema no conoce (no se guardan; asi no se
+      cuelan a la consolidada columnas sueltas como paso con nombre_upgd).
+    - Renombra cada obligatoria del encabezado del Excel a su nombre interno
+      (Nombre_upgd -> nom_upgd): piezas, consolidada y codigo usan un solo nombre.
+    - Crea vacias las no obligatorias que falten (por ejemplo nacionalidad, que
+      SIVIGILA dejo de exportar).
+    """
+
+    def fit(self, datos, y=None):
+        return self
+
+    def transform(self, datos):
+        columnas_esperadas = leer_columnas_esperadas()
+        datos_alineados = datos.copy()
+        datos_alineados.columns = datos_alineados.columns.str.lower()
+
+        encabezados_conocidos = _encabezados_conocidos(columnas_esperadas)
+        desconocidas = [columna for columna in datos_alineados.columns if columna not in encabezados_conocidos]
+        datos_alineados = datos_alineados.drop(columns=desconocidas)
+
+        nombre_interno_por_encabezado = {
+            encabezado_excel: nombre_interno for nombre_interno, encabezado_excel in columnas_esperadas.items()
+        }
+        datos_alineados = datos_alineados.rename(columns=nombre_interno_por_encabezado)
+
+        for columna in _columnas_no_obligatorias(columnas_esperadas):
+            if columna not in datos_alineados.columns:
+                datos_alineados[columna] = pd.NA
+
+        return datos_alineados
+
+
 class DescartarColumnasSinValorAnalitico(BaseEstimator, TransformerMixin):
     """Paso 1: descarta las 29 columnas sin valor analitico o redundantes con su codigo."""
 
@@ -154,8 +279,9 @@ class EstandarizarMinusculas(BaseEstimator, TransformerMixin):
         return datos_estandarizados
 
 
-def _a_datetime(bloque_columnas):
-    return bloque_columnas.apply(pd.to_datetime, errors="coerce")
+def _a_datetime(bloque_columnas, ordenes):
+    convertir_columna = lambda serie: convertir_columna_fecha(serie, ordenes)
+    return bloque_columnas.apply(convertir_columna)
 
 
 def _a_float64(bloque_columnas):
@@ -175,11 +301,19 @@ class ConvertirTipos(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, datos):
-        columnas_originales = list(datos.columns)
+        # Todas las columnas que se convierten existen: las obligatorias las valida el
+        # paso 0 y las no obligatorias que faltaban las creo vacias AlinearColumnas.
+        datos_completos = datos.copy()
+
+        columnas_originales = list(datos_completos.columns)
+
+        # El orden de dia y mes se decide una vez para todo el archivo (ver fechas.py).
+        ordenes_fecha = detectar_ordenes(datos_completos, COLUMNAS_FECHA)
+        convertidor_fechas = FunctionTransformer(_a_datetime, kw_args={"ordenes": ordenes_fecha})
 
         convertidor = ColumnTransformer(
             transformers=[
-                ("fechas", FunctionTransformer(_a_datetime), COLUMNAS_FECHA),
+                ("fechas", convertidor_fechas, COLUMNAS_FECHA),
                 ("ocupacion", FunctionTransformer(_a_float64), ["ocupacion"]),
                 ("enteras", FunctionTransformer(_a_int64), COLUMNAS_ENTERAS),
             ],
@@ -188,7 +322,7 @@ class ConvertirTipos(BaseEstimator, TransformerMixin):
         )
         convertidor.set_output(transform="pandas")
 
-        datos_convertidos = convertidor.fit_transform(datos)
+        datos_convertidos = convertidor.fit_transform(datos_completos)
         datos_en_orden_original = datos_convertidos[columnas_originales]
         return datos_en_orden_original
 
@@ -421,7 +555,9 @@ def construir_pipeline_limpieza(ruta_referencias=DIR_REFERENCIAS):
     """Construye el pipeline de limpieza de dengue con los 7 pasos de la spec, en orden."""
     pipeline = Pipeline(
         steps=[
+            ("validar_encabezados", ValidarEncabezados()),
             ("descartar_columnas", DescartarColumnasSinValorAnalitico()),
+            ("alinear_columnas", AlinearColumnas()),
             ("estandarizar_minusculas", EstandarizarMinusculas()),
             ("convertir_tipos", ConvertirTipos()),
             ("construir_edad_anios", ConstruirEdadAnios()),

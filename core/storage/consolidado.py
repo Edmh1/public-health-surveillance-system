@@ -54,6 +54,16 @@ def actualizar_consolidado(
     else:
         consolidado_nuevo = pd.concat([consolidado_sin_pieza, pieza_nueva], ignore_index=True)
 
+        # Una columna que la pieza nueva no trae y que quedo vacia en todo el resto
+        # solo la aportaba la version anterior de esta pieza (por ejemplo, un
+        # encabezado mal nombrado que entro antes de validarse). Se quita para que
+        # la consolidada no arrastre columnas muertas.
+        columnas_muertas = [
+            columna for columna in consolidado_nuevo.columns
+            if columna not in pieza_nueva.columns and consolidado_nuevo[columna].isna().all()
+        ]
+        consolidado_nuevo = consolidado_nuevo.drop(columns=columnas_muertas)
+
     columnas_esperadas = set(consolidado_nuevo.columns)
     filas_esperadas = len(consolidado_nuevo)
     escribir_parquet_atomico(consolidado_nuevo, ruta_consolidado, columnas_esperadas, filas_esperadas)
