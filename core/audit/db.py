@@ -1,8 +1,10 @@
 """Conexion y esquema de la base SQLite compartida.
 
 Una sola base de datos para todo el sistema: procesamientos (estado y fallos del
-worker), bitacora (auditoria de agregar/editar/eliminar/restaurar) y registro_piezas
-(que pieza Parquet genero cada archivo subido). Es compartida entre todos los usuarios
+worker), bitacora (auditoria de agregar/editar/eliminar/restaurar), registro_piezas
+(que pieza Parquet genero cada archivo subido) y entrenamientos (bitacora de los
+reentrenamientos del pronostico y de los cambios de version activa: quien, cuando,
+con que rango de datos y cuanto tardo). Es compartida entre todos los usuarios
 y entre el dashboard y el worker.
 """
 
@@ -33,6 +35,21 @@ CREATE TABLE IF NOT EXISTS bitacora (
     usuario TEXT NOT NULL,
     fecha TEXT NOT NULL,
     detalle TEXT
+);
+
+CREATE TABLE IF NOT EXISTS entrenamientos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patologia TEXT NOT NULL,
+    accion TEXT NOT NULL CHECK (accion IN ('entrenar', 'activar')),
+    estado TEXT NOT NULL CHECK (estado IN ('listo', 'fallo')),
+    version TEXT,
+    usuario TEXT NOT NULL,
+    fecha_solicitud TEXT,
+    fecha_inicio TEXT NOT NULL,
+    fecha_fin TEXT NOT NULL,
+    duracion_segundos REAL,
+    rango_datos TEXT,
+    motivo_fallo TEXT
 );
 
 CREATE TABLE IF NOT EXISTS registro_piezas (

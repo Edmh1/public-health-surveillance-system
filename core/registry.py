@@ -1,9 +1,35 @@
 """Registro de patologias: sistema de plugins que descubre e indexa cada patologia disponible."""
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+
+class ModuloPronostico(ABC):
+    """Contrato del pronostico de una patologia que lo tenga. El nucleo lo usa
+    para el reentrenamiento que lanza el perfil de administracion desde Gestion
+    (core/ingestion/entrenamiento.py) sin saber que modelos hay detras.
+
+    entrenar_y_exportar entrena con el consolidado completo, valida y escribe
+    los modelos en carpeta, junto con un manifest.json. El nucleo lee del
+    manifest estos campos, que toda implementacion debe incluir:
+      - fecha_entrenamiento (ISO 8601, UTC) y usuario
+      - rango: {"anio_inicio", "semana_inicio", "anio_fin", "semana_fin",
+        "fecha_ultima_semana"} de los datos usados
+      - semanas: cantidad de semanas de la serie de entrenamiento
+      - modelos: {clave: rotulo legible}
+      - metricas: {clave_modelo: {"1": {"RMSE", "MAE", "MAPE", "R2"}, ...}}
+    Puede agregar los campos propios que necesite (hiperparametros, etc.).
+    Si no se puede entrenar (ej. historico insuficiente), lanza una excepcion
+    con un mensaje legible: el nucleo lo registra como fallo y no toca la
+    version activa.
+    """
+
+    @abstractmethod
+    def entrenar_y_exportar(self, datos: pd.DataFrame, carpeta: Path, usuario: str) -> dict[str, Any]:
+        """Entrena, valida y exporta los modelos en carpeta. Devuelve el manifest."""
 
 
 class PathologyPlugin(ABC):
@@ -117,6 +143,17 @@ class PathologyPlugin(ABC):
         no ofrece opciones para esa patologia.
         """
         return {}
+
+    def obtener_pronostico(self) -> ModuloPronostico | None:
+        """Modulo de pronostico de la patologia, o None si no tiene. Habilita el
+        apartado de reentrenamiento en Gestion (solo perfil de administracion) y
+        el trabajo de entrenamiento del worker.
+
+        No es abstracto: el default None deja a las patologias sin pronostico
+        (ej. tuberculosis) funcionando sin cambios. El nucleo nunca pregunta por
+        el nombre de la patologia, solo por lo que este metodo declara.
+        """
+        return None
 
 
 _PATOLOGIAS_REGISTRADAS: dict[str, PathologyPlugin] = {}
