@@ -1,12 +1,26 @@
 """Pestana 4 Morbilidad: notificacion, clasificacion y hospitalizacion.
 
-Historia que cuenta:
-  1. KPIs: casos totales, hospitalizados, graves, hospitalizados graves
-  2. Panorama general: tipo de caso / flujo clasificacion (Sankey)
-  3. Incidencia por subregion (4.10) / fuente
-  4. Evolucion semanal: casos por tipo + % graves (selector anio local)
-  5. Clasificacion final: dona + distribucion semanal / hospitalizacion territorial
-  6. Hospitalizacion por semana (selector tipo de caso)
+Orden de arriba abajo (regla 1.4 de DESIGN.md: una grafica por fila, salvo
+pares complementarios):
+  1. KPIs: casos totales, incidencia, hospitalizados, dengue grave, hospitalizados graves
+  2. Par: Casos por tipo | Casos por clasificacion final (composicion inicial y
+     final del mismo universo)
+  3. Grafico de Sankey del flujo de clasificacion, a ancho completo, justo
+     debajo: se ve la composicion al notificar, la composicion despues del
+     ajuste y luego el flujo que conecta las dos.
+  4. Casos por semana epidemiologica y tipo (barras apiladas)
+  5. Clasificacion final de los casos por semana epidemiologica
+  6. Casos hospitalizados por semana epidemiologica
+  7. Tasa de hospitalizacion por territorio
+  8. Incidencia de dengue por subregion
+  9. Casos por fuente de notificacion
+
+Las graficas semanales no tienen selector de anio propio: muestran el ULTIMO
+anio del filtro temporal global, declarado en su sufijo (fase 2).
+
+Casos = cod_eve 210 (dengue) y 220 (dengue grave). Los codigos numericos no van
+en las etiquetas de las graficas (ver ETIQUETAS_TIPO_CASO), solo en las notas
+metodologicas.
 """
 
 import pandas as pd
@@ -15,34 +29,48 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core.dashboard_base.estilos import (
+    ANCHO_MEDIA_COLUMNA,
     AZUL_INSTITUCIONAL,
-    LEYENDA_SUPERIOR,
+    MINIMO_CATEGORIAS_DISTRIBUCION,
+    MINIMO_PUNTOS_SERIE,
     NARANJA_INSTITUCIONAL,
+    avisar_datos_insuficientes,
+    describir_cantidad,
     eje_semanal,
+    hay_datos_suficientes,
+    mostrar_grafica,
     rango_con_margen,
 )
-from core.dashboard_base.filtros import CLAVE_FILTROS, resumen_filtros_activos
+from core.dashboard_base.filtros import CLAVE_FILTROS, resumen_filtros_activos, ultimo_anio_del_filtro
 from pathologies.dengue.geografia import obtener_mapeo_subregion
 from pathologies.dengue.indicators import calcular_indicadores
 from pathologies.dengue.poblacion import calcular_tasa_por_municipio, calcular_tasa_por_subregion
 
-CODIGOS_CASOS = {210, 220}
-COD_DENGUE       = 210
+COD_DENGUE = 210
 COD_DENGUE_GRAVE = 220
+CODIGOS_CASOS = {COD_DENGUE, COD_DENGUE_GRAVE}
+
+# Unica fuente de las etiquetas de tipo de caso en esta pestana: sin el codigo
+# numerico entre parentesis (el codigo queda en las notas metodologicas).
+ETIQUETAS_TIPO_CASO = {COD_DENGUE: "Dengue", COD_DENGUE_GRAVE: "Dengue grave"}
+COLORES_TIPO_CASO = {
+    ETIQUETAS_TIPO_CASO[COD_DENGUE]: AZUL_INSTITUCIONAL,
+    ETIQUETAS_TIPO_CASO[COD_DENGUE_GRAVE]: NARANJA_INSTITUCIONAL,
+}
 
 _TIP_CAS_MAP = {
     "1": "Sospechoso",
     "2": "Probable",
-    "3": "Conf. laboratorio",
-    "4": "Conf. clínica",
-    "5": "Conf. nexo epidemiológico",
+    "3": "Confirmado por laboratorio",
+    "4": "Confirmado por clínica",
+    "5": "Confirmado por nexo epidemiológico",
 }
 
 _ESTADO_FINAL_MAP = {
     "2": "Probable",
-    "3": "Conf. laboratorio",
-    "4": "Conf. clínica",
-    "5": "Conf. nexo epidemiológico",
+    "3": "Confirmado por laboratorio",
+    "4": "Confirmado por clínica",
+    "5": "Confirmado por nexo epidemiológico",
     "6": "Descartado",
     "7": "Otro",
     "0": "Sin ajuste",
@@ -50,23 +78,63 @@ _ESTADO_FINAL_MAP = {
 
 _FUENTE_MAP = {
     1: "Rutinaria",
-    2: "Busqueda activa institucional",
+    2: "Búsqueda activa institucional",
     3: "Vigilancia intensificada",
-    4: "Busqueda activa comunitaria",
-    5: "Investigacion",
+    4: "Búsqueda activa comunitaria",
+    5: "Investigación",
+}
+
+# Un color fijo por clasificacion del caso, el mismo en el Sankey, en el anillo
+# de clasificacion final y en la clasificacion final por semana. Tonos de familias
+# bien distintas: ningun par se confunde (antes el violeta de Probable se
+# confundia con el azul de Confirmado por laboratorio). Verde, amarillo y rojo
+# quedan reservados para el canal endemico (DESIGN.md).
+COLORES_CLASIFICACION = {
+    "Confirmado por laboratorio": "#1b3a6b",
+    "Confirmado por nexo epidemiológico": "#e8852c",
+    "Confirmado por clínica": "#0891b2",
+    "Probable": "#c026d3",
+    "Sospechoso": "#8c564b",
+    "Descartado": "#475569",
+    "Sin ajuste": "#a8a29e",
+    "Otro (inicial)": "#b0b7c3",
+    "Otro (final)": "#b0b7c3",
+    "Otro": "#b0b7c3",
 }
 
 _TIPO_CASO_OPTS = {
     "Ambos": [COD_DENGUE, COD_DENGUE_GRAVE],
-    "Dengue (210)": [COD_DENGUE],
-    "Dengue grave (220)": [COD_DENGUE_GRAVE],
+    ETIQUETAS_TIPO_CASO[COD_DENGUE]: [COD_DENGUE],
+    ETIQUETAS_TIPO_CASO[COD_DENGUE_GRAVE]: [COD_DENGUE_GRAVE],
 }
 
-_LAYOUT = dict(margin=dict(l=0, r=0, t=40, b=0))
+_LAYOUT = dict(margin=dict(l=0, r=0, t=70, b=0))
+
+_NOTA_CODIGOS = "Casos con cod_eve 210 (dengue) y 220 (dengue grave)."
+
+
+def _subregiones_en_alcance(casos: pd.DataFrame) -> list[str]:
+    """Subregiones que el filtro global deja dentro del alcance. Sin filtro
+    territorial, las 5; con filtro, solo las elegidas: calcular_tasa_por_subregion
+    devuelve las 5 y las que quedan fuera del filtro saldrian en cero aunque no
+    sea cierto."""
+    filtros = st.session_state.get(CLAVE_FILTROS, {})
+    if filtros.get("subregion") or filtros.get("nom_mun_o"):
+        return sorted(casos["subregion"].dropna().unique())
+    return sorted(set(obtener_mapeo_subregion().values()))
+
+
+def _avisar_una_sola_subregion(subregiones: list[str]) -> None:
+    avisar_datos_insuficientes(
+        f"Con el filtro territorial actual hay {describir_cantidad(len(subregiones), 'subregión', 'subregiones')} "
+        "en el alcance. Para comparar entre subregiones, quita o amplía el filtro de subregión o "
+        "municipio en la barra lateral."
+    )
+
 
 def _pct(n: float, total: float) -> str:
     if total == 0:
-        return "—"
+        return "-"
     p = n / total * 100
     if p >= 1:
         return f"{p:.1f}%"
@@ -75,6 +143,7 @@ def _pct(n: float, total: float) -> str:
     elif p > 0:
         return f"{p:.3f}%"
     return "0%"
+
 
 # ---------------------------------------------------------------------------
 # Orquestador
@@ -89,8 +158,8 @@ def mostrar_morbilidad(datos: pd.DataFrame) -> None:
 
     # Incidencia (tasa poblacional) vive aca ademas de en Situacion: en Situacion
     # es de un solo anio; aca sigue el filtro global, asi que se puede ver por
-    # rangos de anios. Respeta la regla de "no disponible" (municipio / sin DANE)
-    # porque sale del mismo calcular_indicadores.
+    # rangos de anios. Respeta la regla de "no disponible" porque sale del mismo
+    # calcular_indicadores.
     filtros_actuales = st.session_state.get(CLAVE_FILTROS, {})
     resultado_indicadores = calcular_indicadores(datos, filtros_actuales)
 
@@ -105,52 +174,46 @@ def mostrar_morbilidad(datos: pd.DataFrame) -> None:
     _mostrar_kpis(casos, resultado_indicadores["incidencia"])
     st.space("small")
 
-    # Panorama: tipo de caso | Sankey (el Sankey ocupa tambien el ancho que
-    # antes tenia Fuente)
-    c1, c2 = st.columns([1, 2.7])
-    with c1:
+    # Par: composicion inicial (tipo) y final (clasificacion final)
+    col_tipo, col_clasificacion = st.columns(2)
+    with col_tipo:
         with st.container(border=True, height="stretch"):
             _mostrar_tipo_caso(casos)
-    with c2:
+    with col_clasificacion:
         with st.container(border=True, height="stretch"):
-            _mostrar_sankey_clasificacion(casos)
-
-    st.space("small")
-
-    # Incidencia por subregion (4.10) | Fuente (50/50)
-    c_inc, c_fuente = st.columns([1, 1])
-    with c_inc:
-        with st.container(border=True, height="stretch"):
-            _mostrar_incidencia_subregion(casos)
-    with c_fuente:
-        with st.container(border=True, height="stretch"):
-            _mostrar_fuente(casos)
-
-    st.space("small")
-
-    # Evolucion semanal (selector anio local) — FULL WIDTH
-    with st.container(border=True):
-        _mostrar_evolucion_semanal(casos)
-
-    st.space("small")
-
-    # Clasificacion final por semana + dona apiladas | Hospitalizacion territorial
-    c_izq, c_der = st.columns([1, 1])
-    with c_izq:
-        with st.container(border=True):
-            _mostrar_clasificacion_final_semanal(casos)
-        st.space("small")
-        with st.container(border=True):
             _mostrar_clasificacion_final_dona(casos)
-    with c_der:
-        with st.container(border=True, height="stretch"):
-            _mostrar_hospitalizacion_territorial(casos)
 
     st.space("small")
 
-    # Hospitalizacion por semana — FULL WIDTH
     with st.container(border=True):
-        _mostrar_hospitalizacion_semanal(casos)
+        _mostrar_sankey_clasificacion(casos)
+
+    anio_analisis = ultimo_anio_del_filtro()
+
+    st.space("small")
+    with st.container(border=True):
+        _mostrar_evolucion_semanal(casos, anio_analisis)
+
+    st.space("small")
+    with st.container(border=True):
+        _mostrar_clasificacion_final_semanal(casos, anio_analisis)
+
+    st.space("small")
+    with st.container(border=True):
+        _mostrar_hospitalizacion_semanal(casos, anio_analisis)
+
+    st.space("small")
+    with st.container(border=True):
+        _mostrar_hospitalizacion_territorial(casos)
+
+    st.space("small")
+    with st.container(border=True):
+        _mostrar_incidencia_subregion(casos)
+
+    st.space("small")
+    with st.container(border=True):
+        _mostrar_fuente(casos)
+
 
 # ---------------------------------------------------------------------------
 # KPIs
@@ -172,16 +235,15 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        st.metric("Casos totales", f"{total:,}", border=True)
+        st.metric("Casos totales", f"{total:,}", help=_NOTA_CODIGOS, border=True)
     with c2:
         st.metric(
             "Incidencia",
             incidencia_txt,
             help=(
-                "Casos (210+220) / población en riesgo x 100.000. No disponible si falta "
-                "población DANE, o el sistema todavía no tiene los 6 años de histórico "
-                "que pide el lineamiento MSPS/INS para calcular la estratificación de "
-                "riesgo."
+                "Casos de dengue y dengue grave / población en riesgo x 100.000. No disponible "
+                "si falta población DANE, o el sistema todavía no tiene los 6 años de histórico "
+                "que pide el lineamiento MSPS/INS para calcular la estratificación de riesgo."
             ),
             border=True,
         )
@@ -196,13 +258,16 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
             border=True,
         )
     with c4:
+        # Proporcion de graves: vive aqui como KPI (ya no como eje secundario de
+        # la grafica semanal por tipo).
         st.metric(
-            "Dengue grave (220)",
+            ETIQUETAS_TIPO_CASO[COD_DENGUE_GRAVE],
             f"{graves:,}",
             delta=_pct(graves, total),
             delta_color="off",
             delta_arrow="off",
             delta_description="del total",
+            help="Casos de dengue grave (cod_eve 220) sobre el total de casos.",
             border=True,
         )
     with c5:
@@ -217,41 +282,90 @@ def _mostrar_kpis(casos: pd.DataFrame, incidencia: float | None) -> None:
             border=True,
         )
 
+
 # ---------------------------------------------------------------------------
-# 4.3  Tipo de caso (dona)
+# Casos por tipo (dona)
 # ---------------------------------------------------------------------------
 
 def _mostrar_tipo_caso(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/pie_chart: Tipo de caso{resumen_filtros_activos()}")
+    st.subheader(":material/pie_chart: Casos por tipo")
 
     conteo = casos["cod_eve"].value_counts()
-    labels = {COD_DENGUE: "Dengue (210)", COD_DENGUE_GRAVE: "Dengue grave (220)"}
     df = pd.DataFrame({
-        "tipo": [labels.get(k, str(k)) for k in conteo.index],
+        "tipo": [ETIQUETAS_TIPO_CASO.get(codigo, str(codigo)) for codigo in conteo.index],
         "casos": conteo.values,
     })
-    total = df["casos"].sum()
+    if not hay_datos_suficientes(df, MINIMO_CATEGORIAS_DISTRIBUCION):
+        avisar_datos_insuficientes(
+            f"Con los filtros actuales los {len(casos):,} casos son de un solo tipo "
+            f"({df['tipo'].iloc[0]}). Amplía el período o el territorio para ver la composición."
+        )
+        return
 
     fig = px.pie(
         df, names="tipo", values="casos", hole=0.55,
-        color_discrete_sequence=[AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL],
+        color="tipo", color_discrete_map=COLORES_TIPO_CASO,
     )
     fig.update_traces(
         texttemplate="%{value:,} (%{percent})",
         textposition="outside",
     )
-    # Altura pareja con el Sankey vecino: la tarjeta se estira con la fila y con
-    # la altura anterior la dona quedaba pegada arriba con un vacio debajo.
     fig.update_layout(
         showlegend=True,
-        legend=LEYENDA_SUPERIOR,
-        height=520,
-        margin=dict(l=20, r=20, t=40, b=20),
+        height=420,
+        margin=dict(l=20, r=20, t=70, b=20),
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica(fig, "Casos por tipo", resumen_filtros_activos(), ancho=ANCHO_MEDIA_COLUMNA)
+
 
 # ---------------------------------------------------------------------------
-# 4.2  Flujo clasificacion inicial → final (Sankey)
+# Casos por clasificacion final (dona)
+# ---------------------------------------------------------------------------
+
+def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
+    st.subheader(":material/fact_check: Casos por clasificación final")
+
+    if "estado_final_de_caso" not in casos.columns:
+        st.caption("Sin datos.")
+        return
+
+    conteo = (
+        casos["estado_final_de_caso"]
+        .dropna()
+        .astype(str)
+        .map(_ESTADO_FINAL_MAP)
+        .value_counts()
+    )
+    if not hay_datos_suficientes(conteo, MINIMO_CATEGORIAS_DISTRIBUCION):
+        avisar_datos_insuficientes(
+            f"Con los filtros actuales todos los casos con clasificación final caen en "
+            f"{describir_cantidad(len(conteo), 'categoría', 'categorías')}. Amplía el período o "
+            "el territorio para ver la composición."
+        )
+        return
+
+    # Colores explicitos para evitar que la 3.a porcion reciba azul cielo.
+    fig = px.pie(
+        names=conteo.index,
+        values=conteo.values,
+        hole=0.55,
+        color=conteo.index,
+        color_discrete_map=COLORES_CLASIFICACION,
+    )
+    fig.update_traces(
+        texttemplate="%{value:,} (%{percent})",
+        textposition="outside",
+    )
+    fig.update_layout(
+        showlegend=True,
+        height=420,
+        margin=dict(l=20, r=20, t=70, b=20),
+    )
+    mostrar_grafica(fig, "Casos por clasificación final", resumen_filtros_activos(), ancho=ANCHO_MEDIA_COLUMNA)
+
+
+# ---------------------------------------------------------------------------
+# Grafico de Sankey del flujo de clasificacion inicial -> final
 # ---------------------------------------------------------------------------
 
 def _hex_rgba(hex_color: str, alpha: float) -> str:
@@ -260,8 +374,9 @@ def _hex_rgba(hex_color: str, alpha: float) -> str:
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
 
+
 def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/account_tree: Gráfico de Sankey{resumen_filtros_activos()}")
+    st.subheader(":material/account_tree: Gráfico de Sankey de flujo de clasificación de casos")
 
     cols_req = {"tip_cas", "estado_final_de_caso"}
     if not cols_req.issubset(casos.columns):
@@ -270,7 +385,7 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
 
     df = casos[["tip_cas", "estado_final_de_caso"]].dropna().copy()
     df["inicial"] = df["tip_cas"].astype(str).map(_TIP_CAS_MAP).fillna("Otro (inicial)")
-    df["final"]   = df["estado_final_de_caso"].astype(str).map(_ESTADO_FINAL_MAP).fillna("Otro (final)")
+    df["final"] = df["estado_final_de_caso"].astype(str).map(_ESTADO_FINAL_MAP).fillna("Otro (final)")
 
     if df.empty:
         st.caption("Sin datos de flujo de clasificación.")
@@ -284,22 +399,18 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     transiciones = df.groupby(["inicial", "final"]).size().reset_index(name="n")
     transiciones = transiciones[transiciones["inicial"] != transiciones["final"]]
 
+    if transiciones.empty:
+        avisar_datos_insuficientes(
+            f"Con los filtros actuales ninguno de los {len(df):,} casos cambió de clasificación "
+            "entre la notificación y el ajuste final, así que no hay flujo que dibujar. Amplía el "
+            "período o el territorio."
+        )
+        return
+
     # Colores por estado (no por posicion izq/der): mismo color para un estado
     # independientemente de si aparece como clasificacion inicial o final.
-    # Paleta viva y distinguible; verde/amarillo/rojo quedan reservados para el
-    # canal endemico segun DESIGN.md.
-    _PALETA_ESTADOS = {
-        "Probable":                    "#7c3aed",
-        "Conf. laboratorio":           "#2563eb",
-        "Conf. nexo epidemiológico":   "#f97316",
-        "Conf. clínica":               "#0891b2",
-        "Sospechoso":                  "#c026d3",
-        "Descartado":                  "#475569",
-        "Sin ajuste":                  "#a8a29e",
-        "Otro (inicial)":              "#795548",
-        "Otro (final)":                "#795548",
-        "Otro":                        "#795548",
-    }
+    # Verde/amarillo/rojo quedan reservados para el canal endemico (DESIGN.md).
+    _PALETA_ESTADOS = COLORES_CLASIFICACION
     # Tres columnas de nodos: casos totales | clasificacion inicial | clasificacion
     # final. Inicial y final llevan nodos SEPARADOS aunque compartan etiqueta: si
     # "Probable" fuera un solo nodo, la transicion sin cambio se dibujaria como un
@@ -330,8 +441,7 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
 
     # Posicion fija por columna: sin la x, un nodo inicial sin casos que cambien
     # de clasificacion (sin flujo de salida) se iria a la columna derecha por el
-    # acomodo automatico de Plotly. La y fija el orden vertical calculado arriba,
-    # apilando cada columna de arriba hacia abajo con altura proporcional.
+    # acomodo automatico de Plotly. La y fija el orden vertical calculado arriba.
     total_casos = int(conteo_inicial["n"].sum())
 
     def _centros_verticales(valores_columna: list[int]) -> list[float]:
@@ -363,14 +473,16 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
         + _centros_verticales([int(casos_por_final[n]) for n in nodos_finales])
     )
 
+    # El nodo del total va en gris oscuro: en azul se confundia con
+    # "Confirmado por laboratorio", que tiene el azul institucional.
     colores_nodos = (
-        [AZUL_INSTITUCIONAL]
+        ["#374151"]
         + [_PALETA_ESTADOS.get(n, "#6b7280") for n in nodos_iniciales]
         + [_PALETA_ESTADOS.get(n, "#6b7280") for n in nodos_finales]
     )
 
-    # Flujos coloreados por la clasificacion inicial con transparencia:
-    # el ojo puede seguir "que le paso a cada clasificacion inicial" por color.
+    # Flujos coloreados por la clasificacion inicial con transparencia: el ojo
+    # puede seguir "que le paso a cada clasificacion inicial" por color.
     fuentes, destinos, valores, colores_links = [], [], [], []
 
     # Plotly apila los enlaces de cada nodo en el orden en que llegan, no por la
@@ -410,6 +522,9 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
             pad=24,
             thickness=22,
             line=dict(color="white", width=0.8),
+            # Texto propio en espanol: el de Plotly por defecto dice "incoming
+            # flow count / outgoing flow count" (cantidad de enlaces, no de casos).
+            hovertemplate="%{label}<br>%{value:,} casos<extra></extra>",
         ),
         link=dict(
             source=fuentes,
@@ -418,7 +533,7 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
             color=colores_links,
             hovertemplate="%{source.label} → %{target.label}: %{value:,} casos<extra></extra>",
         ),
-        textfont=dict(size=12, color="#1a1a1a", family="sans-serif"),
+        textfont=dict(size=14, color="#1a1a1a", family="sans-serif"),
     ))
 
     # Encabezados de etapa sobre cada columna, para leer el diagrama sin adivinar.
@@ -429,9 +544,9 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
     ]
     for pos_x, ancla, texto in encabezados:
         fig.add_annotation(
-            x=pos_x, y=1.05, xref="paper", yref="paper",
+            x=pos_x, y=1.03, xref="paper", yref="paper",
             text=f"<b>{texto}</b>", showarrow=False,
-            xanchor=ancla, font=dict(size=12, color="#374151"),
+            xanchor=ancla, font=dict(color="#374151"),
         )
 
     # Leyenda de colores por estado. El trazo Sankey no genera leyenda propia,
@@ -452,216 +567,152 @@ def _mostrar_sankey_clasificacion(casos: pd.DataFrame) -> None:
         ))
 
     fig.update_layout(
-        height=540,
-        margin=dict(l=10, r=10, t=100, b=20),
+        height=660,
+        margin=dict(l=10, r=10, t=190, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
         showlegend=True,
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.14,
-            xanchor="center", x=0.5, font=dict(size=10),
-        ),
+        legend=dict(y=1.10),
     )
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica(fig, "Gráfico de Sankey de flujo de clasificación de casos", resumen_filtros_activos())
+
 
 # ---------------------------------------------------------------------------
-# 4.1  Fuente de notificacion (dona)
+# Casos por semana epidemiologica y tipo (barras apiladas)
 # ---------------------------------------------------------------------------
 
-def _mostrar_fuente(casos: pd.DataFrame) -> None:
-    """Barras horizontales para comparar todas las fuentes a la vez.
-    Se prefiere barra sobre dona: la dona dificulta comparar magnitudes entre
-    categorias cuando hay grandes diferencias (ej. Rutinaria vs. BAC).
-    """
-    st.subheader(f":material/notification_important: Fuente{resumen_filtros_activos()}")
+def _mostrar_evolucion_semanal(casos: pd.DataFrame, anio: int | None) -> None:
+    st.subheader(":material/stacked_bar_chart: Casos por semana epidemiológica y tipo")
 
-    if "fuente" not in casos.columns:
-        st.caption("Sin datos de fuente.")
-        return
-
-    conteo = casos["fuente"].dropna().astype(int).map(_FUENTE_MAP).value_counts()
-    if conteo.empty:
-        st.caption("Sin datos.")
-        return
-
-    total = conteo.sum()
-    df = pd.DataFrame({
-        "fuente": conteo.index,
-        "casos": conteo.values,
-        "etiqueta": [f"{v:,}  ({_pct(v, total)})" for v in conteo.values],
-    })
-
-    # Cada fuente con su color y el nombre en la leyenda: los nombres largos
-    # ("Busqueda activa institucional") como etiquetas del eje se comian el
-    # ancho de la grafica en esta tarjeta angosta.
-    colores_fuente = {
-        "Rutinaria":                     AZUL_INSTITUCIONAL,
-        "Busqueda activa institucional": "#f97316",
-        "Vigilancia intensificada":      "#7c3aed",
-        "Busqueda activa comunitaria":   "#0891b2",
-        "Investigacion":                 "#c026d3",
-    }
-    fig = px.bar(
-        df,
-        x="casos",
-        y="fuente",
-        color="fuente",
-        text="etiqueta",
-        orientation="h",
-        labels={"casos": "Casos", "fuente": ""},
-        color_discrete_map=colores_fuente,
-    )
-    fig.update_traces(textposition="outside")
-    # Leyenda anclada a la izquierda: a la derecha se solapa con la barra de
-    # herramientas de Plotly.
-    fig.update_layout(
-        height=480,
-        margin=dict(l=0, r=60, t=70, b=0),
-        xaxis={"range": rango_con_margen(df["casos"].max())},
-        yaxis={"categoryorder": "total ascending", "showticklabels": False},
-        legend={**LEYENDA_SUPERIOR, "xanchor": "left", "x": 0, "font": {"size": 10}},
-    )
-    st.plotly_chart(fig, width="stretch")
-
-# ---------------------------------------------------------------------------
-# 4.4  Evolucion semanal por tipo de caso (selector anio local)
-# ---------------------------------------------------------------------------
-
-def _mostrar_evolucion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/show_chart: Casos semanales por tipo{resumen_filtros_activos(incluir_periodo=False)}")
-
-    if "semana" not in casos.columns:
+    if "semana" not in casos.columns or anio is None:
         st.caption("Sin datos de semana.")
         return
 
-    anios = sorted(casos["ano"].dropna().unique().tolist(), reverse=True)
-    if not anios:
-        return
-
-    col_sel, col_nota = st.columns([1, 3], vertical_alignment="center")
-    with col_sel:
-        anio = st.selectbox("Año de análisis", anios, key="morbilidad_anio_semanal")
-    with col_nota:
-        st.caption(":material/info: Selector propio — ignora el filtro temporal global.")
-
     subset = casos[casos["ano"] == anio].copy()
-    if subset.empty:
-        st.caption(f"Sin datos para {anio}.")
-        return
-
-    subset["tipo"] = subset["cod_eve"].map({
-        COD_DENGUE: "Dengue (210)",
-        COD_DENGUE_GRAVE: "Dengue grave (220)",
-    })
+    subset["tipo"] = subset["cod_eve"].map(ETIQUETAS_TIPO_CASO)
     semanal = subset.groupby(["semana", "tipo"]).size().reset_index(name="casos")
-    if semanal.empty:
-        st.caption(f"Sin datos para {anio}.")
+    semanas_con_casos = semanal["semana"].nunique()
+    if semanas_con_casos < MINIMO_PUNTOS_SERIE:
+        avisar_datos_insuficientes(
+            f"Con los filtros actuales {anio} tiene "
+            f"{describir_cantidad(len(subset), 'caso', 'casos', femenino=False)} en "
+            f"{describir_cantidad(semanas_con_casos, 'semana epidemiológica', 'semanas epidemiológicas')}. "
+            "Amplía el rango de semanas o el territorio para ver la serie semanal."
+        )
         return
-
-    # Total por semana para calcular % graves
-    total_sem = subset.groupby("semana").size().rename("total")
-    graves_sem = subset[subset["cod_eve"] == COD_DENGUE_GRAVE].groupby("semana").size().rename("graves")
-    pct_df = pd.concat([total_sem, graves_sem], axis=1).fillna(0).reset_index()
-    pct_df["pct_grave"] = pct_df["graves"] / pct_df["total"] * 100
 
     fig = px.bar(
         semanal,
         x="semana",
         y="casos",
         color="tipo",
-        barmode="group",
+        barmode="stack",
         labels={"semana": "Semana epidemiológica", "casos": "Casos", "tipo": "Tipo"},
-        color_discrete_map={
-            "Dengue (210)": AZUL_INSTITUCIONAL,
-            "Dengue grave (220)": NARANJA_INSTITUCIONAL,
-        },
+        color_discrete_map=COLORES_TIPO_CASO,
+        category_orders={"tipo": [ETIQUETAS_TIPO_CASO[COD_DENGUE], ETIQUETAS_TIPO_CASO[COD_DENGUE_GRAVE]]},
     )
-    # Linea de % graves sobre eje secundario. Hover propio: "Semana X · Y%" en
-    # vez de la coordenada (x, y) cruda que muestra Plotly por defecto.
-    fig.add_trace(go.Scatter(
-        x=pct_df["semana"],
-        y=pct_df["pct_grave"],
-        name="% Graves",
-        mode="lines+markers",
-        marker=dict(size=5),
-        line=dict(dash="dot", width=1.5, color="#555555"),
-        yaxis="y2",
-        hovertemplate="Semana %{x} · %{y:.1f}% graves<extra></extra>",
-    ))
-    fig.update_layout(
-        yaxis2=dict(overlaying="y", side="right", title="% Graves", showgrid=False),
-        legend=LEYENDA_SUPERIOR,
-        **_LAYOUT,
-    )
+    fig.update_layout(legend_title_text="", **_LAYOUT)
     fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica(fig, "Casos por semana epidemiológica y tipo", resumen_filtros_activos(periodo=str(anio)))
+    st.caption(f"Año {anio}: el último del filtro de años de la barra lateral.")
+
 
 # ---------------------------------------------------------------------------
-# 4.5  Hospitalizacion por semana y tipo de caso
+# Clasificacion final de los casos por semana epidemiologica
 # ---------------------------------------------------------------------------
 
-def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/local_hospital: Hospitalización por semana{resumen_filtros_activos(incluir_periodo=False)}")
+def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame, anio: int | None) -> None:
+    st.subheader(":material/stacked_bar_chart: Clasificación final de los casos por semana epidemiológica")
 
-    if "pac_hos" not in casos.columns or "semana" not in casos.columns:
+    if "semana" not in casos.columns or "estado_final_de_caso" not in casos.columns or anio is None:
         st.caption("Sin datos.")
         return
 
-    anios = sorted(casos["ano"].dropna().unique().tolist(), reverse=True)
-    anio = st.selectbox("Año", anios, key="morbilidad_hosp_anio") if anios else None
-    if anio is None:
-        return
-
     subset = casos[casos["ano"] == anio].copy()
-    subset["estado_hosp"] = subset["pac_hos"].map({1: "Hospitalizado", 2: "No hospitalizado"})
-    subset["tipo"] = subset["cod_eve"].map({
-        COD_DENGUE: "Dengue",
-        COD_DENGUE_GRAVE: "Grave",
-    })
-    subset["categoria"] = subset["tipo"] + " — " + subset["estado_hosp"]
+    subset["clasificacion"] = (
+        subset["estado_final_de_caso"].astype(str).map(_ESTADO_FINAL_MAP).fillna("Otro")
+    )
 
-    semanal = subset.groupby(["semana", "categoria"]).size().reset_index(name="casos")
-    if semanal.empty:
-        st.caption(f"Sin datos para {anio}.")
+    semanal = subset.groupby(["semana", "clasificacion"]).size().reset_index(name="casos")
+    semanas_con_casos = semanal["semana"].nunique()
+    if semanas_con_casos < MINIMO_PUNTOS_SERIE:
+        avisar_datos_insuficientes(
+            f"Con los filtros actuales {anio} tiene casos en "
+            f"{describir_cantidad(semanas_con_casos, 'semana epidemiológica', 'semanas epidemiológicas')}. "
+            "Amplía el rango de semanas o el territorio para ver la serie semanal."
+        )
         return
 
-    # Colores explícitos: Dengue=azul institucional, Grave=naranja;
-    # Hospitalizado=color sólido, No hospitalizado=versión más suave.
-    # Sin esto, la 3.ª categoria recibiría el azul cielo del tema.
     fig = px.bar(
         semanal,
         x="semana",
         y="casos",
-        color="categoria",
-        barmode="group",
-        labels={"semana": "Semana", "casos": "Casos", "categoria": ""},
-        color_discrete_map={
-            "Dengue — Hospitalizado":     AZUL_INSTITUCIONAL,
-            "Dengue — No hospitalizado":  "#8ba5c5",
-            "Grave — Hospitalizado":      NARANJA_INSTITUCIONAL,
-            "Grave — No hospitalizado":   "#d4a87a",
-        },
+        color="clasificacion",
+        barmode="stack",
+        labels={"semana": "Semana epidemiológica", "casos": "Casos", "clasificacion": "Clasificación"},
+        color_discrete_map=COLORES_CLASIFICACION,
     )
-    fig.update_layout(
-        legend=dict(**LEYENDA_SUPERIOR, font=dict(size=10)),
-        **_LAYOUT,
-    )
+    fig.update_layout(height=440, legend_title_text="", **_LAYOUT)
     fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica(fig, "Clasificación final de los casos por semana epidemiológica", resumen_filtros_activos(periodo=str(anio)))
+    st.caption(f"Año {anio}: el último del filtro de años de la barra lateral.")
+
 
 # ---------------------------------------------------------------------------
-# 4.6 + 4.7  Hospitalizacion territorial (subregion y municipio, ambas en tasa)
+# Casos hospitalizados por semana epidemiologica
+# ---------------------------------------------------------------------------
+
+def _mostrar_hospitalizacion_semanal(casos: pd.DataFrame, anio: int | None) -> None:
+    st.subheader(":material/local_hospital: Casos hospitalizados por semana epidemiológica")
+
+    if "pac_hos" not in casos.columns or "semana" not in casos.columns or anio is None:
+        st.caption("Sin datos.")
+        return
+
+    subset = casos[(casos["ano"] == anio) & (casos["pac_hos"] == 1)].copy()
+    subset["tipo"] = subset["cod_eve"].map(ETIQUETAS_TIPO_CASO)
+
+    semanal = subset.groupby(["semana", "tipo"]).size().reset_index(name="casos")
+    semanas_con_casos = semanal["semana"].nunique()
+    if semanas_con_casos < MINIMO_PUNTOS_SERIE:
+        avisar_datos_insuficientes(
+            f"Con los filtros actuales {anio} tiene "
+            f"{describir_cantidad(len(subset), 'caso hospitalizado', 'casos hospitalizados', femenino=False)} en "
+            f"{describir_cantidad(semanas_con_casos, 'semana epidemiológica', 'semanas epidemiológicas')}. "
+            "Amplía el rango de semanas o el territorio para ver la serie semanal."
+        )
+        return
+
+    fig = px.bar(
+        semanal,
+        x="semana",
+        y="casos",
+        color="tipo",
+        barmode="stack",
+        labels={"semana": "Semana epidemiológica", "casos": "Casos hospitalizados", "tipo": ""},
+        color_discrete_map=COLORES_TIPO_CASO,
+        category_orders={"tipo": [ETIQUETAS_TIPO_CASO[COD_DENGUE], ETIQUETAS_TIPO_CASO[COD_DENGUE_GRAVE]]},
+    )
+    fig.update_layout(legend_title_text="", **_LAYOUT)
+    fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
+    mostrar_grafica(fig, "Casos hospitalizados por semana epidemiológica", resumen_filtros_activos(periodo=str(anio)))
+    st.caption(f"Año {anio}: el último del filtro de años de la barra lateral. Casos con hospitalización registrada.")
+
+
+# ---------------------------------------------------------------------------
+# Tasa de hospitalizacion por territorio (subregion y municipio)
 # ---------------------------------------------------------------------------
 
 def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/map: Hospitalización por territorio{resumen_filtros_activos()}")
+    st.subheader(":material/map: Tasa de hospitalización por territorio")
 
     if "pac_hos" not in casos.columns:
         st.caption("Sin datos de hospitalización.")
         return
 
+    # Selector de representacion: elige que tipo de caso se dibuja.
     tipo_sel = st.segmented_control(
         "Tipo de caso",
         list(_TIPO_CASO_OPTS.keys()),
@@ -673,19 +724,29 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
     subset = casos[(casos["cod_eve"].isin(codigos)) & (casos["pac_hos"] == 1)]
 
     if subset.empty:
-        st.caption("Sin hospitalizados para ese filtro.")
+        avisar_datos_insuficientes(
+            "Con los filtros actuales no hay casos hospitalizados de ese tipo. Amplía el período "
+            "o el territorio."
+        )
         return
 
     anios_en_alcance = sorted(int(a) for a in casos["ano"].dropna().unique())
+    contexto = resumen_filtros_activos()
+    if tipo_sel != "Ambos":
+        contexto = f"{contexto} · {tipo_sel}"
 
-    # Subregion: TASA por 100.000 hab.
     if "subregion" in subset.columns:
         mapeo_subregion = obtener_mapeo_subregion()
         tasas = calcular_tasa_por_subregion(subset, anios_en_alcance, mapeo_subregion)
 
         sub = pd.DataFrame({"territorio": list(tasas.keys()), "tasa": list(tasas.values())})
+        subregiones = _subregiones_en_alcance(casos)
+        sub = sub[sub["territorio"].isin(subregiones)]
         sub = sub.dropna(subset=["tasa"]).sort_values("tasa")
-        if sub.empty:
+        st.markdown("##### Por subregión")
+        if len(subregiones) < MINIMO_CATEGORIAS_DISTRIBUCION:
+            _avisar_una_sola_subregion(subregiones)
+        elif sub.empty:
             st.caption("Sin población DANE disponible para el período filtrado.")
         else:
             fig_sub = px.bar(
@@ -696,18 +757,16 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
             fig_sub.update_traces(
                 textposition="outside",
                 texttemplate="%{text:.1f}",
+                marker_color=AZUL_INSTITUCIONAL,
                 name="Tasa x100.000 hab.",
                 showlegend=True,
             )
             fig_sub.update_layout(
-                title="Por subregión (tasa x100.000 hab.)",
                 margin=dict(l=0, r=0, t=70, b=0),
                 xaxis={"range": rango_con_margen(sub["tasa"].max())},
-                legend=LEYENDA_SUPERIOR,
             )
-            st.plotly_chart(fig_sub, width="stretch")
+            mostrar_grafica(fig_sub, "Tasa de hospitalización por subregión", contexto)
 
-    # Municipio — top 15 por TASA x100.000 hab.
     if "nom_mun_o" in subset.columns and "cod_mun_completo" in subset.columns:
         municipios_con_casos = sorted(subset["cod_mun_completo"].dropna().unique().astype(int))
         tasas_municipio = calcular_tasa_por_municipio(subset, anios_en_alcance, municipios_con_casos)
@@ -716,6 +775,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
             subset.dropna(subset=["nom_mun_o"])
             .drop_duplicates(subset=["cod_mun_completo"])
             .set_index("cod_mun_completo")["nom_mun_o"]
+            .str.title()
         )
 
         mun = pd.DataFrame({
@@ -726,6 +786,7 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
         mun = mun.dropna(subset=["tasa", "municipio"]).sort_values("tasa", ascending=False).head(15)
         mun = mun.sort_values("tasa")
 
+        st.markdown("##### Por municipio (los 15 con la tasa más alta)")
         if mun.empty:
             st.caption("Sin población DANE disponible para el período filtrado.")
         else:
@@ -737,25 +798,26 @@ def _mostrar_hospitalizacion_territorial(casos: pd.DataFrame) -> None:
             fig_mun.update_traces(
                 textposition="outside",
                 texttemplate="%{text:.1f}",
+                marker_color=AZUL_INSTITUCIONAL,
                 name="Tasa x100.000 hab.",
                 showlegend=True,
             )
             fig_mun.update_layout(
-                title="Por municipio — Top 15 (tasa x100.000 hab.)",
+                height=520,
                 margin=dict(l=0, r=0, t=70, b=0),
                 xaxis={"range": rango_con_margen(mun["tasa"].max())},
-                legend=LEYENDA_SUPERIOR,
             )
-            st.plotly_chart(fig_mun, width="stretch")
+            mostrar_grafica(fig_mun, "Tasa de hospitalización por municipio (los 15 más altos)", contexto)
 
     st.caption("Tasa = hospitalizados / población en riesgo x 100.000, en ambos niveles.")
 
+
 # ---------------------------------------------------------------------------
-# 4.10  Incidencia por subregion
+# Incidencia de dengue por subregion
 # ---------------------------------------------------------------------------
 
 def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/bar_chart: Incidencia por subregión{resumen_filtros_activos()}")
+    st.subheader(":material/bar_chart: Incidencia de dengue por subregión")
 
     if "subregion" not in casos.columns:
         st.caption("Sin datos de subregión.")
@@ -766,6 +828,11 @@ def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
     tasas = calcular_tasa_por_subregion(casos, anios_en_alcance, mapeo_subregion)
 
     df = pd.DataFrame({"subregion": list(tasas.keys()), "incidencia": list(tasas.values())})
+    subregiones = _subregiones_en_alcance(casos)
+    if len(subregiones) < MINIMO_CATEGORIAS_DISTRIBUCION:
+        _avisar_una_sola_subregion(subregiones)
+        return
+    df = df[df["subregion"].isin(subregiones)]
     df = df.dropna(subset=["incidencia"]).sort_values("incidencia")
     if df.empty:
         st.caption("Sin población DANE disponible para el período filtrado.")
@@ -779,107 +846,61 @@ def _mostrar_incidencia_subregion(casos: pd.DataFrame) -> None:
     fig.update_traces(
         textposition="outside",
         texttemplate="%{text:.1f}",
+        marker_color=AZUL_INSTITUCIONAL,
         name="Incidencia x100.000 hab.",
         showlegend=True,
     )
     fig.update_layout(
         **_LAYOUT,
         xaxis={"range": rango_con_margen(df["incidencia"].max())},
-        legend=LEYENDA_SUPERIOR,
     )
-    st.plotly_chart(fig, width="stretch")
-    st.caption("Incidencia = casos (210+220) / población en riesgo x 100.000, por subregión.")
+    mostrar_grafica(fig, "Incidencia de dengue por subregión", resumen_filtros_activos())
+    st.caption("Incidencia = casos / población en riesgo x 100.000, por subregión.")
+
 
 # ---------------------------------------------------------------------------
-# 4.8  Clasificacion final (dona)
+# Casos por fuente de notificacion
 # ---------------------------------------------------------------------------
 
-def _mostrar_clasificacion_final_dona(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/fact_check: Clasificación final{resumen_filtros_activos()}")
+def _mostrar_fuente(casos: pd.DataFrame) -> None:
+    """Barras horizontales para comparar todas las fuentes a la vez: la dona
+    dificulta comparar magnitudes cuando hay grandes diferencias (ej. Rutinaria
+    frente a la busqueda activa)."""
+    st.subheader(":material/notification_important: Casos por fuente de notificación")
 
-    if "estado_final_de_caso" not in casos.columns:
-        st.caption("Sin datos.")
+    if "fuente" not in casos.columns:
+        st.caption("Sin datos de fuente.")
         return
 
-    conteo = (
-        casos["estado_final_de_caso"]
-        .dropna()
-        .astype(str)
-        .map(_ESTADO_FINAL_MAP)
-        .value_counts()
-    )
-    if conteo.empty:
-        st.caption("Sin datos.")
+    conteo = casos["fuente"].dropna().astype(int).map(_FUENTE_MAP).value_counts()
+    if not hay_datos_suficientes(conteo, MINIMO_CATEGORIAS_DISTRIBUCION):
+        avisar_datos_insuficientes(
+            f"Con los filtros actuales todos los casos llegaron por "
+            f"{describir_cantidad(len(conteo), 'fuente de notificación', 'fuentes de notificación')}. "
+            "Amplía el período o el territorio para comparar entre fuentes."
+        )
         return
 
-    # Colores explícitos para evitar que el 3.ª slice reciba azul cielo.
-    _COLORES_ESTADO_DONA = [
-        AZUL_INSTITUCIONAL,   # Conf. laboratorio (el más frecuente → color primario)
-        NARANJA_INSTITUCIONAL, # Conf. nexo
-        "#7c3aed",             # Probable (mismo violeta del Sankey)
-        "#374151",             # Descartado / Otro
-    ]
-    fig = px.pie(
-        names=conteo.index,
-        values=conteo.values,
-        hole=0.55,
-        color_discrete_sequence=_COLORES_ESTADO_DONA,
-    )
-    fig.update_traces(
-        texttemplate="%{value:,} (%{percent})",
-        textposition="outside",
-    )
-    fig.update_layout(
-        showlegend=True,
-        legend=LEYENDA_SUPERIOR,
-        height=300,
-        margin=dict(l=10, r=10, t=40, b=10),
-    )
-    st.plotly_chart(fig, width="stretch")
-
-# ---------------------------------------------------------------------------
-# 4.9  Clasificacion final por semana
-# ---------------------------------------------------------------------------
-
-def _mostrar_clasificacion_final_semanal(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/stacked_bar_chart: Clasificación final por semana{resumen_filtros_activos(incluir_periodo=False)}")
-
-    if "semana" not in casos.columns or "estado_final_de_caso" not in casos.columns:
-        st.caption("Sin datos.")
-        return
-
-    anios = sorted(casos["ano"].dropna().unique().tolist(), reverse=True)
-    if not anios:
-        return
-
-    anio = st.selectbox(
-        "Año",
-        anios,
-        key="morbilidad_clas_final_anio",
-        label_visibility="collapsed",
-    )
-    subset = casos[casos["ano"] == anio].copy()
-    subset["clasificacion"] = (
-        subset["estado_final_de_caso"].astype(str).map(_ESTADO_FINAL_MAP).fillna("Otro")
-    )
-
-    semanal = subset.groupby(["semana", "clasificacion"]).size().reset_index(name="casos")
-    if semanal.empty:
-        st.caption(f"Sin datos para {anio}.")
-        return
+    total = conteo.sum()
+    df = pd.DataFrame({
+        "fuente": conteo.index,
+        "casos": conteo.values,
+        "etiqueta": [f"{v:,}  ({_pct(v, total)})" for v in conteo.values],
+    })
 
     fig = px.bar(
-        semanal,
-        x="semana",
-        y="casos",
-        color="clasificacion",
-        barmode="stack",
-        labels={"semana": "Semana epidemiológica", "casos": "Casos", "clasificacion": "Clasificación"},
+        df,
+        x="casos",
+        y="fuente",
+        text="etiqueta",
+        orientation="h",
+        labels={"casos": "Casos", "fuente": ""},
     )
+    fig.update_traces(textposition="outside", marker_color=AZUL_INSTITUCIONAL, name="Casos", showlegend=True)
     fig.update_layout(
-        legend=dict(**LEYENDA_SUPERIOR, font=dict(size=10)),
-        height=380,
-        **_LAYOUT,
+        height=420,
+        margin=dict(l=0, r=60, t=70, b=0),
+        xaxis={"range": rango_con_margen(df["casos"].max())},
+        yaxis={"categoryorder": "total ascending"},
     )
-    fig.update_xaxes(**eje_semanal(int(semanal["semana"].max())))
-    st.plotly_chart(fig, width="stretch")
+    mostrar_grafica(fig, "Casos por fuente de notificación", resumen_filtros_activos())

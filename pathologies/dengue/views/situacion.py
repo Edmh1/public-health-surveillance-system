@@ -1,7 +1,9 @@
-"""Pestana 2 Situacion: KPIs, mapa de situacion (2.1) y canal endemico (2.2),
-cuartiles y Bortman lado a lado, tal como el INS Colombia recomienda usarlos en
-paralelo para confirmar senales de alerta. El pronostico de corto plazo vive en
-su propia pestana (Pronostico, ver pathologies/dengue/views/pronostico.py).
+"""Pestana 2 Situacion: KPIs, mapa de situacion (2.1) y canal endemico (2.2).
+El canal se dibuja con UN metodo a la vez (selector "Metodologia", cuartiles por
+defecto) y a ancho completo: con los dos metodos en paralelo cada canal quedaba
+a media pantalla y no se leia. El canal obedece el filtro geografico global de
+la barra lateral (ya no tiene selectores propios de escala ni de territorio). El
+pronostico de corto plazo vive en su propia pestana (Pronostico).
 
 Casos = cod_eve en {210, 220}. La mortalidad (580) no participa del canal endemico
 ni del mapa de situacion, pero si de los KPIs (letalidad, mortalidad).
@@ -17,8 +19,9 @@ from core.dashboard_base.estilos import (
     COLOR_EPIDEMIA,
     COLOR_EXITO_EPIDEMIOLOGICO,
     COLOR_SEGURIDAD_EPIDEMIOLOGICO,
-    LEYENDA_SUPERIOR,
+    ANCHO_MEDIA_COLUMNA,
     eje_semanal,
+    mostrar_grafica,
 )
 from core.dashboard_base.filtros import CLAVE_FILTROS, resumen_filtros_activos
 from core.geografia import obtener_geojson_subregiones
@@ -41,12 +44,12 @@ CODIGOS_CASOS = {210, 220}
 
 META_LETALIDAD = 0.10  # meta nacional INS/MSPS
 
-_ESCALA_OPCIONES = ["Subregión", "Municipio"]
-
-_METODOS = [
-    ("cuartiles", "Cuartiles / medianas (INS Colombia)"),
-    ("bortman", "Bortman (media geométrica)"),
-]
+# Metodos del canal endemico: clave del calculo -> rotulo del selector. El
+# primero es el de por defecto.
+_METODOS = {
+    "cuartiles": "Cuartiles",
+    "bortman": "Bortman (media geométrica)",
+}
 
 _ZONA_SIN_DATOS = "Sin datos suficientes"
 
@@ -241,7 +244,7 @@ def _mostrar_kpis_principales(resultado: dict, anio_kpi: int | None) -> None:
 # ---------------------------------------------------------------------------
 
 def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
-    st.subheader(f":material/map: Situación actual por subregión{resumen_filtros_activos()}")
+    st.subheader(":material/map: Situación actual por subregión")
     st.caption(
         "Zona del canal endémico en la última semana reportada de cada subregión, "
         "comparada contra esa misma semana en años anteriores."
@@ -258,6 +261,7 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
     anios_disponibles = sorted((int(anio) for anio in casos["ano"].dropna().unique()), reverse=True)
 
     with st.expander("Ajustar año de vigilancia y línea base histórica", icon=":material/tune:"):
+        _explicar_parametros_del_metodo()
         resultado_seleccion = _seleccionar_linea_base(anios_disponibles, key_prefix="situacion_mapa")
 
     with st.expander(":material/help: ¿Cómo se lee este mapa?"):
@@ -314,7 +318,11 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
     with ranura_mapa:
         col_mapa, col_resumen = st.columns([1.6, 1])
         with col_mapa:
-            st.plotly_chart(_graficar_mapa_situacion(situacion), width="stretch")
+            contexto = resumen_filtros_activos(periodo=f"año de vigilancia {anio_vigilancia}")
+            mostrar_grafica(
+                _graficar_mapa_situacion(situacion), "Situación actual por subregión", contexto,
+                ancho=ANCHO_MEDIA_COLUMNA,
+            )
         with col_resumen:
             for _, fila in situacion.sort_values("subregion").iterrows():
                 zona = fila["situacion"]
@@ -324,7 +332,7 @@ def _mostrar_situacion_actual(casos: pd.DataFrame) -> None:
                     f'padding: 0.5rem 0.8rem; margin-bottom: 0.6rem;">'
                     f'<strong>{fila["subregion"]}</strong><br>'
                     f'{zona} '
-                    f'<small style="color:#666;">— semana {int(fila["semana"])} de {int(fila["ano"])}</small>'
+                    f'<span style="color:#555; font-size:0.95rem;">- semana {int(fila["semana"])} de {int(fila["ano"])}</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -367,19 +375,19 @@ def _graficar_mapa_situacion(situacion: pd.DataFrame) -> go.Figure:
     fig.update_geos(fitbounds="locations", visible=False)
     fig.update_layout(
         margin={"r": 0, "t": 40, "l": 0, "b": 0},
-        height=360,
-        legend=dict(**LEYENDA_SUPERIOR, title=None),
+        height=400,
+        legend=dict(title=None),
     )
     return fig
 
 # ---------------------------------------------------------------------------
-# 2.2  Canal endemico (cuartiles y Bortman lado a lado)
+# 2.2  Canal endemico (un metodo a la vez, a ancho completo)
 # ---------------------------------------------------------------------------
 
 def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
     col_titulo, col_metodologia = st.columns([5, 1.3], vertical_alignment="center")
     with col_titulo:
-        st.subheader(f":material/monitoring: Canal endémico{resumen_filtros_activos()}")
+        st.subheader(":material/monitoring: Canal endémico")
     with col_metodologia:
         if st.button(
             "Metodología",
@@ -391,81 +399,61 @@ def _mostrar_canal_endemico(casos: pd.DataFrame) -> None:
 
     st.caption(
         "Compara los casos por semana epidemiológica del año de vigilancia contra el "
-        "historial de años anteriores. El INS Colombia recomienda revisar cuartiles y "
-        "Bortman en paralelo para confirmar señales de alerta."
+        "historial de años anteriores, en el territorio que marque el filtro de la barra "
+        "lateral (sin filtro, todo el Magdalena)."
     )
 
-    col_escala, col_territorio = st.columns(2)
-
-    with col_escala:
-        escala = st.segmented_control(
-            "Escala",
-            _ESCALA_OPCIONES,
-            default="Subregión",
-            required=True,
-            key="situacion_canal_escala",
-        )
-    columna_territorio = "subregion" if escala == "Subregión" else "nom_mun_o"
-
-    territorios_disponibles = sorted(casos[columna_territorio].dropna().unique().tolist())
-    if not territorios_disponibles:
-        st.caption("Sin datos geográficos suficientes para esta escala.")
-        return
-
-    with col_territorio:
-        territorio = st.selectbox(
-            escala,
-            territorios_disponibles,
-            key=f"situacion_canal_territorio_{escala}",
-        )
-    datos_territorio = casos[casos[columna_territorio] == territorio]
+    metodo = st.segmented_control(
+        "Metodología",
+        list(_METODOS.keys()),
+        default="cuartiles",
+        required=True,
+        format_func=lambda clave: _METODOS[clave],
+        key="situacion_canal_metodo",
+    )
 
     anios_disponibles = sorted(
-        (int(anio) for anio in datos_territorio["ano"].dropna().unique()), reverse=True
+        (int(anio) for anio in casos["ano"].dropna().unique()), reverse=True
     )
     if not anios_disponibles:
-        st.caption("Sin datos para este territorio.")
+        st.caption("Sin datos para el territorio filtrado.")
         return
 
-    # Las graficas van ARRIBA de los controles (año de vigilancia, ventana,
+    # La grafica va ARRIBA de los parametros (año de vigilancia, ventana,
     # excluir): se reserva su posicion con un contenedor vacio, se dibujan los
-    # controles debajo y luego se rellena el contenedor de arriba. Asi los
-    # selectores no tapan ni empujan el grafico.
-    ranura_graficas = st.container()
+    # parametros debajo y luego se rellena el contenedor de arriba.
+    ranura_grafica = st.container()
 
     st.space("small")
-    st.caption(":material/tune: Parámetros del canal endémico")
-    resultado_seleccion = _seleccionar_linea_base(
-        anios_disponibles, key_prefix=f"situacion_canal_{escala}_{territorio}"
-    )
+    with st.expander("Ajustar año de vigilancia y línea base histórica", icon=":material/tune:"):
+        _explicar_parametros_del_metodo()
+        resultado_seleccion = _seleccionar_linea_base(anios_disponibles, key_prefix="situacion_canal")
 
     if resultado_seleccion is None:
-        with ranura_graficas:
+        with ranura_grafica:
             st.caption("Ajusta el año de vigilancia o la línea base abajo para ver el canal.")
         return
     anio_vigilancia, anios_base_seleccionados = resultado_seleccion
 
-    with ranura_graficas:
-        col_cuartiles, col_bortman = st.columns(2)
-        for columna, (metodo, etiqueta) in zip((col_cuartiles, col_bortman), _METODOS):
-            resultado = _calcular_canal_endemico_cacheado(
-                datos_territorio,
-                metodo=metodo,
-                anio_vigilancia=anio_vigilancia,
-                anios_base=anios_base_seleccionados,
-            )
-            with columna:
-                st.plotly_chart(
-                    _graficar_canal(resultado, territorio, anio_vigilancia),
-                    width="stretch",
-                )
-                # El nombre del metodo va DEBAJO del grafico: como titulo de
-                # Plotly se solapaba con la leyenda superior.
-                st.markdown(
-                    f'<p style="text-align:center; font-weight:600; '
-                    f'margin-top:-0.5rem;">{etiqueta}</p>',
-                    unsafe_allow_html=True,
-                )
+    resultado = _calcular_canal_endemico_cacheado(
+        casos,
+        metodo=metodo,
+        anio_vigilancia=anio_vigilancia,
+        anios_base=anios_base_seleccionados,
+    )
+    with ranura_grafica:
+        contexto = resumen_filtros_activos(periodo=f"año de vigilancia {anio_vigilancia}")
+        contexto = f"{contexto} · método: {_METODOS[metodo]}"
+        mostrar_grafica(_graficar_canal(resultado, anio_vigilancia), "Canal endémico", contexto)
+
+
+def _explicar_parametros_del_metodo() -> None:
+    st.caption(
+        ":material/info: Estos son parámetros del método del canal endémico (qué año se vigila "
+        "y qué años forman la línea base histórica), no filtros de la vista: no recortan los "
+        "casos que se muestran, configuran el cálculo."
+    )
+
 
 def _seleccionar_linea_base(anios_disponibles: list[int], key_prefix: str) -> tuple[int, list[int]] | None:
     """Selector compartido de año de vigilancia + ventana (5-7 años) + exclusión
@@ -574,7 +562,7 @@ def _construir_linea_base(anios_disponibles_desc: list[int], tamano_objetivo: in
             break
     return sorted(seleccionados)
 
-def _graficar_canal(resultado: dict, territorio: str, anio_vigilancia: int) -> go.Figure:
+def _graficar_canal(resultado: dict, anio_vigilancia: int) -> go.Figure:
     bandas = resultado["bandas"]
     serie_actual = resultado["serie_actual"]
     etiquetas_linea = ETIQUETAS_LINEAS[resultado["metodo"]]
@@ -648,8 +636,8 @@ def _graficar_canal(resultado: dict, territorio: str, anio_vigilancia: int) -> g
     fig.update_layout(
         xaxis=dict(title="Semana epidemiológica", **eje_semanal(int(max(semanas)))),
         yaxis=dict(title="Casos"),
-        margin=dict(l=0, r=0, t=80, b=0),
-        legend=dict(**LEYENDA_SUPERIOR, font=dict(size=10)),
+        margin=dict(l=0, r=0, b=0),
+        height=540,
     )
     return fig
 
@@ -685,7 +673,7 @@ def _dialogo_metodologia() -> None:
                 f'<div style="background-color:{_con_opacidad(_ZONA_COLOR[zona], 0.15)}; '
                 f'border-left: 4px solid {_ZONA_COLOR[zona]}; border-radius: 6px; '
                 f'padding: 0.5rem 0.7rem; height: 100%;">'
-                f'<strong>{zona}</strong><br><small>{descripcion}</small></div>',
+                f'<strong>{zona}</strong><br><span style="font-size:0.95rem;">{descripcion}</span></div>',
                 unsafe_allow_html=True,
             )
 
@@ -805,8 +793,8 @@ def _dialogo_metodologia() -> None:
     with tab_comparativa:
         st.markdown(
             "El INS Colombia usa ambos métodos en paralelo para confirmar señales de "
-            "alerta; por eso este dashboard los muestra lado a lado en vez de obligar "
-            "a elegir uno."
+            "alerta. En la pestaña se ve uno a la vez, a ancho completo, con el selector "
+            "Metodología: conviene revisar los dos antes de concluir."
         )
         st.markdown(
             "| | Cuartiles | Bortman |\n"
