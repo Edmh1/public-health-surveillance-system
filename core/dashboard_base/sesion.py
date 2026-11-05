@@ -106,18 +106,10 @@ def _panel_contexto() -> None:
             max-width: 430px;
             margin-left: 20px;
         ">
-            <!-- Icono en contenedor blanco para que sea visible sobre el fondo oscuro -->
-            <div style="
-                width: 60px; height: 60px;
-                background: rgba(255,255,255,0.92);
-                border-radius: 14px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin-bottom: 24px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-            ">
-                <img src="{escudo_uri}" style="height: 48px;">
+            <!-- Escudo de la universidad directo sobre el fondo oscuro: es la
+                 version con el texto en blanco, que en un recuadro blanco no se veria -->
+            <div style="margin-bottom: 22px;">
+                <img src="{escudo_uri}" alt="Universidad del Magdalena" style="height: 72px; display: block;">
             </div>
 
             <h1 style="
