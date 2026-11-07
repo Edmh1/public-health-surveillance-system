@@ -1,34 +1,37 @@
 """Pestana Pronostico: pronostico semanal de casos de dengue a nivel
-departamental (Magdalena), de 1 a 6 semanas, con tres modelos sin clima, uno por
-familia: Prophet (estadistico, el modelo por defecto), XGBoost (aprendizaje
-automatico) y LSTM (aprendizaje profundo). Ver el dialogo de "Fundamentacion".
+departamental (Magdalena), de 1 a 6 semanas, con el mejor modelo de cada familia
+(estadistico, aprendizaje automatico, aprendizaje profundo). La metodologia
+completa esta en docs/pronostico.md, que el dialogo de Fundamentacion muestra.
 
-La pestana NO entrena en el pronostico en vivo: carga la version de modelos
-exportada que el perfil de administracion genero desde Gestion (ver
-core/ingestion/entrenamiento.py y core/storage/modelos.py) y muestra con que
-datos fue entrenada. Si el consolidado tiene datos mas recientes que el modelo,
-lo avisa. La unica excepcion es el modo de verificacion historica (ver
-_entrenar_y_pronosticar_historico).
+La pestana SOLO MUESTRA: no entrena, no sube ni cambia modelos (eso es de
+Gestion, perfil de administracion). Usa la version activa de cada familia
+(core/storage/modelos.py).
 
-Serie DEPARTAMENTAL unica: esta pestana NO depende de los filtros globales de
-subregion/municipio/anio/semana (los modelos se validaron a escala
-departamental), por eso usa siempre el consolidado COMPLETO de la sesion en vez
-del datos_filtrados que le llega por el contrato de pestana.
+Dos vistas que no se mezclan:
+- Pronostico en vivo: el modelo definitivo (entrenado con el 100 % del rango)
+  pronostica las proximas 6 semanas desde la ultima semana cargada. Se calcula al
+  abrir la pestana (cache por version) y no se guarda en ningun archivo. Lo
+  acompanan, en un bloque aparte, las metricas de la prueba por horizonte: el
+  rendimiento historico del modelo de evaluacion, no el error de estos
+  pronosticos.
+- Pronostico de una semana pasada: los resultados individuales de la prueba,
+  leidos del CSV de la version (pronosticos_prueba.csv). No se reconstruyen con
+  el modelo definitivo ni se entrena nada.
 
-Tasa (casos x100.000 hab.): es una tasa SEMANAL, por eso el numero se ve chico
-comparado con la Incidencia anual de Situacion; no son comparables entre si. Usa
-poblacion TOTAL del Magdalena (los 30 municipios), NO la poblacion en riesgo que
-usan Incidencia/Mortalidad: el pronostico es una serie departamental unica, y
-depender de la estratificacion de riesgo (que exige 6 anios de historico)
-acoplaria dos piezas independientes. Ver CLAUDE.md.
+Presentacion: los calculos usan valores sin redondear; las tablas y la grafica
+muestran 1 decimal.
+
+Serie DEPARTAMENTAL unica: no depende de los filtros globales; usa siempre el
+consolidado completo de la sesion. Tasa con poblacion TOTAL del Magdalena (no la
+poblacion en riesgo): ver CLAUDE.md.
 """
 
-import numpy as np
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from epiweeks import Week
 
-from core.auth.permisos import PERMISO_REENTRENAR_PRONOSTICO, tiene_permiso
 from core.dashboard_base import datos as modulo_datos
 from core.dashboard_base.estilos import (
     AZUL_INSTITUCIONAL,
@@ -38,122 +41,151 @@ from core.dashboard_base.estilos import (
 )
 from core.dashboard_base.filtros import CLAVE_FILTROS
 from core.dashboard_base.gestion_entrenamiento import (
-    dialogo_confirmar_reentrenamiento,
+    FORMATO_COLUMNAS_METRICAS,
     formatear_fecha_larga,
+    tabla_metricas,
+    tabla_metricas_global,
 )
-from core.dashboard_base.sesion import usuario_actual
+from core.ingestion.entrenamiento import describir_rango
 from core.storage import modelos as almacen_modelos
 from pathologies.dengue.poblacion import obtener_poblacion_total_departamental
-from pathologies.dengue.prediccion import (
+from pathologies.dengue.pronostico import catalogo, documentacion
+from pathologies.dengue.pronostico.configuracion import (
+    FAMILIA_APRENDIZAJE_AUTOMATICO,
+    FAMILIA_APRENDIZAJE_PROFUNDO,
+    FAMILIA_ESTADISTICO,
+    FAMILIAS,
     HORIZONTE_MAXIMO_SEMANAS,
     HORIZONTE_RECOMENDADO_SEMANAS,
-    MODELO_LSTM,
-    MODELO_POR_DEFECTO,
-    MODELO_PROPHET,
-    MODELO_XGBOOST,
-    MODELOS_DISPONIBLES,
-    NOMBRES_MODELOS,
-    SEMANAS_MINIMAS_ENTRENAMIENTO,
-    calcular_metricas,
-    cargar_modelo,
-    construir_serie_semanal_departamental,
-    entrenar_modelo,
-    pronosticar,
 )
+from pathologies.dengue.pronostico.evaluacion import calcular_metricas
+from pathologies.dengue.pronostico.inferencia import pronosticar
+from pathologies.dengue.pronostico.manifest import es_formato_vigente
+from pathologies.dengue.pronostico.paquete import leer_pronosticos_prueba
+from pathologies.dengue.pronostico.serie import agregar_semana_epidemiologica, construir_serie_semanal_departamental
 
 PATOLOGIA = "dengue"
 
-# Un color por modelo, fijo en toda la pestana, para que al comparar los tres
-# cada uno se reconozca sin leer la leyenda. El negro queda reservado para el
-# dato real.
-COLORES_MODELO = {
-    MODELO_PROPHET: AZUL_INSTITUCIONAL,
-    MODELO_XGBOOST: NARANJA_INSTITUCIONAL,
-    # Verde azulado y no violeta: el violeta se confundia con el azul de Prophet.
-    MODELO_LSTM: "#0891b2",
+# Un color por familia, fijo en toda la pestana. El negro queda reservado para
+# el dato real.
+COLORES_FAMILIA = {
+    FAMILIA_ESTADISTICO: AZUL_INSTITUCIONAL,
+    FAMILIA_APRENDIZAJE_AUTOMATICO: NARANJA_INSTITUCIONAL,
+    # Verde azulado y no violeta: el violeta se confundia con el azul.
+    FAMILIA_APRENDIZAJE_PROFUNDO: "#0891b2",
 }
+_FAMILIA_POR_DEFECTO = FAMILIA_ESTADISTICO
+_COLOR_GRIS = "#6b7280"
 
 _OPCION_COMPARAR = "comparar"
-_ETIQUETAS_SELECTOR_MODELO = {
-    **NOMBRES_MODELOS,
-    _OPCION_COMPARAR: "Comparar los tres",
-}
-
 _METRICAS = ["Casos", "Tasa semanal (x100.000 hab.)"]
+_MODO_EN_VIVO = "Pronóstico en vivo (próximas semanas)"
+_MODO_HISTORICO = "Pronóstico de una semana pasada (prueba)"
 
-_MODO_EN_VIVO = "Pronóstico en vivo (hoy)"
-_MODO_PERSONALIZADO = "Elegir otra semana..."
-
-# Ejemplos historicos para presentaciones/validacion: el modelo entrena SOLO con
-# datos hasta esa fecha (nunca ve lo que paso despues) y el grafico superpone lo
-# que realmente ocurrio, para comparar. Nunca inventa ni fuerza un resultado.
-#
-# Dos ejemplos A PROPOSITO, en direcciones distintas, para que no se vea como un
-# caso aislado elegido a mano: una subida real (inicio del brote de octubre 2018,
-# camino al pico de 177 casos/semana en diciembre) y un descenso real (tras ese
-# mismo pico, enero 2019). _MODO_PERSONALIZADO deja probar CUALQUIER semana.
-_EJEMPLOS_HISTORICOS = {
-    "Ejemplo histórico: inicio del brote de octubre 2018": pd.Timestamp("2018-10-28"),
-    "Ejemplo histórico: descenso tras el pico de enero 2019": pd.Timestamp("2019-01-06"),
-}
-_SEMANAS_CONTEXTO_REAL_HISTORICO = 8  # mas alla del horizonte, para ver hacia donde iba realmente
-
-# Vista inicial del eje X: los ultimos dos anios. El rangeslider deja acercar y
-# alejar sobre todo el historico sin otro control.
+_SEMANAS_CONTEXTO_REAL_HISTORICO = 8
 _SEMANAS_VISTA_INICIAL = 104
+
+_NOTA_REDONDEO = (
+    "Valores mostrados con 1 decimal; todos los cálculos usan los valores sin redondear."
+)
+
+_FORMATO_COLUMNAS_CASOS = {
+    "Pronóstico": st.column_config.NumberColumn("Pronóstico", format="%.1f"),
+    "±RMSE": st.column_config.NumberColumn("±RMSE", format="%.1f"),
+    "Casos reales": st.column_config.NumberColumn("Casos reales", format="%.0f"),
+    "Error absoluto": st.column_config.NumberColumn("Error absoluto", format="%.1f"),
+    "Persistencia": st.column_config.NumberColumn("Persistencia", format="%.1f"),
+    "Error absoluto persistencia": st.column_config.NumberColumn("Error absoluto persistencia", format="%.1f"),
+}
 
 
 # ---------------------------------------------------------------------------
-# Carga de modelos exportados y calculo (cacheados)
+# Modelos activos y sus archivos (cacheados)
 # ---------------------------------------------------------------------------
 
 @st.cache_resource(show_spinner=False)
-def _cargar_modelo_exportado(version: str, tipo: str):
-    """Un modelo exportado se carga una vez por proceso y version. La LSTM
-    importa TensorFlow aqui, solo cuando de verdad se pide."""
-    carpeta = almacen_modelos.ruta_version(PATOLOGIA, version)
-    return cargar_modelo(tipo, carpeta)
+def _cargar_modelo(modelo: str, version: str):
+    """El modelo definitivo de una version se carga una vez por proceso. Las
+    redes importan TensorFlow aqui. Cargar no entrena."""
+    manifest = almacen_modelos.leer_manifest(PATOLOGIA, modelo, version)
+    clase = catalogo.obtener_modelo(modelo)
+    instancia = clase(manifest["hiperparametros"])
+    instancia.cargar(almacen_modelos.ruta_version(PATOLOGIA, modelo, version))
+    return instancia
 
 
 @st.cache_data(show_spinner=False)
-def _pronosticar_con_exportado(version: str, tipo: str, serie: pd.DataFrame) -> pd.DataFrame:
-    """Pronostico en vivo con el modelo exportado de la version activa, desde la
-    ultima semana del consolidado cargado. Siempre a HORIZONTE_MAXIMO_SEMANAS:
-    el selector de horizonte solo recorta, asi no se recalcula al moverlo."""
-    modelo = _cargar_modelo_exportado(version, tipo)
-    return pronosticar(modelo, serie, HORIZONTE_MAXIMO_SEMANAS)
+def _pronosticar_en_vivo(modelo: str, version: str, serie: pd.DataFrame) -> pd.DataFrame:
+    """Las 6 semanas siguientes a la ultima semana del consolidado, con el
+    modelo definitivo. El selector de horizonte solo recorta. No se guarda en
+    ningun archivo."""
+    instancia = _cargar_modelo(modelo, version)
+    return pronosticar(instancia, serie, HORIZONTE_MAXIMO_SEMANAS)
 
 
-# EXCEPCION DELIBERADA a "la pestana no entrena": el modo de verificacion
-# historica entrena al vuelo con los datos hasta la fecha elegida, porque ahi el
-# punto es justamente que el modelo NO vea lo que vino despues. Un modelo
-# exportado ya vio todo el historico y no sirve para esta prueba. No quitar.
 @st.cache_data(show_spinner=False)
-def _entrenar_y_pronosticar_historico(serie_modelo: pd.DataFrame, tipo: str) -> pd.DataFrame | None:
-    modelo = entrenar_modelo(serie_modelo, tipo)
-    if modelo is None:
-        return None
-    return pronosticar(modelo, serie_modelo, HORIZONTE_MAXIMO_SEMANAS)
+def _registros_prueba(modelo: str, version: str) -> pd.DataFrame | None:
+    manifest = almacen_modelos.leer_manifest(PATOLOGIA, modelo, version) or {}
+    carpeta = almacen_modelos.ruta_version(PATOLOGIA, modelo, version)
+    return leer_pronosticos_prueba(carpeta, manifest)
 
+
+def _modelos_activos() -> dict[str, dict]:
+    """{familia: {"modelo", "version", "manifest", "nombre"}} de las familias con
+    version activa, en el orden de FAMILIAS."""
+    punteros = almacen_modelos.leer_activos(PATOLOGIA)
+    activos = {}
+    for familia in FAMILIAS:
+        puntero = punteros.get(familia)
+        if puntero is None:
+            continue
+        manifest = almacen_modelos.leer_manifest(PATOLOGIA, puntero["modelo"], puntero["version"]) or {}
+        activos[familia] = {
+            "modelo": puntero["modelo"],
+            "version": puntero["version"],
+            "manifest": manifest,
+            "nombre": manifest.get("nombre") or puntero["modelo"],
+        }
+    return activos
+
+
+def _rotulo(familia: str, activo: dict) -> str:
+    return f"{activo['nombre']} ({FAMILIAS[familia].lower()})"
+
+
+def _metricas_horizonte(manifest: dict, horizonte: int, pronosticador: str = "modelo") -> dict:
+    por_horizonte = manifest.get("metricas_prueba", {}).get("por_horizonte", {})
+    return por_horizonte.get(str(horizonte), {}).get(pronosticador, {})
+
+
+def _texto_semana(fecha: pd.Timestamp) -> str:
+    semana = Week.fromdate(pd.Timestamp(fecha).date(), system="CDC")
+    return f"Sem. {semana.week} · {semana.year}"
+
+
+# ---------------------------------------------------------------------------
+# Tasa
+# ---------------------------------------------------------------------------
 
 def _poblacion_por_anio(anios: list[int]) -> dict[int, float | None]:
     return {anio: obtener_poblacion_total_departamental([anio]) for anio in sorted(set(anios))}
 
 
-def _agregar_tasa(df: pd.DataFrame, columna_casos: str) -> pd.DataFrame:
+def _agregar_tasa(df: pd.DataFrame, columnas: list[str]) -> pd.DataFrame:
     """Agrega '<columna>_tasa' dividiendo por la poblacion TOTAL del Magdalena
     del anio de cada fila. None (no disponible) si falta poblacion para ese
     anio, nunca un numero inventado."""
     df = df.copy()
     poblacion = _poblacion_por_anio(df["ano"].tolist())
-    tasas = []
-    for _, fila in df.iterrows():
-        poblacion_anio = poblacion[fila["ano"]]
-        if poblacion_anio:
-            tasas.append(fila[columna_casos] / poblacion_anio * 100_000)
-        else:
-            tasas.append(None)
-    df[f"{columna_casos}_tasa"] = tasas
+    for columna in columnas:
+        tasas = []
+        for _, fila in df.iterrows():
+            poblacion_anio = poblacion[fila["ano"]]
+            if poblacion_anio and pd.notna(fila[columna]):
+                tasas.append(fila[columna] / poblacion_anio * 100_000)
+            else:
+                tasas.append(None)
+        df[f"{columna}_tasa"] = tasas
     return df
 
 
@@ -176,43 +208,56 @@ def mostrar_pronostico(_datos_filtrados: pd.DataFrame) -> None:
             _dialogo_fundamentacion()
 
     st.caption(
-        "Pronóstico a nivel departamental (todo el Magdalena). No depende de los filtros "
-        "de la barra lateral: usa siempre el histórico completo."
+        "Pronóstico de casos notificados (probables y confirmados, los mismos que el resto del "
+        "tablero) a nivel departamental, todo el Magdalena, con el mejor modelo de cada familia. "
+        "No depende de los filtros de la barra lateral: usa siempre el histórico completo."
     )
     _avisar_si_hay_filtros_geograficos_activos()
 
-    serie = construir_serie_semanal_departamental(datos_completos)
-    if len(serie) < SEMANAS_MINIMAS_ENTRENAMIENTO:
-        st.warning(
-            f"No es posible calcular el pronóstico: hacen falta al menos "
-            f"{SEMANAS_MINIMAS_ENTRENAMIENTO} semanas de histórico semanal continuo "
-            f"para estimar la estacionalidad anual, y hay {len(serie)} semanas "
-            f"({len(serie) / 52:.1f} años) disponibles.",
-            icon=":material/warning:",
+    activos = _modelos_activos()
+    if not activos:
+        st.info(
+            "Todavía no hay modelos de pronóstico activos. El perfil de administración los entrena "
+            "o los sube desde Gestión, apartado Pronóstico.",
+            icon=":material/info:",
         )
         return
 
-    modo = st.selectbox(
+    serie = construir_serie_semanal_departamental(datos_completos)
+    if serie.empty:
+        st.warning("No hay casos en el consolidado para pronosticar.", icon=":material/warning:")
+        return
+
+    modo = st.segmented_control(
         "Modo",
-        [_MODO_EN_VIVO] + list(_EJEMPLOS_HISTORICOS.keys()) + [_MODO_PERSONALIZADO],
+        [_MODO_EN_VIVO, _MODO_HISTORICO],
+        default=_MODO_EN_VIVO,
+        required=True,
         key="pronostico_modo",
         help=(
-            "Los modos históricos entrenan el mismo modelo como si solo conociera datos "
-            "hasta esa fecha pasada (nunca ve lo que pasó después) y comparan contra los "
-            "casos reales que ocurrieron: sirven para verificar el modelo con casos reales, no "
-            "son el pronóstico de hoy. \"Elegir otra semana\" deja probar cualquier semana del "
-            "histórico, no solo los ejemplos preseleccionados."
+            "En vivo: el modelo definitivo pronostica las próximas semanas. Semana pasada: los "
+            "pronósticos que hizo el modelo de evaluación durante la prueba, en semanas que no "
+            "había visto, comparados con lo que ocurrió."
         ),
     )
+
+    opciones_modelo = list(activos)
+    if len(activos) > 1:
+        opciones_modelo.append(_OPCION_COMPARAR)
+    if _FAMILIA_POR_DEFECTO in activos:
+        indice_defecto = opciones_modelo.index(_FAMILIA_POR_DEFECTO)
+    else:
+        indice_defecto = 0
+
+    def _rotulo_opcion(opcion: str) -> str:
+        if opcion == _OPCION_COMPARAR:
+            return f"Comparar los {len(activos)}"
+        return _rotulo(opcion, activos[opcion])
 
     col_modelo, col_horizonte, col_metrica = st.columns([2.2, 2, 1.8], vertical_alignment="bottom")
     with col_modelo:
         opcion_modelo = st.selectbox(
-            "Modelo",
-            MODELOS_DISPONIBLES + [_OPCION_COMPARAR],
-            index=MODELOS_DISPONIBLES.index(MODELO_POR_DEFECTO),
-            format_func=lambda opcion: _ETIQUETAS_SELECTOR_MODELO[opcion],
-            key="pronostico_modelo",
+            "Modelo", opciones_modelo, index=indice_defecto, format_func=_rotulo_opcion, key="pronostico_modelo"
         )
     with col_horizonte:
         horizonte = st.select_slider(
@@ -227,246 +272,22 @@ def mostrar_pronostico(_datos_filtrados: pd.DataFrame) -> None:
         )
 
     if opcion_modelo == _OPCION_COMPARAR:
-        tipos = list(MODELOS_DISPONIBLES)
+        familias_elegidas = list(activos)
     else:
-        tipos = [opcion_modelo]
+        familias_elegidas = [opcion_modelo]
+    elegidos = {familia: activos[familia] for familia in familias_elegidas}
 
     if horizonte > HORIZONTE_RECOMENDADO_SEMANAS:
         st.warning(
-            f"El documento técnico recomienda pronosticar hasta {HORIZONTE_RECOMENDADO_SEMANAS} "
-            "semanas. Más allá el error crece de forma notoria: en la sexta semana, Prophet tuvo "
-            "un MAPE del 35 % y un R² de 0.62, contra 0.87 en la primera.",
+            f"Se recomienda pronosticar hasta {HORIZONTE_RECOMENDADO_SEMANAS} semanas. Más allá el "
+            "error crece: compara las métricas de la prueba de cada horizonte.",
             icon=":material/warning:",
         )
 
     if modo == _MODO_EN_VIVO:
-        _mostrar_en_vivo(serie, tipos, horizonte, metrica)
-        return
-
-    if modo == _MODO_PERSONALIZADO:
-        origen = _seleccionar_semana_personalizada(serie)
-        if origen is None:
-            return
+        _mostrar_en_vivo(serie, elegidos, horizonte, metrica)
     else:
-        origen = _EJEMPLOS_HISTORICOS[modo]
-    _mostrar_historico(serie, origen, tipos, horizonte, metrica)
-
-
-def _mostrar_en_vivo(serie: pd.DataFrame, tipos: list[str], horizonte: int, metrica: str) -> None:
-    version = almacen_modelos.version_activa(PATOLOGIA)
-    if version is None:
-        _explicar_sin_modelo()
-        return
-    manifest = almacen_modelos.leer_manifest(PATOLOGIA, version) or {}
-    _mostrar_procedencia(manifest, serie)
-
-    pronosticos = {}
-    for tipo in tipos:
-        if tipo == MODELO_LSTM:
-            mensaje = "Cargando la LSTM (la primera vez tarda porque carga TensorFlow)..."
-        else:
-            mensaje = f"Calculando el pronóstico con {NOMBRES_MODELOS[tipo]}..."
-        with st.spinner(mensaje):
-            pronostico_completo = _pronosticar_con_exportado(version, tipo, serie)
-        pronosticos[tipo] = pronostico_completo[pronostico_completo["horizonte_semanas"] <= horizonte]
-
-    _mostrar_error_esperado(manifest, tipos, horizonte)
-    _dibujar(serie, pronosticos, metrica, contexto_real=None)
-    _mostrar_semanas_pronosticadas(pronosticos, es_historico=False)
-
-
-def _mostrar_historico(
-    serie: pd.DataFrame, origen: pd.Timestamp, tipos: list[str], horizonte: int, metrica: str
-) -> None:
-    serie_modelo = serie[serie["fecha_semana"] <= origen].reset_index(drop=True)
-    fin_contexto = origen + pd.Timedelta(weeks=_SEMANAS_CONTEXTO_REAL_HISTORICO)
-    serie_contexto_real = serie[
-        (serie["fecha_semana"] > origen) & (serie["fecha_semana"] <= fin_contexto)
-    ].reset_index(drop=True)
-
-    st.warning(
-        f"Estás viendo un EJEMPLO HISTÓRICO, no el pronóstico de hoy: modelo entrenado aquí "
-        f"mismo solo con datos hasta el {formatear_fecha_larga(origen.isoformat())}, comparado con "
-        "los casos reales que ocurrieron después.",
-        icon=":material/history_edu:",
-    )
-
-    if len(serie_modelo) < SEMANAS_MINIMAS_ENTRENAMIENTO:
-        st.warning(
-            "No hay suficiente histórico antes de esta fecha para entrenar el modelo.",
-            icon=":material/warning:",
-        )
-        return
-
-    pronosticos = {}
-    for tipo in tipos:
-        with st.spinner(f"Entrenando {NOMBRES_MODELOS[tipo]} con datos hasta esa fecha..."):
-            pronostico_completo = _entrenar_y_pronosticar_historico(serie_modelo, tipo)
-        if pronostico_completo is None:
-            st.warning(f"No fue posible entrenar {NOMBRES_MODELOS[tipo]}.", icon=":material/warning:")
-            continue
-        pronosticos[tipo] = pronostico_completo[pronostico_completo["horizonte_semanas"] <= horizonte]
-
-    if not pronosticos:
-        return
-
-    anios = int(serie_modelo["ano"].min()), int(serie_modelo["ano"].max())
-    st.caption(
-        f":material/history: Modelo entrenado con {len(serie_modelo)} semanas de histórico "
-        f"({anios[0]}-{anios[1]})."
-    )
-    _mostrar_error_real(pronosticos, serie_contexto_real, horizonte)
-    _dibujar(serie_modelo, pronosticos, metrica, contexto_real=serie_contexto_real)
-    _mostrar_semanas_pronosticadas(pronosticos, es_historico=True, contexto_real=serie_contexto_real)
-
-
-def _explicar_sin_modelo() -> None:
-    st.info(
-        "Todavía no hay un modelo de pronóstico entrenado, así que no se puede mostrar el "
-        "pronóstico de hoy. Lo genera el perfil de administración desde Gestión, en el apartado "
-        "Pronóstico. Mientras tanto, los modos históricos de arriba sí funcionan.",
-        icon=":material/info:",
-    )
-    usuario = usuario_actual()
-    if usuario is not None and tiene_permiso(usuario.rol, PERMISO_REENTRENAR_PRONOSTICO):
-        if st.button("Entrenar ahora", icon=":material/model_training:", key="pronostico_entrenar_primero"):
-            dialogo_confirmar_reentrenamiento(PATOLOGIA, usuario)
-
-
-def _mostrar_procedencia(manifest: dict, serie: pd.DataFrame) -> None:
-    """Con que datos fue entrenado el modelo en uso (visible, no en un tooltip)
-    y aviso si el consolidado ya tiene datos mas recientes que el modelo."""
-    rango = manifest.get("rango", {})
-    fecha = formatear_fecha_larga(manifest["fecha_entrenamiento"])
-    st.markdown(
-        f":material/model_training: Modelo entrenado el {fecha} con {rango.get('anio_inicio')}-"
-        f"{rango.get('anio_fin')} ({manifest.get('semanas')} semanas, hasta la semana "
-        f"{rango.get('semana_fin')} de {rango.get('anio_fin')})."
-    )
-
-    fecha_ultima_modelo = pd.Timestamp(rango.get("fecha_ultima_semana"))
-    fecha_ultima_datos = pd.Timestamp(serie["fecha_semana"].iloc[-1])
-    if fecha_ultima_datos <= fecha_ultima_modelo:
-        return
-
-    ultima = serie.iloc[-1]
-    semanas_nuevas = int((fecha_ultima_datos - fecha_ultima_modelo).days // 7)
-    st.warning(
-        f"El consolidado tiene datos más recientes que el modelo: llega hasta la semana "
-        f"{int(ultima['semana'])} de {int(ultima['ano'])}, {semanas_nuevas} semana(s) después de lo "
-        "que vio el modelo. El pronóstico se calcula desde la última semana cargada, pero el "
-        "modelo no aprendió de esos datos nuevos. Hay que reentrenarlo desde Gestión, apartado "
-        "Pronóstico (perfil de administración).",
-        icon=":material/update:",
-    )
-    usuario = usuario_actual()
-    if usuario is not None and tiene_permiso(usuario.rol, PERMISO_REENTRENAR_PRONOSTICO):
-        if st.button("Reentrenar ahora", icon=":material/model_training:", key="pronostico_reentrenar_desactualizado"):
-            dialogo_confirmar_reentrenamiento(PATOLOGIA, usuario)
-
-
-def _formatear_numero(valor: float | None, sufijo: str = "", decimales: int = 1) -> str:
-    if valor is None:
-        return "No disponible"
-    return f"{valor:,.{decimales}f}{sufijo}"
-
-
-def _mostrar_tarjetas_metricas(metricas_por_modelo: dict) -> None:
-    """Las cuatro metricas (RMSE, MAE, MAPE, R2). Con un modelo, una tarjeta por
-    metrica; comparando los tres, una tabla con una fila por modelo. Dentro de un
-    st.empty: el bloque cambia de forma (tarjetas o tabla) y asi nunca queda a la
-    vista la forma anterior."""
-    with st.empty().container():
-        _dibujar_tarjetas_metricas(metricas_por_modelo)
-
-
-def _dibujar_tarjetas_metricas(metricas_por_modelo: dict) -> None:
-    if len(metricas_por_modelo) == 1:
-        valores = next(iter(metricas_por_modelo.values()))
-        columnas = st.columns(4)
-        with columnas[0]:
-            st.metric("RMSE (casos)", _formatear_numero(valores.get("RMSE")), border=True)
-        with columnas[1]:
-            st.metric("MAE (casos)", _formatear_numero(valores.get("MAE")), border=True)
-        with columnas[2]:
-            st.metric("MAPE", _formatear_numero(valores.get("MAPE"), " %"), border=True)
-        with columnas[3]:
-            st.metric("R²", _formatear_numero(valores.get("R2"), decimales=2), border=True)
-        return
-
-    filas = []
-    for tipo, valores in metricas_por_modelo.items():
-        filas.append({
-            "Modelo": NOMBRES_MODELOS[tipo],
-            "RMSE (casos)": valores.get("RMSE"),
-            "MAE (casos)": valores.get("MAE"),
-            "MAPE (%)": valores.get("MAPE"),
-            "R²": valores.get("R2"),
-        })
-    st.dataframe(pd.DataFrame(filas), hide_index=True, width="stretch")
-
-
-def _mostrar_error_esperado(manifest: dict, tipos: list[str], horizonte: int) -> None:
-    """Error que el modelo obtuvo en la validacion walk-forward del sistema PARA
-    EL HORIZONTE ELEGIDO. Nunca es el error de esta prediccion (el futuro todavia
-    no paso): se rotula como error esperado."""
-    metricas = manifest.get("metricas", {})
-    st.caption(
-        f":material/rule: Error esperado a {horizonte} semana(s), medido en validación histórica "
-        "(walk-forward del sistema sobre los datos con que se entrenó esta versión). No es el "
-        "error de esta predicción."
-    )
-    metricas_por_modelo = {tipo: metricas.get(tipo, {}).get(str(horizonte), {}) for tipo in tipos}
-    _mostrar_tarjetas_metricas(metricas_por_modelo)
-
-
-def _mostrar_error_real(pronosticos: dict, contexto_real: pd.DataFrame, horizonte: int) -> None:
-    """En modo historico SI se puede medir el error real: lo que el modelo
-    pronostico contra lo que paso en esas mismas semanas. Se muestran las cuatro
-    metricas, R2 incluido, aunque con tan pocas semanas sea inestable."""
-    reales = contexto_real.head(horizonte)
-    if reales.empty:
-        return
-    cantidad = len(reales)
-    st.caption(
-        f":material/rule: Error real de este ejemplo: pronóstico contra lo que ocurrió en las "
-        f"{cantidad} semana(s) siguientes."
-    )
-    metricas_por_modelo = {}
-    for tipo, pronostico in pronosticos.items():
-        comparables = pronostico.head(cantidad)["casos_pronosticados"].to_numpy()
-        metricas_por_modelo[tipo] = calcular_metricas(reales["casos"].to_numpy()[:len(comparables)], comparables)
-    _mostrar_tarjetas_metricas(metricas_por_modelo)
-
-
-def _seleccionar_semana_personalizada(serie: pd.DataFrame) -> pd.Timestamp | None:
-    """Deja elegir CUALQUIER semana del historico como origen, no solo los dos
-    ejemplos preseleccionados. La fecha se ajusta a la semana epidemiologica mas
-    cercana hacia atras (convencion CDC)."""
-    fechas_disponibles = serie["fecha_semana"]
-    if len(fechas_disponibles) <= SEMANAS_MINIMAS_ENTRENAMIENTO:
-        st.info(
-            "Todavía no hay suficiente histórico para elegir una semana personalizada.",
-            icon=":material/info:",
-        )
-        return None
-
-    primera_fecha_valida = fechas_disponibles.iloc[SEMANAS_MINIMAS_ENTRENAMIENTO - 1]
-    ultima_fecha_valida = fechas_disponibles.iloc[-2]  # deja al menos 1 semana real de contexto despues
-
-    fecha_elegida = st.date_input(
-        "Semana de origen (se ajusta al inicio de esa semana epidemiológica)",
-        value=primera_fecha_valida.date(),
-        min_value=primera_fecha_valida.date(),
-        max_value=ultima_fecha_valida.date(),
-        key="pronostico_fecha_personalizada",
-    )
-    fecha_elegida = pd.Timestamp(fecha_elegida)
-
-    semanas_hasta_fecha = fechas_disponibles[fechas_disponibles <= fecha_elegida]
-    if semanas_hasta_fecha.empty:
-        return primera_fecha_valida
-    return semanas_hasta_fecha.iloc[-1]
+        _mostrar_historico(serie, elegidos, horizonte, metrica)
 
 
 def _avisar_si_hay_filtros_geograficos_activos() -> None:
@@ -480,48 +301,351 @@ def _avisar_si_hay_filtros_geograficos_activos() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Grafica
+# En vivo
 # ---------------------------------------------------------------------------
 
-def _dibujar(serie: pd.DataFrame, pronosticos: dict, metrica: str, contexto_real: pd.DataFrame | None) -> None:
-    usar_tasa = metrica == _METRICAS[1]
-    serie_grafica = _agregar_tasa(serie, "casos") if usar_tasa else serie
-    contexto_grafica = None
-    if contexto_real is not None and not contexto_real.empty:
-        contexto_grafica = _agregar_tasa(contexto_real, "casos") if usar_tasa else contexto_real
-    pronosticos_grafica = {}
-    for tipo, pronostico in pronosticos.items():
-        if usar_tasa:
-            pronosticos_grafica[tipo] = _agregar_tasa(pronostico, "casos_pronosticados")
-        else:
-            pronosticos_grafica[tipo] = pronostico
+def _mostrar_procedencia(elegidos: dict[str, dict], serie: pd.DataFrame) -> None:
+    fecha_ultima_datos = pd.Timestamp(serie["fecha_semana"].iloc[-1])
+    lineas = []
+    desactualizados = []
+    for activo in elegidos.values():
+        manifest = activo["manifest"]
+        rango = manifest.get("rango", {})
+        fecha = manifest.get("fecha_entrenamiento")
+        fecha_texto = formatear_fecha_larga(fecha) if fecha else "fecha desconocida"
+        rango_texto = describir_rango(rango) if rango else "rango desconocido"
+        lineas.append(f"{activo['nombre']}: modelo definitivo entrenado el {fecha_texto} con {rango_texto}.")
+        fecha_ultima_modelo = rango.get("fecha_ultima_semana")
+        if fecha_ultima_modelo and fecha_ultima_datos > pd.Timestamp(fecha_ultima_modelo):
+            desactualizados.append(activo["nombre"])
 
-    figura = _graficar_pronostico(serie_grafica, pronosticos_grafica, usar_tasa, contexto_grafica)
-    # Anio epidemiologico (no el calendario de la fecha): la semana 1 de 2007
-    # empieza el 31 de diciembre de 2006.
+    st.caption(":material/model_training: " + "  \n".join(lineas))
+    if desactualizados:
+        ultima = serie.iloc[-1]
+        st.warning(
+            f"El consolidado llega hasta la semana {int(ultima['semana'])} de {int(ultima['ano'])}, "
+            f"más reciente que los datos con que se entrenó {', '.join(desactualizados)}. El "
+            "pronóstico parte de la última semana cargada, pero el modelo no aprendió de esas "
+            "semanas nuevas. El perfil de administración puede reentrenarlo desde Gestión.",
+            icon=":material/update:",
+        )
+
+
+def _con_limites(pronostico: pd.DataFrame, manifest: dict) -> pd.DataFrame:
+    """Agrega a cada semana el RMSE de la prueba de su horizonte y el rango
+    orientativo pronostico +- RMSE (el limite inferior no baja de 0)."""
+    tabla = pronostico.copy()
+    errores = []
+    for horizonte in tabla["horizonte_semanas"]:
+        errores.append(_metricas_horizonte(manifest, int(horizonte)).get("RMSE"))
+    tabla["rmse"] = pd.to_numeric(pd.Series(errores, index=tabla.index), errors="coerce")
+    limite_inferior = tabla["casos_pronosticados"] - tabla["rmse"]
+    tabla["limite_inferior"] = limite_inferior.clip(lower=0)
+    tabla["limite_superior"] = tabla["casos_pronosticados"] + tabla["rmse"]
+    return tabla
+
+
+def _mostrar_en_vivo(serie: pd.DataFrame, elegidos: dict[str, dict], horizonte: int, metrica: str) -> None:
+    _mostrar_procedencia(elegidos, serie)
+
+    pronosticos = {}
+    for familia, activo in elegidos.items():
+        try:
+            with st.spinner(f"Calculando el pronóstico con {activo['nombre']}..."):
+                completo = _pronosticar_en_vivo(activo["modelo"], activo["version"], serie)
+        except Exception as error:
+            st.warning(
+                f"No se pudo usar {activo['nombre']}: {error}. El perfil de administración puede "
+                "revisarlo en Gestión.",
+                icon=":material/error:",
+            )
+            continue
+        recortado = completo[completo["horizonte_semanas"] <= horizonte]
+        pronosticos[familia] = _con_limites(recortado, activo["manifest"])
+    if not pronosticos:
+        return
+
+    st.markdown("#### Pronóstico de las próximas semanas")
+    st.caption(
+        "Modelo definitivo, entrenado con el 100 % de su rango, a partir de los casos reales hasta "
+        "la última semana cargada. Rango orientativo: pronóstico ± el RMSE de la prueba de ese "
+        "horizonte; no es un intervalo de confianza. " + _NOTA_REDONDEO
+    )
+    _dibujar(serie, pronosticos, elegidos, metrica, contexto_real=None, etiqueta_corte="Última semana cargada")
+    _mostrar_tabla_futuro(pronosticos, elegidos)
+
+    st.markdown("#### Desempeño histórico en la prueba")
+    primer_manifest = next(iter(elegidos.values()))["manifest"]
+    alcance = primer_manifest.get("metricas_prueba", {}).get("alcance")
+    if alcance:
+        st.markdown(alcance + " Sirven como referencia del error esperado en cada horizonte.")
+    _mostrar_metricas_prueba(elegidos, horizonte)
+
+
+def _rango_texto(fila) -> str:
+    return f"{fila['limite_inferior']:,.1f} a {fila['limite_superior']:,.1f}"
+
+
+def _mostrar_tabla_futuro(pronosticos: dict[str, pd.DataFrame], elegidos: dict[str, dict]) -> None:
+    if len(pronosticos) == 1:
+        pronostico = next(iter(pronosticos.values()))
+        filas = []
+        for _, fila in pronostico.iterrows():
+            filas.append({
+                "Semana": _texto_semana(fila["fecha_semana"]),
+                "Horizonte": f"H{int(fila['horizonte_semanas'])}",
+                "Pronóstico": fila["casos_pronosticados"],
+                "±RMSE": fila["rmse"],
+                "Rango orientativo (±RMSE)": _rango_texto(fila),
+            })
+        st.dataframe(pd.DataFrame(filas), hide_index=True, width="stretch", column_config=_FORMATO_COLUMNAS_CASOS)
+        return
+
+    primer = next(iter(pronosticos.values()))
+    tabla = pd.DataFrame({
+        "Semana": [_texto_semana(fecha) for fecha in primer["fecha_semana"]],
+        "Horizonte": [f"H{int(valor)}" for valor in primer["horizonte_semanas"]],
+    })
+    for familia, pronostico in pronosticos.items():
+        valores = []
+        for _, fila in pronostico.iterrows():
+            valores.append(f"{fila['casos_pronosticados']:,.1f} ({_rango_texto(fila)})")
+        tabla[elegidos[familia]["nombre"]] = valores
+    st.dataframe(tabla, hide_index=True, width="stretch")
+
+
+def _mostrar_metricas_prueba(elegidos: dict[str, dict], horizonte: int) -> None:
+    filas = []
+    for activo in elegidos.values():
+        manifest = activo["manifest"]
+        por_horizonte = tabla_metricas(manifest)
+        if por_horizonte.empty:
+            continue
+        horizontes_elegidos = [f"H{numero}" for numero in range(1, horizonte + 1)]
+        por_horizonte = por_horizonte[por_horizonte["Horizonte"].isin(horizontes_elegidos)]
+        global_ = tabla_metricas_global(manifest).rename(columns={"Alcance": "Horizonte"})
+        combinada = pd.concat([por_horizonte, global_], ignore_index=True)
+        combinada.insert(0, "Modelo", activo["nombre"])
+        filas.append(combinada)
+    if not filas:
+        st.markdown("Los modelos elegidos no tienen métricas de la prueba.")
+        return
+    tabla = pd.concat(filas, ignore_index=True)
+    columnas = ["Modelo", "Horizonte", "n", "RMSE", "MAE", "MAPE (%)", "R²", "RMSE persistencia", "Razón RMSE vs persistencia"]
+    st.dataframe(tabla[columnas], hide_index=True, width="stretch", column_config=FORMATO_COLUMNAS_METRICAS)
+    st.caption(
+        "Cada fila H se calcula con todos los pronósticos de ese horizonte en la prueba (n "
+        "registros); la fila global, con todos los registros de H1 a H6 a la vez. La semana 1 "
+        "futura se acompaña del RMSE de H1, la 6 del de H6. " + _NOTA_REDONDEO
+    )
+
+
+# ---------------------------------------------------------------------------
+# Semana pasada: resultados individuales de la prueba
+# ---------------------------------------------------------------------------
+
+def _mostrar_historico(serie: pd.DataFrame, elegidos: dict[str, dict], horizonte: int, metrica: str) -> None:
+    con_registros = {}
+    sin_registros = []
+    for familia, activo in elegidos.items():
+        registros = None
+        if es_formato_vigente(activo["manifest"]):
+            registros = _registros_prueba(activo["modelo"], activo["version"])
+        if registros is None or registros.empty:
+            sin_registros.append(activo["nombre"])
+        else:
+            con_registros[familia] = registros
+    if sin_registros:
+        st.info(
+            f"{', '.join(sin_registros)}: su versión no tiene resultados de la prueba guardados.",
+            icon=":material/info:",
+        )
+    if not con_registros:
+        return
+
+    conjuntos = [set(registros["fecha_origen"]) for registros in con_registros.values()]
+    origenes = sorted(set.intersection(*conjuntos))
+    if not origenes:
+        st.info("Los modelos elegidos no tienen semanas de prueba en común. Elige uno solo.", icon=":material/info:")
+        return
+
+    primeros = next(iter(con_registros.values()))
+    horizontes_por_origen = primeros.groupby("fecha_origen")["horizonte_semanas"].apply(sorted).to_dict()
+    completos = [origen for origen in origenes if len(horizontes_por_origen.get(origen, [])) == HORIZONTE_MAXIMO_SEMANAS]
+    if completos:
+        defecto = origenes.index(completos[-1])
+    else:
+        defecto = len(origenes) - 1
+
+    def _rotulo_origen(posicion: int) -> str:
+        origen = origenes[posicion]
+        horizontes = horizontes_por_origen.get(origen, [])
+        semana = Week.fromdate(origen.date(), system="CDC")
+        if not horizontes:
+            disponibles = "sin horizontes"
+        elif len(horizontes) == 1:
+            disponibles = f"H{horizontes[0]}"
+        else:
+            disponibles = f"H{horizontes[0]} a H{horizontes[-1]}"
+        return f"Semana {semana.week} de {semana.year} ({formatear_fecha_larga(origen.isoformat())}) · evaluables: {disponibles}"
+
+    posicion = st.selectbox(
+        "Pronosticar desde la semana (semana de origen)",
+        list(range(len(origenes))),
+        index=defecto,
+        format_func=_rotulo_origen,
+        key="pronostico_origen_historico",
+        help=(
+            "Semanas de origen de la prueba. Solo se muestran los horizontes cuya semana objetivo "
+            "pertenece a la prueba, por eso al principio y al final hay menos de 6."
+        ),
+    )
+    origen = origenes[posicion]
+
+    pronosticos = {}
+    filas_tabla = []
+    for familia, registros in con_registros.items():
+        activo = elegidos[familia]
+        del_origen = registros[(registros["fecha_origen"] == origen) & (registros["horizonte_semanas"] <= horizonte)]
+        del_origen = del_origen.sort_values("horizonte_semanas")
+        if del_origen.empty:
+            continue
+        para_grafica = pd.DataFrame({
+            "fecha_semana": del_origen["fecha_objetivo"].to_numpy(),
+            "horizonte_semanas": del_origen["horizonte_semanas"].to_numpy(),
+            "casos_pronosticados": del_origen["pronostico_modelo"].to_numpy(),
+        })
+        para_grafica = agregar_semana_epidemiologica(para_grafica)
+        pronosticos[familia] = _con_limites(para_grafica, activo["manifest"])
+        for _, fila in del_origen.iterrows():
+            filas_tabla.append(_fila_resultado_individual(activo["nombre"], fila))
+
+    if not pronosticos:
+        horizontes = horizontes_por_origen.get(origen, [])
+        st.info(
+            f"Desde esta semana el primer horizonte evaluable es H{horizontes[0]}: sube el horizonte "
+            "para verlo.",
+            icon=":material/info:",
+        )
+        return
+
+    cortes = []
+    for activo in elegidos.values():
+        prueba = activo["manifest"].get("prueba", {})
+        if prueba.get("inicio_prueba"):
+            ultimo_dia = pd.Timestamp(prueba["inicio_prueba"]) - pd.Timedelta(weeks=1)
+            cortes.append(f"{activo['nombre']}, hasta el {formatear_fecha_larga(ultimo_dia.isoformat())}")
+    st.warning(
+        "Estás viendo resultados individuales de la PRUEBA, no el pronóstico de hoy. Los hizo el "
+        "modelo de evaluación, entrenado solo con el 85 % de los datos "
+        f"({'; '.join(cortes)}), que no había visto estas semanas. No es el modelo definitivo.",
+        icon=":material/history_edu:",
+    )
+
+    serie_hasta_origen = serie[serie["fecha_semana"] <= origen].reset_index(drop=True)
+    fin_contexto = origen + pd.Timedelta(weeks=horizonte + _SEMANAS_CONTEXTO_REAL_HISTORICO)
+    contexto_real = serie[(serie["fecha_semana"] > origen) & (serie["fecha_semana"] <= fin_contexto)].reset_index(drop=True)
+    _dibujar(serie_hasta_origen, pronosticos, elegidos, metrica, contexto_real=contexto_real, etiqueta_corte="Semana de origen")
+
+    tabla = pd.DataFrame(filas_tabla)
+    if len(pronosticos) == 1:
+        tabla = tabla.drop(columns=["Modelo"])
+    st.dataframe(tabla, hide_index=True, width="stretch", column_config=_FORMATO_COLUMNAS_CASOS)
+    st.caption(
+        "Cada fila es un registro de pronosticos_prueba.csv: semana objetivo, horizonte, casos "
+        "reales, pronóstico del modelo de evaluación y su error, y la persistencia (repetir los "
+        "casos de la semana de origen) con su error. " + _NOTA_REDONDEO + " Con 0 casos reales el "
+        "error porcentual no está definido."
+    )
+
+
+def _texto_error_porcentual(valor) -> str:
+    if pd.isna(valor):
+        return "no definido (0 casos reales)"
+    return f"{valor:,.1f} %"
+
+
+def _fila_resultado_individual(nombre_modelo: str, fila) -> dict:
+    return {
+        "Modelo": nombre_modelo,
+        "Semana objetivo": _texto_semana(fila["fecha_objetivo"]),
+        "Horizonte": f"H{int(fila['horizonte_semanas'])}",
+        "Casos reales": fila["casos_reales"],
+        "Pronóstico": fila["pronostico_modelo"],
+        "Error absoluto": fila["error_absoluto"],
+        "Error porcentual": _texto_error_porcentual(fila["error_porcentual"]),
+        "Persistencia": fila["pronostico_persistencia"],
+        "Error absoluto persistencia": fila["error_absoluto_persistencia"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Grafica de pronostico
+# ---------------------------------------------------------------------------
+
+def _dibujar(
+    serie: pd.DataFrame,
+    pronosticos: dict[str, pd.DataFrame],
+    elegidos: dict[str, dict],
+    metrica: str,
+    contexto_real: pd.DataFrame | None,
+    etiqueta_corte: str,
+) -> None:
+    usar_tasa = metrica == _METRICAS[1]
+    serie_grafica = serie
+    contexto_grafica = contexto_real
+    pronosticos_grafica = pronosticos
+    if usar_tasa:
+        serie_grafica = _agregar_tasa(serie, ["casos"])
+        if contexto_real is not None and not contexto_real.empty:
+            contexto_grafica = _agregar_tasa(contexto_real, ["casos"])
+        pronosticos_grafica = {}
+        for familia, pronostico in pronosticos.items():
+            columnas = ["casos_pronosticados", "limite_inferior", "limite_superior"]
+            pronosticos_grafica[familia] = _agregar_tasa(pronostico, columnas)
+
+    mostrar_banda = len(pronosticos) == 1
+    figura = _graficar_pronostico(
+        serie_grafica, pronosticos_grafica, elegidos, usar_tasa, contexto_grafica, mostrar_banda, etiqueta_corte
+    )
     anio_inicio = int(serie["ano"].iloc[0])
     anio_fin = int(serie["ano"].iloc[-1])
     contexto_texto = f"Dengue · Magdalena · casos semanales {anio_inicio}-{anio_fin} y pronóstico"
     mostrar_grafica(figura, "Pronóstico de casos de dengue", contexto_texto, key="pronostico_grafica")
 
 
+def _color_translucido(color_hex: str, opacidad: float) -> str:
+    color = color_hex.lstrip("#")
+    rojo = int(color[0:2], 16)
+    verde = int(color[2:4], 16)
+    azul = int(color[4:6], 16)
+    return f"rgba({rojo}, {verde}, {azul}, {opacidad})"
+
+
 def _graficar_pronostico(
     serie: pd.DataFrame,
-    pronosticos: dict,
+    pronosticos: dict[str, pd.DataFrame],
+    elegidos: dict[str, dict],
     usar_tasa: bool,
     contexto_real: pd.DataFrame | None,
+    mostrar_banda: bool,
+    etiqueta_corte: str,
 ) -> go.Figure:
-    """Negro continuo = dato real (incluido, en modo historico, lo que paso
-    despues del corte). Punteado con marcadores = modelo, un color fijo por
-    modelo. Sin banda de incertidumbre (ver prediccion.pronosticar)."""
-    columna_real = "casos_tasa" if usar_tasa else "casos"
-    columna_pronostico = "casos_pronosticados_tasa" if usar_tasa else "casos_pronosticados"
+    """Negro continuo = dato real. Punteado con marcadores = pronostico, un
+    color fijo por familia. Con un solo modelo, banda del rango orientativo
+    (+- RMSE de la prueba de cada horizonte)."""
+    sufijo = "_tasa" if usar_tasa else ""
+    columna_real = f"casos{sufijo}"
+    columna_pronostico = f"casos_pronosticados{sufijo}"
+    columna_inferior = f"limite_inferior{sufijo}"
+    columna_superior = f"limite_superior{sufijo}"
     etiqueta_eje = "Tasa semanal (x100.000 hab.)" if usar_tasa else "Casos"
-    formato = ",.2f" if usar_tasa else ",.0f"
+    formato_real = ",.2f" if usar_tasa else ",.0f"
+    formato_pronostico = ",.2f" if usar_tasa else ",.1f"
 
     fechas_reales = serie["fecha_semana"]
     valores_reales = serie[columna_real]
-    if contexto_real is not None:
+    if contexto_real is not None and not contexto_real.empty:
         fechas_reales = pd.concat([fechas_reales, contexto_real["fecha_semana"]])
         valores_reales = pd.concat([valores_reales, contexto_real[columna_real]])
 
@@ -532,28 +656,55 @@ def _graficar_pronostico(
         mode="lines",
         line=dict(color=COLOR_DATO_REAL, width=1.4),
         name="Casos reales",
-        hovertemplate=f"%{{x|%d %b %Y}} · %{{y:{formato}}}<extra>Real</extra>",
+        hovertemplate=f"%{{x|%d %b %Y}} · %{{y:{formato_real}}}<extra>Real</extra>",
     ))
 
-    # Puente entre la ultima semana que vio el modelo y la primera pronosticada:
-    # sin este punto, la linea punteada queda desconectada del historico.
     fecha_corte = serie["fecha_semana"].iloc[-1]
     valor_corte = serie[columna_real].iloc[-1]
-    for tipo, pronostico in pronosticos.items():
+    for familia, pronostico in pronosticos.items():
+        color = COLORES_FAMILIA.get(familia, AZUL_INSTITUCIONAL)
+        nombre = elegidos[familia]["nombre"]
+        fechas = [fecha_corte] + pronostico["fecha_semana"].tolist()
+
+        if mostrar_banda:
+            fig.add_trace(go.Scatter(
+                x=fechas,
+                y=[valor_corte] + pronostico[columna_superior].tolist(),
+                mode="lines",
+                line=dict(width=0),
+                hoverinfo="skip",
+                showlegend=False,
+            ))
+            fig.add_trace(go.Scatter(
+                x=fechas,
+                y=[valor_corte] + pronostico[columna_inferior].tolist(),
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor=_color_translucido(color, 0.18),
+                name="Rango orientativo (±RMSE de la prueba)",
+                hoverinfo="skip",
+            ))
+
+        errores = [None] + pronostico["rmse"].tolist()
         fig.add_trace(go.Scatter(
-            x=[fecha_corte] + pronostico["fecha_semana"].tolist(),
+            x=fechas,
             y=[valor_corte] + pronostico[columna_pronostico].tolist(),
+            customdata=errores,
             mode="lines+markers",
-            line=dict(color=COLORES_MODELO[tipo], width=2.2, dash="dot"),
-            marker=dict(size=8, color=COLORES_MODELO[tipo]),
-            name=NOMBRES_MODELOS[tipo],
-            hovertemplate=f"%{{x|%d %b %Y}} · %{{y:{formato}}}<extra>{NOMBRES_MODELOS[tipo]}</extra>",
+            line=dict(color=color, width=2.2, dash="dot"),
+            marker=dict(size=8, color=color),
+            name=nombre,
+            hovertemplate=(
+                f"%{{x|%d %b %Y}} · %{{y:{formato_pronostico}}} (±RMSE %{{customdata:,.1f}} casos)"
+                f"<extra>{nombre}</extra>"
+            ),
         ))
 
-    fig.add_vline(x=fecha_corte, line_width=1.2, line_dash="dot", line_color="#6b7280")
+    fig.add_vline(x=fecha_corte, line_width=1.2, line_dash="dot", line_color=_COLOR_GRIS)
     fig.add_annotation(
         x=fecha_corte, y=1, yref="paper", xanchor="right", yanchor="bottom",
-        text="Último dato que vio el modelo", showarrow=False, font=dict(size=14, color="#4b5563"),
+        text=etiqueta_corte, showarrow=False, font=dict(size=14, color="#4b5563"),
     )
 
     fecha_fin_visible = max(pronostico["fecha_semana"].iloc[-1] for pronostico in pronosticos.values())
@@ -569,216 +720,325 @@ def _graficar_pronostico(
             rangeslider=dict(visible=True, thickness=0.08),
         ),
         yaxis=dict(title=etiqueta_eje, rangemode="tozero"),
-        # Margen inferior para que el titulo del eje X no quede cortado debajo de
-        # la barra deslizante (rangeslider), sobre todo en pantalla completa.
         margin=dict(l=0, r=10, b=70),
         height=560,
     )
     return fig
 
 
-def _mostrar_semanas_pronosticadas(
-    pronosticos: dict, es_historico: bool, contexto_real: pd.DataFrame | None = None
-) -> None:
-    st.space("small")
-    etiqueta = "Semanas siguientes al ejemplo histórico" if es_historico else "Próximas semanas"
-    st.caption(f":material/calendar_month: {etiqueta}")
-    with st.empty().container():
-        _dibujar_semanas_pronosticadas(pronosticos, contexto_real)
+# ---------------------------------------------------------------------------
+# Fundamentacion: secciones de docs/pronostico.md con graficas del modelo activo
+# ---------------------------------------------------------------------------
+
+_PESTANAS_FUNDAMENTACION = [
+    ("Resumen", [1, 2]),
+    ("Ciclo de vida y formatos", [3, 4, 5]),
+    ("División y evaluación", [6, 7, 8]),
+    ("Pronóstico en vivo", [9, 11]),
+    ("Métricas y persistencia", [10, 12, 13]),
+    ("Clima y estudio de modelado", [14, 15]),
+]
 
 
-def _dibujar_semanas_pronosticadas(pronosticos: dict, contexto_real: pd.DataFrame | None) -> None:
+def _carpeta_y_registros(activo: dict):
+    carpeta = almacen_modelos.ruta_version(PATOLOGIA, activo["modelo"], activo["version"])
+    registros = None
+    if es_formato_vigente(activo["manifest"]):
+        registros = _registros_prueba(activo["modelo"], activo["version"])
+    return carpeta, registros
 
-    if len(pronosticos) == 1:
-        tipo, pronostico = next(iter(pronosticos.items()))
-        pronostico_con_tasa = _agregar_tasa(pronostico, "casos_pronosticados")
-        # Siempre la misma cantidad de columnas (el horizonte maximo), aunque el
-        # horizonte elegido sea menor: si la cantidad de columnas cambia entre
-        # reruns del fragmento, Streamlit podia dejar a la vista la fila de
-        # tarjetas anterior junto a la nueva (tarjetas duplicadas).
-        columnas = st.columns(HORIZONTE_MAXIMO_SEMANAS)
-        for columna, (_, fila) in zip(columnas, pronostico_con_tasa.iterrows()):
-            tasa = fila["casos_pronosticados_tasa"]
-            tasa_texto = f"{tasa:,.1f}" if tasa is not None else "No disponible"
-            with columna:
-                st.metric(
-                    f"Sem. {int(fila['semana'])} · {int(fila['ano'])}",
-                    f"{fila['casos_pronosticados']:,.0f} casos",
-                    help=(
-                        f"Tasa semanal: {tasa_texto} x100.000 hab. (población total del Magdalena, "
-                        "no comparable con la Incidencia anual de Situación). Horizonte: "
-                        f"{int(fila['horizonte_semanas'])} semana(s) desde la última semana con "
-                        "datos reales."
-                    ),
-                    border=True,
-                )
+
+def _marcador_diagrama_ciclo_de_vida(activo: dict) -> None:
+    azul = AZUL_INSTITUCIONAL
+    naranja = NARANJA_INSTITUCIONAL
+    gris = _COLOR_GRIS
+    diagrama = f"""
+    digraph {{
+        rankdir=LR;
+        node [shape=box, style="rounded,filled", fontcolor=white, fontsize=12, fontname="Helvetica"];
+        edge [color="{gris}"];
+        A [label="A. Entrenamiento\\nGestión o fuera de la app", fillcolor="{azul}"];
+        B [label="B. Evaluación\\nmodelo de evaluación (85 %)\\npronostica la prueba (15 %)", fillcolor="{naranja}"];
+        CSV [label="pronosticos_prueba.csv\\n+ métricas en el manifest", fillcolor="{naranja}"];
+        C [label="C. Exportación\\nmodelo definitivo (100 %)\\nformato nativo + manifest", fillcolor="{azul}"];
+        D [label="D. Importación\\nrevisa y carga\\n(sin entrenar)", fillcolor="{gris}"];
+        E [label="E. Inferencia\\npróximas 6 semanas\\n(sin entrenar)", fillcolor="{gris}"];
+        H [label="Semana pasada\\n(resultados individuales)", fillcolor="{naranja}"];
+        R [label="±RMSE por horizonte\\n(métricas de la prueba)", fillcolor="{naranja}"];
+        A -> B -> CSV;
+        B -> C -> D -> E;
+        CSV -> H;
+        CSV -> R -> E;
+    }}
+    """
+    st.graphviz_chart(diagrama, width="stretch")
+    st.caption("Azul: entrenamiento. Naranja: evaluación en la prueba y lo que sale de ella. Gris: uso del modelo ya entrenado.")
+
+
+def _marcador_arbol_zip(activo: dict) -> None:
+    carpeta, _ = _carpeta_y_registros(activo)
+    if not es_formato_vigente(activo["manifest"]):
+        return
+    st.markdown(f"Paquete real de {activo['nombre']} (versión {activo['version']}):")
+    st.code(documentacion.arbol_del_paquete(carpeta, activo["manifest"]), language="text")
+
+
+def _marcador_ejemplos_archivos(activo: dict) -> None:
+    carpeta, _ = _carpeta_y_registros(activo)
+    if not es_formato_vigente(activo["manifest"]):
+        return
+    st.markdown(f"Contenido real de cada archivo de {activo['nombre']}:")
+    for archivo in documentacion.ejemplos_de_archivos(carpeta, activo["manifest"]):
+        with st.expander(archivo["titulo"]):
+            st.code(archivo["contenido"], language=archivo["lenguaje"])
+
+
+def _fecha_corta(fecha: pd.Timestamp) -> str:
+    meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+    return f"{meses[fecha.month - 1]} {fecha.year}"
+
+
+def _marcador_linea_de_tiempo(activo: dict) -> None:
+    manifest = activo["manifest"]
+    rango = manifest.get("rango", {})
+    prueba = manifest.get("prueba", {})
+    if not rango.get("fecha_primera_semana") or not prueba.get("inicio_prueba"):
+        return
+    primera = pd.Timestamp(rango["fecha_primera_semana"])
+    ultima = pd.Timestamp(rango["fecha_ultima_semana"])
+    inicio_prueba = pd.Timestamp(prueba["inicio_prueba"])
+    fin_prueba = pd.Timestamp(prueba["fin_prueba"])
+    fin_entrenamiento = inicio_prueba - pd.Timedelta(weeks=1)
+    fin_en_vivo = ultima + pd.Timedelta(weeks=HORIZONTE_MAXIMO_SEMANAS)
+
+    etapas = pd.DataFrame([
+        {
+            "Etapa": "Modelo de evaluación: entrenamiento",
+            "Inicio": primera,
+            "Fin": fin_entrenamiento,
+            "Texto": f"{_fecha_corta(primera)} a {_fecha_corta(fin_entrenamiento)} (85 %)",
+            "Grupo": "entrenamiento",
+        },
+        {
+            "Etapa": "Prueba: orígenes móviles",
+            "Inicio": inicio_prueba,
+            "Fin": fin_prueba,
+            "Texto": f"{_fecha_corta(inicio_prueba)} a {_fecha_corta(fin_prueba)} (15 %)",
+            "Grupo": "prueba",
+        },
+        {
+            "Etapa": "Modelo definitivo: entrenamiento",
+            "Inicio": primera,
+            "Fin": ultima,
+            "Texto": f"{_fecha_corta(primera)} a {_fecha_corta(ultima)} (100 %)",
+            "Grupo": "definitivo",
+        },
+        {
+            "Etapa": "Pronóstico en vivo",
+            "Inicio": ultima + pd.Timedelta(weeks=1),
+            "Fin": fin_en_vivo,
+            "Texto": f"{HORIZONTE_MAXIMO_SEMANAS} semanas",
+            "Grupo": "en_vivo",
+        },
+    ])
+    colores = {
+        "entrenamiento": _color_translucido(AZUL_INSTITUCIONAL, 0.45),
+        "prueba": NARANJA_INSTITUCIONAL,
+        "definitivo": AZUL_INSTITUCIONAL,
+        "en_vivo": _COLOR_GRIS,
+    }
+    figura = px.timeline(
+        etapas, x_start="Inicio", x_end="Fin", y="Etapa", color="Grupo", color_discrete_map=colores, text="Texto"
+    )
+    figura.update_traces(textposition="inside", insidetextanchor="middle", hovertemplate="%{text}<extra></extra>")
+    figura.update_yaxes(autorange="reversed", title=None)
+    figura.update_xaxes(title=None)
+    figura.update_layout(showlegend=False, height=330, bargap=0.25, margin=dict(l=0, r=10))
+    mostrar_grafica(
+        figura,
+        "División temporal de la versión activa",
+        f"Dengue · Magdalena · {activo['nombre']} · versión {activo['version']}",
+        key="fundamentacion_linea_de_tiempo",
+    )
+
+
+def _marcador_origenes_moviles(activo: dict) -> None:
+    """Tres semanas de origen consecutivas, cada una con sus 6 pronosticos del
+    CSV, en el tramo de la prueba donde mas subieron los casos."""
+    _, registros = _carpeta_y_registros(activo)
+    if registros is None:
+        return
+    serie = construir_serie_semanal_departamental(modulo_datos.obtener_datos(PATOLOGIA))
+    reales = serie.set_index("fecha_semana")["casos"]
+    conteo = registros.groupby("fecha_origen")["horizonte_semanas"].count()
+    completos = sorted(conteo[conteo == HORIZONTE_MAXIMO_SEMANAS].index)
+    if len(completos) < 3:
         return
 
-    primer_pronostico = next(iter(pronosticos.values()))
+    mejor = None
+    mayor_subida = None
+    for posicion in range(len(completos) - 2):
+        origen = completos[posicion]
+        sexta = registros[(registros["fecha_origen"] == origen) & (registros["horizonte_semanas"] == HORIZONTE_MAXIMO_SEMANAS)]
+        subida = float(sexta["casos_reales"].iloc[0]) - float(reales.get(origen, 0))
+        if mayor_subida is None or subida > mayor_subida:
+            mayor_subida = subida
+            mejor = posicion
+    origenes = completos[mejor:mejor + 3]
+
+    inicio = origenes[0] - pd.Timedelta(weeks=6)
+    fin = origenes[-1] + pd.Timedelta(weeks=HORIZONTE_MAXIMO_SEMANAS + 1)
+    tramo = serie[(serie["fecha_semana"] >= inicio) & (serie["fecha_semana"] <= fin)]
+
+    figura = go.Figure()
+    figura.add_trace(go.Scatter(
+        x=tramo["fecha_semana"], y=tramo["casos"], mode="lines+markers",
+        line=dict(color=COLOR_DATO_REAL, width=1.6), marker=dict(size=5, color=COLOR_DATO_REAL),
+        name="Casos reales", hovertemplate="%{x|%d %b %Y} · %{y:,.0f}<extra>Real</extra>",
+    ))
+    colores = [AZUL_INSTITUCIONAL, NARANJA_INSTITUCIONAL, _COLOR_GRIS]
+    for posicion, origen in enumerate(origenes):
+        color = colores[posicion]
+        filas = registros[registros["fecha_origen"] == origen].sort_values("horizonte_semanas")
+        semana = Week.fromdate(origen.date(), system="CDC")
+        nombre = f"Desde la semana {semana.week} de {semana.year}"
+        figura.add_trace(go.Scatter(
+            x=[origen] + filas["fecha_objetivo"].tolist(),
+            y=[reales.get(origen)] + filas["pronostico_modelo"].tolist(),
+            mode="lines+markers", line=dict(color=color, width=2.2, dash="dot"), marker=dict(size=8, color=color),
+            name=nombre, hovertemplate=f"%{{x|%d %b %Y}} · %{{y:,.1f}}<extra>{nombre}</extra>",
+        ))
+        figura.add_trace(go.Scatter(
+            x=[origen], y=[reales.get(origen)], mode="markers",
+            marker=dict(size=15, color=color, line=dict(color=COLOR_DATO_REAL, width=2)),
+            showlegend=False, hovertemplate=f"Dato real de partida · %{{y:,.0f}}<extra>{nombre}</extra>",
+        ))
+    figura.update_layout(
+        xaxis=dict(title="Semana epidemiológica (fecha de inicio)"),
+        yaxis=dict(title="Casos", rangemode="tozero"),
+        height=430, margin=dict(l=0, r=10),
+    )
+    mostrar_grafica(
+        figura,
+        "Seis pronósticos desde cada semana de origen",
+        f"Dengue · Magdalena · {activo['nombre']} · tres orígenes consecutivos de la prueba",
+        key="fundamentacion_origenes_moviles",
+    )
+    st.markdown(
+        "Cada círculo es el dato real de una semana de origen. Desde ahí salen sus 6 pronósticos "
+        "(H1 a H6). Una semana después, el siguiente origen vuelve a partir del dato real."
+    )
+
+
+def _marcador_tabla_csv_ejemplo(activo: dict) -> None:
+    _, registros = _carpeta_y_registros(activo)
+    if registros is None:
+        return
+    conteo = registros.groupby("fecha_origen")["horizonte_semanas"].count()
+    completos = sorted(conteo[conteo == HORIZONTE_MAXIMO_SEMANAS].index)
+    ultimo = registros["fecha_origen"].max()
+    st.markdown(
+        f"Registros reales de {activo['nombre']}: {len(registros)} filas, {registros['fecha_origen'].nunique()} "
+        "semanas de origen. Valores tal como están en el CSV (sin redondear)."
+    )
+    if completos:
+        origen = completos[0]
+        st.markdown(f"Una semana de origen con sus 6 horizontes ({formatear_fecha_larga(origen.isoformat())}):")
+        st.dataframe(registros[registros["fecha_origen"] == origen], hide_index=True, width="stretch")
+    st.markdown(f"Última semana de origen evaluable ({formatear_fecha_larga(ultimo.isoformat())}):")
+    st.dataframe(registros[registros["fecha_origen"] == ultimo], hide_index=True, width="stretch")
+
+
+def _marcador_ejemplo_metricas(activo: dict) -> None:
+    _, registros = _carpeta_y_registros(activo)
+    if registros is None:
+        return
+    manifest = activo["manifest"]
+    h1 = registros[registros["horizonte_semanas"] == 1].sort_values("fecha_origen")
+    muestra = h1.head(5)
     tabla = pd.DataFrame({
-        "Semana": [
-            f"Sem. {int(fila['semana'])} · {int(fila['ano'])}" for _, fila in primer_pronostico.iterrows()
-        ],
+        "Semana objetivo": [_texto_semana(fecha) for fecha in muestra["fecha_objetivo"]],
+        "y": muestra["casos_reales"].to_numpy(),
+        "ŷ": muestra["pronostico_modelo"].to_numpy(),
+        "|y − ŷ|": muestra["error_absoluto"].to_numpy(),
+        "(y − ŷ)²": (muestra["casos_reales"] - muestra["pronostico_modelo"]).pow(2).to_numpy(),
+        "APE (%)": muestra["error_porcentual"].to_numpy(),
     })
-    for tipo, pronostico in pronosticos.items():
-        tabla[NOMBRES_MODELOS[tipo]] = np.round(pronostico["casos_pronosticados"].to_numpy(), 0)
-    if contexto_real is not None and not contexto_real.empty:
-        reales = contexto_real.head(len(tabla))["casos"].tolist()
-        reales = reales + [None] * (len(tabla) - len(reales))
-        tabla["Casos reales"] = reales
+    st.markdown(f"Con los datos de {activo['nombre']}: los 5 primeros registros de H1 del CSV.")
     st.dataframe(tabla, hide_index=True, width="stretch")
+    de_la_muestra = calcular_metricas(muestra["casos_reales"], muestra["pronostico_modelo"])
+    suma_absolutos = float(muestra["error_absoluto"].sum())
+    suma_cuadrados = float((muestra["casos_reales"] - muestra["pronostico_modelo"]).pow(2).sum())
+    st.markdown(
+        f"$$MAE = \\frac{{{suma_absolutos:.3f}}}{{5}} = {de_la_muestra['MAE']:.3f} \\qquad "
+        f"RMSE = \\sqrt{{\\frac{{{suma_cuadrados:.3f}}}{{5}}}} = {de_la_muestra['RMSE']:.3f}$$"
+    )
+
+    completo = calcular_metricas(h1["casos_reales"], h1["pronostico_modelo"])
+    declarado = _metricas_horizonte(manifest, 1)
+    global_csv = calcular_metricas(registros["casos_reales"], registros["pronostico_modelo"])
+    global_manifest = manifest.get("metricas_prueba", {}).get("global", {}).get("modelo", {})
+    comprobacion = pd.DataFrame([
+        {"Métrica": "H1 (todos sus registros)", "n": completo["n"], "RMSE desde el CSV": completo["RMSE"], "RMSE del manifest": declarado.get("RMSE"), "MAE desde el CSV": completo["MAE"], "MAE del manifest": declarado.get("MAE")},
+        {"Métrica": "Global (H1 a H6)", "n": global_csv["n"], "RMSE desde el CSV": global_csv["RMSE"], "RMSE del manifest": global_manifest.get("RMSE"), "MAE desde el CSV": global_csv["MAE"], "MAE del manifest": global_manifest.get("MAE")},
+    ])
+    st.markdown("Comprobación: las métricas recalculadas aquí desde el CSV coinciden con las del manifest.")
+    st.dataframe(comprobacion, hide_index=True, width="stretch")
 
 
-# ---------------------------------------------------------------------------
-# Dialogo de fundamentacion: resume el documento tecnico de modelado (repo de
-# modelado, notebooks 03_dengue_modeling y 05_dengue_ablacion_clima_vs_lags).
-# La tabla de aqui es la evaluacion del ESTUDIO DE MODELADO y justifica por que
-# se eligieron estas tres familias; la tabla de error que acompana al pronostico
-# en la pestana es la de la validacion del PROPIO SISTEMA. No mezclarlas.
-# ---------------------------------------------------------------------------
+def _marcador_tabla_persistencia(activo: dict) -> None:
+    manifest = activo["manifest"]
+    if not manifest.get("metricas_prueba"):
+        return
+    st.markdown(f"{activo['nombre']}, métricas de la prueba contra la persistencia en los mismos registros:")
+    st.dataframe(tabla_metricas_global(manifest), hide_index=True, width="stretch", column_config=FORMATO_COLUMNAS_METRICAS)
+    st.dataframe(tabla_metricas(manifest), hide_index=True, width="stretch", column_config=FORMATO_COLUMNAS_METRICAS)
 
-_TABLA_NOTEBOOK_05 = (
-    "| Modelo | H | RMSE | MAE | MAPE | R² |\n"
-    "|---|---|---|---|---|---|\n"
-    "| Prophet | 1 | 12.335 | 8.909 | 23.07 % | 0.8672 |\n"
-    "| Prophet | 2 | 14.027 | 10.062 | 24.64 % | 0.8283 |\n"
-    "| Prophet | 3 | 16.292 | 11.638 | 28.45 % | 0.7684 |\n"
-    "| Prophet | 4 | 17.468 | 12.415 | 30.75 % | 0.7337 |\n"
-    "| Prophet | 6 | 20.761 | 14.152 | 35.37 % | 0.6239 |\n"
-    "| XGBoost | 1 | 12.912 | 9.528 | 24.65 % | 0.8545 |\n"
-    "| XGBoost | 2 | 13.937 | 10.112 | 26.48 % | 0.8305 |\n"
-    "| XGBoost | 3 | 15.884 | 11.807 | 30.42 % | 0.7798 |\n"
-    "| XGBoost | 4 | 17.804 | 13.361 | 35.29 % | 0.7234 |\n"
-    "| XGBoost | 6 | 23.585 | 16.665 | 40.74 % | 0.5146 |\n"
-    "| LSTM | 1 | 12.968 | 9.025 | 22.40 % | 0.8533 |\n"
-    "| LSTM | 2 | 14.661 | 10.229 | 24.37 % | 0.8124 |\n"
-    "| LSTM | 3 | 17.387 | 11.787 | 27.40 % | 0.7362 |\n"
-    "| LSTM | 4 | 19.815 | 13.479 | 31.10 % | 0.6574 |\n"
-    "| LSTM | 6 | 24.317 | 16.267 | 35.89 % | 0.4840 |\n"
-    "| Persistencia (línea base) | 1 | 13.211 | 9.950 | 26.11 % | 0.8477 |\n"
-    "| Persistencia (línea base) | 2 | 14.007 | 10.440 | 25.90 % | 0.8288 |\n"
-    "| Persistencia (línea base) | 3 | 17.543 | 12.702 | 30.76 % | 0.7315 |\n"
-    "| Persistencia (línea base) | 4 | 19.942 | 14.929 | 36.52 % | 0.6530 |\n"
-    "| Persistencia (línea base) | 6 | 24.926 | 17.702 | 44.25 % | 0.4579 |"
-)
+
+_MARCADORES = {
+    "diagrama_ciclo_de_vida": _marcador_diagrama_ciclo_de_vida,
+    "arbol_zip": _marcador_arbol_zip,
+    "ejemplos_archivos": _marcador_ejemplos_archivos,
+    "linea_de_tiempo": _marcador_linea_de_tiempo,
+    "origenes_moviles": _marcador_origenes_moviles,
+    "tabla_csv_ejemplo": _marcador_tabla_csv_ejemplo,
+    "ejemplo_metricas": _marcador_ejemplo_metricas,
+    "tabla_persistencia": _marcador_tabla_persistencia,
+}
+
+
+def _mostrar_seccion(numero: int, secciones: dict, activo: dict | None) -> None:
+    seccion = secciones.get(numero)
+    if seccion is None:
+        return
+    st.markdown(f"#### {numero}. {seccion['titulo']}")
+    for tipo, contenido in documentacion.partir_por_marcadores(seccion["contenido"]):
+        if tipo == documentacion.TIPO_TEXTO:
+            st.markdown(contenido)
+        elif activo is not None and contenido in _MARCADORES:
+            _MARCADORES[contenido](activo)
 
 
 @st.dialog("Fundamentación del pronóstico", width="large")
 def _dialogo_fundamentacion() -> None:
-    st.markdown(
-        "Resumen del documento técnico de modelado: por qué tres modelos, por qué sin variables "
-        "climáticas y hasta dónde llega el horizonte útil."
-    )
+    secciones = documentacion.leer_secciones()
+    activos = _modelos_activos()
+    activo = None
+    if activos:
+        familia = st.selectbox(
+            "Modelo activo para las gráficas y tablas de ejemplo",
+            list(activos),
+            format_func=lambda clave: _rotulo(clave, activos[clave]),
+            key="fundamentacion_modelo",
+        )
+        activo = activos[familia]
 
-    tab_resumen, tab_familias, tab_clima, tab_horizonte, tab_datos = st.tabs(
-        ["Resumen", "Tres familias", "¿Por qué sin clima?", "Horizonte", "Datos y validación"]
-    )
+    pestanas = st.tabs([titulo for titulo, _ in _PESTANAS_FUNDAMENTACION])
+    for pestana, (_, numeros) in zip(pestanas, _PESTANAS_FUNDAMENTACION):
+        with pestana:
+            for numero in numeros:
+                _mostrar_seccion(numero, secciones, activo)
 
-    with tab_resumen:
-        st.markdown(
-            "Se evaluaron 6 modelos de tres familias (estadísticos: SARIMAX y Prophet; aprendizaje "
-            "automático: XGBoost y LightGBM; aprendizaje profundo: LSTM y N-BEATS) con pronóstico "
-            "multipaso walk-forward (origen móvil, sin ver los casos de las semanas que se "
-            "pronostican). Es la evaluación honesta para alerta temprana: la comparación a un "
-            "paso está inflada por la autocorrelación semanal de la serie."
-        )
-        st.markdown(
-            "El tablero despliega el mejor de cada familia a multipaso y sin covariables "
-            "climáticas, que es su escenario operativo real:\n\n"
-            "- Estadístico: Prophet-AR (estacionalidad anual y rezagos de 1, 2, 4 y 8 semanas). "
-            "SARIMAX fue peor en los cinco horizontes.\n"
-            "- Aprendizaje automático: XGBoost sobre los mismos rezagos. LightGBM fue peor en los "
-            "cinco horizontes.\n"
-            "- Aprendizaje profundo: LSTM con una ventana de 12 semanas. N-BEATS fue peor en los "
-            "cinco horizontes y se derrumba desde la tercera semana (R² de -1.13 en la sexta).\n\n"
-            "Prophet queda por defecto: es el único que se sostiene en todo el rango de "
-            "horizontes y el mejor a 4 semanas, el horizonte operativo."
-        )
-
-    with tab_familias:
-        st.markdown(
-            "Desempeño por horizonte (H, en semanas), sin clima. Evaluación del estudio de "
-            "modelado: notebook 05 del repositorio dengue-surveillance-magdalena, validación "
-            "walk-forward sobre la serie de investigación 2007-2024."
-        )
-        st.markdown(_TABLA_NOTEBOOK_05)
-        st.markdown(
-            "Dos lecturas de esta tabla:\n\n"
-            "- XGBoost es el mejor en la segunda y la tercera semana; Prophet en la primera, la "
-            "cuarta y la sexta.\n"
-            "- La LSTM apenas supera a la persistencia a partir de la cuarta semana (RMSE de "
-            "19.815 contra 19.942): en una serie de este tamaño, el aporte real del aprendizaje "
-            "profundo es pequeño."
-        )
-        st.caption(
-            "Esta tabla justifica la elección de las tres familias. El error que acompaña al "
-            "pronóstico en la pestaña es otro: el de la validación que corre el propio sistema "
-            "cada vez que se reentrena, sobre los datos del CITES."
-        )
-
-    with tab_clima:
-        st.markdown(
-            "Se comparó cada modelo entrenado con y sin variables climáticas (humedad, "
-            "precipitación, temperatura), mismos hiperparámetros, única diferencia el clima."
-        )
-        st.markdown(
-            "| Modelo | Δ R² h=1 | Δ R² h=3 | Δ R² h=4 | Δ R² h=6 |\n"
-            "|---|---|---|---|---|\n"
-            "| Prophet | -0.006 | -0.012 | -0.016 | -0.026 |\n"
-            "| ARIMA / SARIMA | -0.003 | -0.035 | -0.053 | -0.120 |\n"
-            "| XGBoost | -0.010 | -0.056 | -0.080 | -0.154 |\n"
-            "| LightGBM | -0.017 | -0.050 | -0.081 | -0.093 |\n"
-            "| LSTM | -0.022 | -0.064 | -0.081 | -0.119 |\n"
-            "| N-BEATS | -0.026 | -0.218 | -0.481 | -1.555 |"
-        )
-        st.caption(
-            "Δ R² = R² sin clima menos R² con clima (más negativo = el clima ayuda más). Prophet "
-            "es el único cuya pérdida se mantiene marginal en todo el rango."
-        )
-        st.markdown(
-            "Se optó por no usar covariables climáticas: el costo de adquirir, actualizar y "
-            "validar series climáticas recae sobre la operación del sistema, y para el modelo por "
-            "defecto (Prophet) esa mejora no es significativa en el horizonte útil."
-        )
-
-    with tab_horizonte:
-        st.markdown(
-            f"El selector deja pronosticar de 1 a {HORIZONTE_MAXIMO_SEMANAS} semanas. El documento "
-            f"técnico recomienda hasta {HORIZONTE_RECOMENDADO_SEMANAS}: a partir de la quinta el "
-            "error crece de forma notoria (en la sexta, MAPE del 35 % y R² de 0.62 en Prophet, "
-            "contra 0.87 en la primera) y la pestaña lo avisa."
-        )
-        st.markdown(
-            "El horizonte de 5 semanas no se evaluó en el notebook; el pronóstico recursivo lo "
-            "produce igual y su error sale de la validación que hace el propio sistema al "
-            "reentrenar."
-        )
-        st.markdown(
-            "Pronóstico recursivo: para pronosticar más de una semana, los rezagos que caen dentro "
-            "del horizonte se completan con la propia predicción del modelo, la misma lógica de la "
-            "evaluación walk-forward."
-        )
-
-    with tab_datos:
-        st.markdown(
-            "La serie de investigación con que se validaron los modelos cubre 940 semanas "
-            "epidemiológicas (2007-2024), dividida cronológicamente en 70 % entrenamiento, 15 % "
-            "validación y 15 % prueba (2022-2024), sin barajar."
-        )
-        st.markdown(
-            "Los modelos que usa este tablero no se entrenan solos: el perfil de administración "
-            "los reentrena desde Gestión cuando se carga información nueva. Cada reentrenamiento "
-            "es una versión nueva (las anteriores se conservan y se puede volver a ellas), queda "
-            "registrado quién lo lanzó y con qué datos, y calcula su propio error por horizonte de "
-            "1 a 6 semanas con una validación walk-forward sobre los datos del CITES (último 15 % "
-            "de la serie como prueba). Ese es el error esperado que se muestra junto al pronóstico."
-        )
-        st.markdown(
-            "El selector Modo incluye ejemplos históricos (una subida real y un descenso real) y la "
-            "opción de elegir cualquier semana: ahí el modelo se entrena en el momento solo con "
-            "datos hasta esa fecha y se compara contra lo que efectivamente ocurrió. Ninguno "
-            "inventa ni ajusta el resultado. No reemplazan el pronóstico de hoy."
-        )
-
+    st.caption("Fuente: docs/pronostico.md del repositorio del tablero.")
     if st.button("Cerrar", width="stretch"):
         st.rerun()

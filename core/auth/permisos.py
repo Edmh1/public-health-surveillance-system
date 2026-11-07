@@ -15,9 +15,10 @@ PERMISO_ELIMINAR_PARA_SIEMPRE = "eliminar_para_siempre"
 PERMISO_VER_BITACORA = "ver_bitacora"
 PERMISO_VER_PROCESAMIENTOS = "ver_procesamientos"
 PERMISO_GESTIONAR_USUARIOS = "gestionar_usuarios"
-# Reentrenar cambia lo que el tablero pronostica para todo el mundo: es un nivel
+# Entrenar, subir, activar o eliminar modelos de pronostico cambia lo que el
+# tablero pronostica para todo el mundo: es un nivel
 # mas restrictivo que el resto de Gestion, solo para Admin.
-PERMISO_REENTRENAR_PRONOSTICO = "reentrenar_pronostico"
+PERMISO_GESTIONAR_PRONOSTICO = "gestionar_pronostico"
 
 PERMISOS_DE_VISOR = {
     PERMISO_VER_DASHBOARD,
@@ -36,7 +37,7 @@ PERMISOS_DE_EDITOR = PERMISOS_DE_VISOR | {
 PERMISOS_DE_ADMIN = PERMISOS_DE_EDITOR | {
     PERMISO_ELIMINAR_PARA_SIEMPRE,
     PERMISO_GESTIONAR_USUARIOS,
-    PERMISO_REENTRENAR_PRONOSTICO,
+    PERMISO_GESTIONAR_PRONOSTICO,
 }
 
 _PERMISOS_POR_ROL = {

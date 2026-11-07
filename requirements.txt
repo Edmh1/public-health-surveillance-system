@@ -15,7 +15,10 @@ PyYAML
 tzdata
 prophet
 epiweeks
-joblib
+# Pronostico: candidatos ARIMA/SARIMA (familia estadistica) y LightGBM
+# (aprendizaje automatico). Ver pathologies/dengue/pronostico/modelos/.
+statsmodels
+lightgbm
 # Pronostico: XGBoost (aprendizaje automatico) y LSTM (aprendizaje profundo).
 # En la imagen Docker (Linux) van las variantes CPU: el servidor no tiene GPU y
 # los paquetes normales de Linux arrastran librerias de NVIDIA (xgboost baja

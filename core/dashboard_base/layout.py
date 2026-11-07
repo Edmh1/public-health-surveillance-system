@@ -12,7 +12,7 @@ import streamlit as st
 
 from core.auth.permisos import (
     PERMISO_ELIMINAR_PIEZA,
-    PERMISO_REENTRENAR_PRONOSTICO,
+    PERMISO_GESTIONAR_PRONOSTICO,
     PERMISO_SUBIR_PIEZA,
     PERMISO_VER_BITACORA,
     PERMISO_VER_PAPELERA,
@@ -31,7 +31,7 @@ from core.dashboard_base.estilos import (
     aplicar_estilos,
     imagen_a_data_uri,
 )
-from core.dashboard_base.gestion_entrenamiento import mostrar_reentrenamiento
+from core.dashboard_base.gestion_entrenamiento import mostrar_gestion_pronostico
 from core.dashboard_base.gestion_papelera import mostrar_papelera
 from core.dashboard_base.gestion_piezas import mostrar_piezas_activas
 from core.dashboard_base.gestion_subida import (
@@ -264,7 +264,7 @@ def _tiene_algo_que_gestionar(usuario) -> bool:
             PERMISO_VER_PAPELERA,
             PERMISO_VER_BITACORA,
             PERMISO_VER_PROCESAMIENTOS,
-            PERMISO_REENTRENAR_PRONOSTICO,
+            PERMISO_GESTIONAR_PRONOSTICO,
         )
     )
 
@@ -289,12 +289,12 @@ def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
         tiene_permiso(usuario.rol, PERMISO_VER_PROCESAMIENTOS)
         or tiene_permiso(usuario.rol, PERMISO_VER_BITACORA)
     )
-    # Reentrenar solo aparece si el rol lo permite (Admin) Y la patologia declara
+    # Modelos de pronostico solo aparece si el rol lo permite (Admin) Y la patologia declara
     # un pronostico en su plugin: el nucleo no pregunta por el nombre de la
     # patologia (ver PathologyPlugin.obtener_pronostico).
     plugin = obtener_patologia(patologia)
     tiene_pronostico = (
-        tiene_permiso(usuario.rol, PERMISO_REENTRENAR_PRONOSTICO)
+        tiene_permiso(usuario.rol, PERMISO_GESTIONAR_PRONOSTICO)
         and plugin.obtener_pronostico() is not None
     )
 
@@ -343,4 +343,4 @@ def _mostrar_seccion_gestion(patologia: str, usuario) -> None:
 
     if tiene_pronostico:
         with tabs[i]:
-            mostrar_reentrenamiento(patologia, usuario)
+            mostrar_gestion_pronostico(patologia, usuario)

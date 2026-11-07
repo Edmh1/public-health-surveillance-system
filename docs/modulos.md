@@ -42,7 +42,7 @@ Keycloak solo entrega la identidad y la etiqueta del rol; qué puede hacer cada 
 |---|---|---|
 | Visor | Estudiantes | Ver las seis pestañas de análisis. No ve la pestaña Gestión. |
 | Editor | Personal CITES | Todo lo del Visor, más subir, reemplazar (editar) y enviar a papelera archivos; restaurar desde la papelera; ver Procesamientos y Bitácora. Alcance global: gestiona cualquier patología. |
-| Admin | Administración | Todo lo del Editor, más eliminar para siempre desde la papelera y reentrenar el pronóstico (apartado Pronóstico de Gestión). |
+| Admin | Administración | Todo lo del Editor, más eliminar para siempre desde la papelera y gestionar los modelos de pronóstico: entrenar, subir, activar y eliminar versiones (apartado Pronóstico de Gestión). |
 
 ### Barra superior y encabezado
 
@@ -139,7 +139,7 @@ Deslizador de un solo año que por defecto se ubica en el año más reciente. Af
 #### Canal endémico
 
 - Título con botón "Metodología" a la derecha.
-- Obedece el filtro territorial de la barra lateral: sin filtro es el canal de todo el Magdalena; con una subregión o un municipio filtrado, el de ese territorio. Ya no tiene selectores propios de escala ni de territorio.
+- Obedece el filtro territorial de la barra lateral: sin filtro es el canal de todo el Magdalena; con una subregión o un municipio filtrado, el de ese territorio. No tiene selectores propios de escala ni de territorio.
 - Control segmentado "Metodología": Cuartiles (por defecto) o Bortman (media geométrica). Se dibuja una sola gráfica a ancho completo; con los dos métodos en paralelo cada canal quedaba a media pantalla y no se leía.
   - Cuartiles: líneas Cuartil inferior (P25), Mediana (P50), Cuartil superior (P75).
   - Bortman: líneas Límite inferior IC 95 %, Umbral estacional, Límite superior IC 95 %.
@@ -169,86 +169,78 @@ Estimar cuántos casos de dengue se esperan en las próximas 1 a 6 semanas en el
 
 ### Datos y filtros
 
-- Serie semanal departamental única (todo el Magdalena) de casos 210+220, construida con todas las semanas del rango (las semanas sin casos se registran como cero, porque son un dato real).
+- Serie semanal departamental única (todo el Magdalena) de casos notificados de dengue y dengue grave (210+220, probables y confirmados, la misma definición que el resto del tablero), construida con todas las semanas del rango (las semanas sin casos se registran como cero, porque son un dato real).
 - No depende de ningún filtro global. Los modelos se validaron a escala departamental. Si la persona tiene activo un filtro de subregión o municipio, aparece el aviso "Tienes un filtro de subregión o municipio activo: no afecta a esta pestaña, el pronóstico siempre es departamental".
 
 ### Modelos
 
-Tres modelos sin variables climáticas, uno por familia. De cada familia va el que mejor desempeño tuvo a multipaso y sin clima en el notebook 05 del repositorio de modelado:
+El mejor modelo de cada familia, sin variables climáticas:
 
-| Familia | Modelo | Configuración | Descartado de la misma familia |
-|---|---|---|---|
-| Estadístico | Prophet-AR (por defecto) | Estacionalidad anual y regresores con log1p(casos) de 1, 2, 4 y 8 semanas atrás | SARIMAX |
-| Aprendizaje automático | XGBoost | Rezagos 1, 2, 4 y 8 en casos (escala original); learning_rate 0,04, max_depth 2, min_child_weight 5, 300 árboles | LightGBM |
-| Aprendizaje profundo | LSTM | Ventana de 12 semanas de log1p(casos) con MinMaxScaler; capas LSTM de 64 y 16 unidades, tanh, dropout 0,2, salida Dense(1); rmsprop, pérdida MAE, lotes de 16, 40 épocas | N-BEATS |
+| Familia | Candidatos | Color en la gráfica |
+|---|---|---|
+| Estadístico | ARIMA, SARIMA, Prophet-AR | azul |
+| Aprendizaje automático | XGBoost, LightGBM | naranja |
+| Aprendizaje profundo | LSTM, N-BEATS | verde azulado |
 
-- Prophet queda por defecto: es el único que se sostiene en todo el rango de horizontes y el mejor a 4 semanas, el horizonte operativo.
-- Pronóstico recursivo: para semanas más allá de la primera, los rezagos que caen dentro del horizonte se completan con la propia predicción del modelo.
-- Sin banda de incertidumbre: solo Prophet la produce de forma nativa, y mostrarla en uno solo de los tres modelos los haría ver de distinta calidad. La incertidumbre se expresa como el error esperado por horizonte.
+- Cuál ocupa cada familia lo decide la experimentación, con la metodología de [METODOLOGIA_PRONOSTICO.md](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/METODOLOGIA_PRONOSTICO.md), y lo activa el perfil de administración desde Gestión. La pestaña muestra la versión activa de cada familia.
+- Pronóstico recursivo: para semanas más allá de la primera, los valores que caen dentro del horizonte se completan con la propia predicción del modelo. Desde cada semana se pronostican como máximo 6 semanas.
 - Requisito mínimo: 120 semanas de histórico (aproximadamente 2,3 años).
 
-### Entrenamiento
+### La pestaña solo muestra
 
-- La pestaña no entrena en el pronóstico en vivo: carga la versión de modelos exportada que el perfil de administración generó desde Gestión (ver Gestión, subpestaña Pronóstico).
-- Cada reentrenamiento es una versión nueva; las anteriores se conservan y se puede volver a cualquiera.
-- Única excepción: los modos históricos entrenan en el momento con datos hasta la fecha elegida, porque ahí el punto es que el modelo no vea lo que vino después.
+No entrena, no sube ni cambia modelos y no tiene botones para hacerlo; todo eso se hace desde Gestión, subpestaña Pronóstico, y solo el perfil de administración. La metodología completa (ciclo de vida, formatos, evaluación, métricas y fórmulas) está en la [documentación técnica del pronóstico](pronostico.md).
 
 ### Componentes (en orden de aparición)
 
 #### Encabezado
 
-Título "Pronóstico de casos de dengue" con el botón "Fundamentación" a la derecha, y la leyenda "Pronóstico a nivel departamental (todo el Magdalena)...".
+Título "Pronóstico de casos de dengue" con el botón "Fundamentación" a la derecha, y la leyenda "Pronóstico de casos notificados (probables y confirmados, los mismos que el resto del tablero) a nivel departamental...".
 
 #### Selector "Modo"
 
-- Pronóstico en vivo (hoy): el pronóstico desde la última semana con datos, con el modelo exportado activo.
-- Ejemplo histórico: inicio del brote de octubre 2018 (subida real hacia el pico de 177 casos por semana de diciembre de 2018).
-- Ejemplo histórico: descenso tras el pico de enero 2019 (bajada real tras ese mismo pico).
-- Elegir otra semana...: selector de fecha para usar cualquier semana del histórico como punto de partida.
-
-En los modos históricos aparece el aviso "Estás viendo un EJEMPLO HISTÓRICO, no el pronóstico de hoy...". Los dos ejemplos fijos van en direcciones opuestas a propósito, y la opción de elegir cualquier semana permite que cualquier persona verifique el modelo con la fecha que quiera.
+- Pronóstico en vivo (próximas semanas): el modelo definitivo de cada familia pronostica desde la última semana con datos.
+- Pronóstico de una semana pasada (prueba): los resultados individuales de la prueba, leídos del CSV de la versión.
 
 #### Selectores de modelo, horizonte y métrica
 
-- Modelo: "Prophet (estadístico)" (por defecto), "XGBoost (aprendizaje automático)", "LSTM (aprendizaje profundo)" o "Comparar los tres", que superpone las tres líneas sobre la misma serie real. Al cambiar de modelo cambian la línea pronosticada y las métricas, no el histórico.
-- Horizonte (semanas): de 1 a 6, por defecto 4. A partir de la quinta semana aparece un aviso: el documento técnico recomienda hasta 4 y más allá el error crece de forma notoria (en la sexta, MAPE del 35 % y R² de 0,62 contra 0,87 en la primera).
+- Modelo: el modelo activo de cada familia, rotulado con su familia (por ejemplo "Prophet-AR (estadístico)"; el estadístico es el valor por defecto), o "Comparar", que superpone todos sobre la misma serie real.
+- Horizonte (semanas): de 1 a 6, por defecto 4. Más allá del horizonte recomendado aparece un aviso de que el error crece.
 - Métrica: "Casos" (por defecto) o "Tasa semanal (x100.000 hab.)". La tasa usa la población total del Magdalena (30 municipios), no la población en riesgo.
 
-#### Procedencia del modelo y aviso de datos nuevos
+#### Procedencia de los modelos y aviso de datos nuevos
 
-- En modo en vivo, en texto visible: "Modelo entrenado el 12 de noviembre de 2026 con 2007-2025 (N semanas, hasta la semana S de AAAA)".
-- Si el consolidado tiene datos más recientes que los que vio el modelo, aparece un aviso que lo dice y explica que hay que reentrenar desde Gestión. Para el perfil de administración incluye el botón "Reentrenar ahora".
-- Si todavía no hay ningún modelo exportado, la pestaña lo explica y dice quién puede generarlo; los modos históricos siguen funcionando.
+- En modo en vivo, en texto visible, por cada modelo mostrado: "Prophet-AR: modelo definitivo entrenado el 6 de noviembre de 2026 con 2007 (sem. 1) a 2025 (sem. 53)".
+- Si el consolidado tiene datos más recientes que los que vio un modelo, un aviso lo dice y explica que el perfil de administración puede reentrenarlo desde Gestión. No hay botón.
+- Si todavía no hay modelos activos, la pestaña lo explica y dice quién puede generarlos.
 
-#### Métricas de error
+#### Modo en vivo: pronóstico de las próximas semanas
 
-Se distinguen dos cosas en pantalla:
+- Gráfica: línea negra continua con los casos reales; pronóstico punteado con marcadores, un color fijo por familia (estadístico azul, aprendizaje automático naranja, aprendizaje profundo verde azulado); línea vertical "Última semana cargada"; barra de desplazamiento con la vista inicial de los últimos dos años. Con un solo modelo, banda sombreada del rango orientativo: pronóstico ± el RMSE de la prueba de cada horizonte, sin bajar de 0. No es un intervalo de confianza.
+- Tabla con un modelo: Semana, Horizonte (H1 a H6), Pronóstico, ±RMSE y Rango orientativo (±RMSE). Al comparar: una columna por modelo con el pronóstico y su rango.
 
-- Modo en vivo: "Error esperado a N semana(s), medido en validación histórica": el RMSE, MAE, MAPE y R² que el modelo obtuvo, para ese horizonte, en la validación walk-forward que el sistema corrió al entrenar esa versión. Nunca se presenta como el error de esta predicción. Con "Comparar los tres", una tarjeta por modelo.
-- Modo histórico: el error real de ese ejemplo, comparando el pronóstico contra lo que ocurrió en las semanas siguientes con las mismas cuatro métricas (RMSE, MAE, MAPE y R²).
+#### Modo en vivo: desempeño histórico en la prueba
 
-#### Gráfica de pronóstico
+Bloque aparte, con el alcance escrito: son las métricas del modelo de evaluación en la prueba (15 %), antes de entrenar el modelo definitivo; no son el error de los pronósticos de arriba. Tabla por modelo con una fila por horizonte hasta el elegido y una fila global (todos los registros de H1 a H6): n, RMSE, MAE, MAPE, R², RMSE de la persistencia y razón entre ambos RMSE.
 
-- Línea negra continua: casos reales. En modo histórico, lo que ocurrió después del corte también es dato real y sigue en negro, como continuación.
-- Líneas punteadas con marcadores: el pronóstico, con un color fijo por modelo (Prophet azul, XGBoost naranja, LSTM verde azulado), conectadas a la última semana real.
-- Línea vertical punteada: el corte, "Último dato que vio el modelo".
-- Eje X con barra de desplazamiento (rangeslider): la vista inicial muestra los últimos dos años y se puede acercar y alejar sobre todo el histórico.
+#### Modo de semana pasada
 
-#### Semanas pronosticadas
+- Selector "Pronosticar desde la semana (semana de origen)": todas las semanas de origen del CSV, cada una con sus horizontes evaluables (solo los que caen dentro de la prueba; al principio y al final hay menos de 6, y la última semana de origen solo tiene H1). Por defecto, la última semana de origen con los 6 horizontes.
+- Aviso: "Estás viendo resultados individuales de la PRUEBA, no el pronóstico de hoy. Los hizo el modelo de evaluación, entrenado solo con el 85 % de los datos (...), que no había visto estas semanas. No es el modelo definitivo".
+- Gráfica con los casos reales antes y después de la semana de origen y los pronósticos guardados.
+- Tabla, una fila por registro del CSV: semana objetivo, horizonte, casos reales, pronóstico, error absoluto, error porcentual ("no definido (0 casos reales)" cuando corresponde), persistencia y su error absoluto.
 
-Con un modelo, una tarjeta por semana ("Sem. 23 · 2026: 45 casos") con la tasa semanal en la ayuda. Con "Comparar los tres", una tabla con una columna por modelo (y los casos reales, en modo histórico).
+Todas las tablas y la gráfica muestran 1 decimal (R² con 2); los cálculos usan los valores sin redondear.
 
 #### Diálogo "Fundamentación del pronóstico"
 
-Resumen del documento técnico en cinco pestañas:
+Muestra las secciones de la [documentación técnica del pronóstico](pronostico.md), con un selector del modelo activo para las partes que usan sus datos reales. Seis pestañas:
 
-- Resumen: las 6 familias evaluadas y por qué se despliega el mejor de cada una, con Prophet por defecto.
-- Tres familias: la tabla de desempeño por horizonte del notebook 05 (Prophet, XGBoost, LSTM y la persistencia como línea base), rotulada como evaluación del estudio de modelado, con dos lecturas: XGBoost es el mejor en la segunda y la tercera semana y Prophet en la primera, la cuarta y la sexta; la LSTM apenas supera a la persistencia a partir de la cuarta semana (19,815 contra 19,942).
-- ¿Por qué sin clima?: tabla de pérdida de R² al quitar las variables climáticas, por modelo y horizonte.
-- Horizonte: por qué se recomienda hasta 4 semanas y de dónde sale el error de la quinta.
-- Datos y validación: la serie de investigación (940 semanas, 2007-2024) y cómo se entrenan y versionan los modelos del tablero.
-
-La tabla del diálogo justifica la elección de las familias; el error que acompaña al pronóstico es el de la validación del propio sistema. No se mezclan en el mismo panel.
+- Resumen: resumen del sistema y familias de modelos.
+- Ciclo de vida y formatos: diagrama del ciclo de vida, formatos de serialización por modelo, estructura del paquete con el árbol y el contenido real de cada archivo.
+- División y evaluación: división temporal (línea de tiempo de la versión), evaluación con orígenes móviles (gráfica de seis pronósticos desde tres semanas de origen consecutivas) y resultados individuales con filas reales del CSV.
+- Pronóstico en vivo: cómo se calcula y el rango orientativo ±RMSE con sus limitaciones.
+- Métricas y persistencia: fórmulas, ejemplo numérico verificable, cálculo con los registros reales del modelo activo comparado contra su manifest, y tabla contra la persistencia.
+- Clima y estudio de modelado: por qué no se usan variables climáticas y criterios de selección de los modelos.
 
 ## Tendencia
 
@@ -271,7 +263,7 @@ Leyenda previa: los casos totales cubren todo el periodo filtrado; semana pico y
 - Semana pico del año más reciente.
 - Municipio más afectado del año más reciente.
 
-El alza frente al año anterior ya no es una tarjeta: va anotada sobre la gráfica comparativa semanal.
+El alza frente al año anterior no es una tarjeta: va anotada sobre la gráfica comparativa semanal.
 
 #### Par: Casos por año + Incidencia por subregión en el Magdalena
 
@@ -373,7 +365,7 @@ A ancho completo, justo debajo del par: Total, Clasificación inicial y Clasific
 
 #### Casos por semana epidemiológica y tipo
 
-Barras apiladas por semana: dengue y dengue grave. Ya no lleva la serie de porcentaje de graves ni el eje secundario.
+Barras apiladas por semana: dengue y dengue grave. No lleva la serie de porcentaje de graves ni eje secundario.
 
 #### Clasificación final de los casos por semana epidemiológica
 
@@ -527,10 +519,10 @@ La papelera guarda una versión por año y código: si una pieza se edita dos ve
 
 ### Subpestaña Pronóstico (solo Admin)
 
-Reentrenar cambia lo que el tablero pronostica para todo el mundo, por eso es un nivel más restrictivo que el resto de Gestión. Solo aparece en las patologías cuyo plugin declara un pronóstico (hoy dengue).
+Es el único lugar donde se gestionan los modelos de pronóstico. Cambiar un modelo cambia lo que el tablero pronostica para todo el mundo, por eso es un nivel más restrictivo que el resto de Gestión: el Editor no la ve. Solo aparece en las patologías cuyo plugin declara un pronóstico (hoy dengue).
 
-- Estado actual: versión activa, cuándo y quién la entrenó, con qué datos (año y semana de inicio y fin) y cuántas semanas; aviso si el consolidado ya tiene datos más recientes; tabla desplegable con el error por horizonte de esa versión.
-- Botón "Reentrenar con el histórico cargado", con confirmación. El trabajo va a la misma cola que las cargas de archivos y la persona puede seguir usando el tablero; al terminar recibe una notificación emergente con el resultado.
-- Qué hace el trabajo, en orden: valida walk-forward los tres modelos y la persistencia en los horizontes de 1 a 6 semanas (último 15 % de la serie como prueba), entrena los tres modelos con todo el histórico, exporta los modelos (Prophet en su JSON nativo, XGBoost en JSON, la LSTM en .keras con su escalador aparte) y un manifest.json con fecha, usuario, rango de datos, hiperparámetros, la tabla de error y la versión del código, y deja la versión nueva como activa. Si algo falla, la versión activa anterior sigue intacta y el fallo queda registrado con su motivo.
-- Versiones: tabla con todas las versiones; ninguna se sobrescribe. "Volver a una versión anterior" + "Usar esta versión", con confirmación.
-- Historial de reentrenamientos: fecha, acción (reentrenamiento o cambio de versión activa), estado, usuario, datos usados, duración, versión y motivo del fallo si lo hubo.
+- Modelos activos: una tarjeta por familia con el nombre de la familia en negrita, el modelo activo, su rango de datos, su origen (entrenado en la app o subido), cuándo entró al sistema en hora de Colombia, el código de versión y un aviso si el consolidado ya tiene datos más recientes.
+- Entrenar: familia, modelo (los que no tienen su librería instalada aparecen como no disponibles), rango de entrenamiento (deslizador de semanas, desde y hasta) e hiperparámetros en JSON, que parten de los de la versión activa de ese modelo. Opción "Dejarla como activa de su familia al terminar". Con confirmación; el trabajo va a la misma cola que las cargas de archivos y al terminar llega una notificación emergente. El trabajo evalúa el modelo en la prueba (último 15 % del rango), guarda los resultados individuales y las métricas, y después entrena el modelo definitivo con todo el rango.
+- Subir modelo: un .zip entrenado en otro equipo con el código del tablero. El procesador lo descomprime de forma segura y lo revisa sin entrenar: formato del manifest, serie, modelo y familia, librería instalada con la misma versión mayor, solo archivos .json, .csv, .txt y .keras, archivos presentes, métricas del manifest iguales a las reconstruidas desde el CSV, carga y pronóstico de prueba. Si algo falla no se guarda nada y el motivo queda en el historial. El botón "Ver estructura del paquete" muestra la estructura, los campos, las columnas del CSV, las reglas, el script para generarlo y, por cada modelo activo, el árbol de su paquete y el contenido real de cada archivo.
+- Versiones: filtro por familia y tabla de las versiones vigentes con origen, rango, fecha, usuario, RMSE H4 y razón contra la persistencia. Las versiones del esquema anterior van aparte, en un desplegable de histórico, y no se pueden activar. El selector "Elegir versión" las nombra de forma legible, por ejemplo "XGBoost · 6 nov 2026, 5:09 p. m. · datos 2007-2025 · entrenado en la app · ACTIVA". Sobre la versión elegida: "Activar en su familia" y "Eliminar" (definitivo, con confirmación); la versión activa no se puede eliminar. Un desplegable muestra la serie, la prueba, las métricas globales y por horizonte con su n, las librerías con su compatibilidad y los hiperparámetros.
+- Historial: entrenar, subir, activar y eliminar, con fecha, estado, modelo, familia, versión, usuario, rango de datos, duración, archivo subido y motivo del fallo. Un desplegable muestra el detalle de cada movimiento: lo pedido al entrenar, el nombre del .zip al subir y una copia del manifest de cada versión eliminada (hiperparámetros, métricas y rango), que sobrevive aunque la versión ya no exista.
