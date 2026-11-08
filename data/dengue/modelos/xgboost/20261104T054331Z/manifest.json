@@ -1,0 +1,129 @@
+{
+  "formato": 1,
+  "patologia": "dengue",
+  "serie": "Casos notificados de dengue y dengue grave (210+220, probables y confirmados) por semana epidemiologica, departamento del Magdalena",
+  "modelo": "xgboost",
+  "nombre": "XGBoost",
+  "familia": "aprendizaje_automatico",
+  "origen": "sistema",
+  "usuario": "eddie",
+  "fecha_entrenamiento": "2026-11-04T05:44:54.943480+00:00",
+  "rango": {
+    "anio_inicio": 2007,
+    "semana_inicio": 1,
+    "anio_fin": 2025,
+    "semana_fin": 53,
+    "fecha_ultima_semana": "2025-12-28",
+    "fecha_primera_semana": "2006-12-31"
+  },
+  "semanas": 992,
+  "hiperparametros": {
+    "rezagos": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "transformacion": "ninguna",
+    "learning_rate": 0.04,
+    "max_depth": 2,
+    "min_child_weight": 5,
+    "n_estimators": 300,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_lambda": 3,
+    "random_state": 42
+  },
+  "archivos": [
+    "xgboost.json"
+  ],
+  "horizonte_maximo_semanas": 6,
+  "validacion": {
+    "metodo": "Walk-forward multipaso: ultimo 15 % de la serie como prueba, modelos entrenados con el resto; desde cada semana de origen se pronostican las 6 siguientes realimentando la propia prediccion.",
+    "semanas_entrenamiento": 843,
+    "semanas_prueba": 149,
+    "origenes": 154,
+    "inicio_prueba": "2023-02-26",
+    "fin_prueba": "2025-12-28"
+  },
+  "metricas": {
+    "1": {
+      "RMSE": 22.477,
+      "MAE": 12.549,
+      "MAPE": 20.19,
+      "R2": 0.8039
+    },
+    "2": {
+      "RMSE": 24.517,
+      "MAE": 14.284,
+      "MAPE": 23.11,
+      "R2": 0.7666
+    },
+    "3": {
+      "RMSE": 27.65,
+      "MAE": 16.567,
+      "MAPE": 26.73,
+      "R2": 0.7032
+    },
+    "4": {
+      "RMSE": 31.807,
+      "MAE": 19.434,
+      "MAPE": 31.28,
+      "R2": 0.6073
+    },
+    "5": {
+      "RMSE": 35.374,
+      "MAE": 21.364,
+      "MAPE": 34.21,
+      "R2": 0.5142
+    },
+    "6": {
+      "RMSE": 38.978,
+      "MAE": 23.362,
+      "MAPE": 36.38,
+      "R2": 0.4102
+    }
+  },
+  "metricas_persistencia": {
+    "1": {
+      "RMSE": 13.759,
+      "MAE": 9.644,
+      "MAPE": 19.46,
+      "R2": 0.9265
+    },
+    "2": {
+      "RMSE": 20.053,
+      "MAE": 13.235,
+      "MAPE": 23.45,
+      "R2": 0.8439
+    },
+    "3": {
+      "RMSE": 25.609,
+      "MAE": 16.383,
+      "MAPE": 27.75,
+      "R2": 0.7454
+    },
+    "4": {
+      "RMSE": 30.628,
+      "MAE": 19.45,
+      "MAPE": 31.95,
+      "R2": 0.6358
+    },
+    "5": {
+      "RMSE": 34.343,
+      "MAE": 21.107,
+      "MAPE": 35.28,
+      "R2": 0.5421
+    },
+    "6": {
+      "RMSE": 38.039,
+      "MAE": 23.114,
+      "MAPE": 38.01,
+      "R2": 0.4383
+    }
+  },
+  "detalles_entrenamiento": {},
+  "librerias": {},
+  "version_codigo": "2026.11.1",
+  "commit_git": null
+}

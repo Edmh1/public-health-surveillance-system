@@ -1,8 +1,8 @@
 """Trabajos del worker para los modelos de pronostico: entrenar una version en la
 app o importar una version subida en un .zip (entrenada en otro equipo).
 
-Los lanza el perfil de administracion desde Gestion. Entrenar una red o validar
-walk-forward no puede bloquear la interfaz, y cargar un modelo subido importa
+Los lanza el perfil de administracion desde Gestion. Entrenar una red o evaluarla
+en la prueba con origenes moviles no puede bloquear la interfaz, y cargar un modelo subido importa
 librerias pesadas, asi que ambos van a la MISMA cola que el procesamiento de
 piezas del SIVIGILA (core/ingestion/cola.py): un trabajo a la vez, en fila, y
 nunca en paralelo con una carga que este reescribiendo el consolidado.
@@ -28,7 +28,7 @@ from core.storage import modelos, rutas
 from core.storage.consolidado import cargar_consolidado
 
 # Tiempo maximo del trabajo en el worker. El default de RQ (3 minutos) no alcanza
-# para entrenar y validar una red en CPU.
+# para entrenar y evaluar una red en CPU.
 TIEMPO_MAXIMO_TRABAJO = "1h"
 
 

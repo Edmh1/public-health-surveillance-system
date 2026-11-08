@@ -1,7 +1,10 @@
-"""LSTM sobre una ventana de log1p(casos) (notebook 05, seccion 7.7). Familia de
-aprendizaje profundo.
+"""LSTM sobre una ventana de log1p(casos). Familia de aprendizaje profundo.
 
-Mismo entrenamiento que el notebook 05: escalado min-max ajustado solo con la
+La ventana, la arquitectura y el entrenamiento son hiperparametros que elige la
+experimentacion con Optuna y 5 semillas (notebook 07 del repositorio de
+experimentacion); los valores por defecto solo son el punto de partida.
+
+Entrenamiento: escalado min-max ajustado solo con la
 parte de ajuste, ventanas de ventana_semanas semanas que predicen la siguiente,
 parada temprana sobre el ultimo tramo restaurando los mejores pesos, y tasa de
 aprendizaje a la mitad cuando se estanca. El escalado, el entrenamiento y la

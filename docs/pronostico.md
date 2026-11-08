@@ -23,7 +23,7 @@ La pestaña ofrece dos vistas que no se deben confundir:
 | Aprendizaje automático | XGBoost, LightGBM | xgboost, lightgbm |
 | Aprendizaje profundo | LSTM, N-BEATS | tensorflow y keras |
 
-Ninguno usa variables climáticas (sección 14). ARIMA y SARIMA trabajan sobre log1p(casos). Prophet-AR combina la estacionalidad anual de Prophet con los casos de 1, 2, 4 y 8 semanas atrás en escala log1p. XGBoost y LightGBM usan esos mismos rezagos. LSTM y N-BEATS reciben las últimas 12 semanas de log1p(casos) escaladas entre 0 y 1.
+Ninguno usa variables climáticas (sección 14). ARIMA y SARIMA trabajan sobre log1p(casos). Prophet-AR combina la estacionalidad anual de Prophet con casos de semanas anteriores (rezagos) en escala log1p. XGBoost y LightGBM también usan rezagos de casos. LSTM y N-BEATS reciben una ventana de las últimas semanas de log1p(casos) escaladas entre 0 y 1. Los rezagos y el largo de la ventana son hiperparámetros de cada versión y se ven en su manifest.
 
 Se muestra el mejor modelo de cada familia para comparar enfoques distintos sobre la misma serie: uno que modela la estructura temporal de forma explícita, uno que aprende relaciones no lineales entre rezagos y uno que aprende patrones de secuencias. Cuál ocupa cada familia se decide en la experimentación (sección 15) y lo activa el perfil de administración.
 
@@ -41,7 +41,7 @@ D. Importación. Al subir un .zip, el procesador lo descomprime de forma segura 
 
 E. Inferencia. Para el pronóstico en vivo, la pestaña carga el modelo definitivo (una vez por versión) y le pide las próximas 6 semanas. No ejecuta fit, Optuna ni ningún entrenamiento. Todas las familias responden a la misma interfaz, ModeloPronostico.pronosticar_trayectorias, así que la pestaña no necesita saber si detrás hay Keras, Prophet, XGBoost, LightGBM o statsmodels.
 
-Las únicas etapas que entrenan son A y B, y lo hacen una vez por versión: el modelo de evaluación (85 %) y el modelo definitivo (100 %).
+Las únicas etapas que entrenan son B y C, y lo hacen una vez por versión: B el modelo de evaluación (85 %) y C el modelo definitivo (100 %). A solo pone en marcha el trabajo.
 
 ## 4. Formatos de serialización e importación por modelo
 
@@ -99,7 +99,7 @@ prediccion = booster.predict(rezagos)
 # LSTM y N-BEATS (Keras 3)
 red.save("lstm.keras")
 red = keras.models.load_model("lstm.keras")
-prediccion_escalada = red.predict(ventana_escalada)  # forma (n, 12, 1) en LSTM, (n, 12) en N-BEATS
+prediccion_escalada = red.predict(ventana_escalada)  # forma (n, ventana, 1) en LSTM, (n, ventana) en N-BEATS
 ```
 
 ## 5. Estructura del paquete .zip
@@ -161,7 +161,7 @@ Cada versión se entrena con un rango de semanas consecutivas (en Gestión se el
 - Prueba: el 15 % final. El modelo de evaluación nunca ve esas semanas al entrenar.
 - Modelo definitivo: el 100 % del rango, después de la evaluación.
 
-Las redes (LSTM y N-BEATS) además separan, dentro de los datos con que entrenan, un tramo final de validación (el 15 % de esos datos) que solo sirve para decidir cuándo detener el entrenamiento (parada temprana, restaurando los mejores pesos). Esa validación es parte del entrenamiento; la prueba es otra cosa.
+Las redes (LSTM y N-BEATS) además separan, dentro de los datos con que entrenan, un tramo final de validación que solo sirve para decidir cuándo detener el entrenamiento (parada temprana, restaurando los mejores pesos). Su tamaño es el hiperparámetro fraccion_validacion; en los modelos exportados desde la experimentación vale 15/85 (0.176), así que en el modelo de evaluación la validación ocupa el 15 % del rango y el entrenamiento propiamente dicho el 70 % inicial, el mismo esquema 70/15/15 con que se eligieron las redes. Esa validación es parte del entrenamiento; la prueba es otra cosa.
 
 <!-- app:linea_de_tiempo -->
 
@@ -266,50 +266,45 @@ La persistencia es la línea base más simple: desde cada semana de origen, pron
 
 Se calcula en los mismos orígenes y horizontes que el modelo (las mismas filas del CSV, columnas de persistencia) y con las mismas fórmulas. La razón entre el RMSE del modelo y el de la persistencia resume la comparación: menos de 1 significa que el modelo se equivoca menos que repetir la última semana. Sirve para saber si la complejidad del modelo está justificada; no es el criterio para elegir el modelo de cada familia (sección 15).
 
+A una semana la persistencia es muy difícil de superar: la serie tiene mucha inercia y los casos de una semana se parecen a los de la anterior. En el estudio de modelado (sección 15), Prophet-AR le gana desde el horizonte 2 y XGBoost y la LSTM no le ganan en ningún horizonte de la prueba; en el brote de 2025, mayor que todo lo observado, ninguno de los tres le gana. Por eso la razón contra la persistencia de la pestaña puede quedar cerca de 1 o por encima, sobre todo en los primeros horizontes.
+
 <!-- app:tabla_persistencia -->
 
 ## 14. Por qué no se usan variables climáticas
 
-En el estudio de modelado se entrenó cada modelo con y sin variables climáticas (humedad, precipitación y temperatura), con los mismos hiperparámetros. Diferencia de R² (sin clima menos con clima; más negativo significa que el clima ayuda más):
+En el estudio de modelado (notebook 05 del repositorio de experimentación, serie de investigación 2007-2024) cada familia se entrenó con y sin variables climáticas, con la misma búsqueda de hiperparámetros, y se evaluó en pronóstico multipaso. Diferencia de R² en la prueba (sin clima menos con clima; negativa significa que el clima ayuda):
 
-| Modelo | H1 | H3 | H4 | H6 |
-|---|---|---|---|---|
-| Prophet | -0.006 | -0.012 | -0.016 | -0.026 |
-| ARIMA / SARIMA | -0.003 | -0.035 | -0.053 | -0.120 |
-| XGBoost | -0.010 | -0.056 | -0.080 | -0.154 |
-| LightGBM | -0.017 | -0.050 | -0.081 | -0.093 |
-| LSTM | -0.022 | -0.064 | -0.081 | -0.119 |
-| N-BEATS | -0.026 | -0.218 | -0.481 | -1.555 |
+| Modelo | H1 | H2 | H3 | H4 | H5 | H6 |
+|---|---|---|---|---|---|---|
+| ARIMA y SARIMA (frente a SARIMAX) | -0.001 | -0.019 | -0.032 | -0.047 | -0.065 | -0.087 |
+| Prophet-AR | -0.026 | -0.051 | -0.086 | -0.094 | -0.149 | -0.221 |
+| XGBoost | 0.004 | 0.007 | -0.025 | -0.044 | -0.120 | -0.111 |
+| LightGBM | 0.035 | 0.043 | 0.047 | 0.058 | 0.055 | 0.089 |
+| LSTM | 0.088 | 0.112 | 0.135 | 0.175 | 0.215 | 0.251 |
+| N-BEATS | -0.019 | -0.042 | -0.082 | -0.124 | -0.174 | -0.223 |
 
-El tablero no usa covariables climáticas: adquirir, actualizar y validar series climáticas cada semana recae sobre la operación del sistema, y para el pronóstico de corto plazo la mayor parte de la señal está en los casos recientes.
+El clima mejora cinco de los siete modelos, poco a una semana y más en los horizontes largos, pero no a todas las familias. El tablero pronostica sin clima por tres razones: esa ganancia se midió con el clima observado también dentro del horizonte, que en operación sería un pronóstico, así que es un techo; las series climáticas terminan en 2024, de modo que un modelo con clima no podría evaluarse en 2025 ni entrenarse hasta 2025; y operar el clima exige adquirir, actualizar y validar tres fuentes cada semana. El detalle está en la sección 13 de METODOLOGIA_PRONOSTICO.md.
 
 ## 15. Estudio de modelado y criterios de selección
 
 Qué modelo ocupa cada familia se decide en el repositorio de experimentación (METODOLOGIA_PRONOSTICO.md), con la serie del tablero y el mismo código de este sistema:
 
 - Periodos iguales para las tres familias: entrenamiento de 2007 a abril de 2022 (85 % de 2007-2024), prueba de abril de 2022 a diciembre de 2024 (15 %) y prueba final en 2025, que solo se reporta.
-- Hiperparámetros con Optuna dentro del entrenamiento: validación cruzada temporal en los modelos estadísticos y de aprendizaje automático; bloque de validación (70/15/15) en las redes, con 5 semillas, eligiendo la configuración más estable.
-- Ganador de cada familia en la prueba por RMSE en los horizontes 1 a 4 (MAE como desempate; en las redes cuenta también la estabilidad). La persistencia se usa para comprobar si el ganador la supera, no para elegir.
+- Hiperparámetros con Optuna dentro del entrenamiento, minimizando el mismo RMSE global de H1 a H6 con que después se elige el ganador: validación cruzada temporal en los modelos estadísticos y de aprendizaje automático; bloque de validación (70/15/15) en las redes, con 5 semillas, eligiendo la configuración más estable.
+- Ganador de cada familia en la prueba por el RMSE global de los horizontes 1 a 6, calculado sobre todos los registros a la vez; si dos candidatos quedan a menos de un 2 %, gana el de menor MAE global, y en las redes, si el empate persiste, el de menor desviación entre semillas. La persistencia se usa para comprobar si el ganador la supera, no para elegir.
 - El ganador se exporta con el procedimiento de la sección 3 sobre 2007-2025 y se sube en Gestión.
 
-Resultados del estudio de modelado previo (notebook 05, serie de investigación 2007-2024 con prueba 2022-2024, sin clima), que dieron origen al enfoque de un modelo por familia:
+Ganadores (serie del tablero, prueba de abril de 2022 a diciembre de 2024; RMSE de la persistencia 18.12 en la prueba y 38.73 en 2025):
 
-| Modelo | H | RMSE | MAE | MAPE | R² |
-|---|---|---|---|---|---|
-| Prophet | 1 | 12.335 | 8.909 | 23.07 % | 0.8672 |
-| Prophet | 4 | 17.468 | 12.415 | 30.75 % | 0.7337 |
-| Prophet | 6 | 20.761 | 14.152 | 35.37 % | 0.6239 |
-| XGBoost | 1 | 12.912 | 9.528 | 24.65 % | 0.8545 |
-| XGBoost | 4 | 17.804 | 13.361 | 35.29 % | 0.7234 |
-| XGBoost | 6 | 23.585 | 16.665 | 40.74 % | 0.5146 |
-| LSTM | 1 | 12.968 | 9.025 | 22.40 % | 0.8533 |
-| LSTM | 4 | 19.815 | 13.479 | 31.10 % | 0.6574 |
-| LSTM | 6 | 24.317 | 16.267 | 35.89 % | 0.4840 |
-| Persistencia | 1 | 13.211 | 9.950 | 26.11 % | 0.8477 |
-| Persistencia | 4 | 19.942 | 14.929 | 36.52 % | 0.6530 |
-| Persistencia | 6 | 24.926 | 17.702 | 44.25 % | 0.4579 |
+| Familia | Ganador | RMSE | MAE | R² | RMSE / persistencia | RMSE en 2025 |
+|---|---|---|---|---|---|---|
+| Estadística | Prophet-AR | 16.21 | 11.65 | 0.768 | 0.894 | 41.74 |
+| Aprendizaje automático | XGBoost | 20.15 | 13.47 | 0.641 | 1.112 | 44.24 |
+| Aprendizaje profundo | LSTM (media de 5 semillas) | 18.86 ± 0.38 | 12.93 ± 0.12 | 0.685 | 1.041 | 44.58 ± 0.65 |
 
-Estas cifras son de otra serie y otro periodo de prueba que las de los modelos del tablero, así que no se comparan con ellas.
+Prophet-AR es el mejor de los siete candidatos y el único que supera a la persistencia en la prueba. En 2025, un brote mayor que todo lo observado, ningún ganador la supera. El horizonte recomendado es 4 semanas: el mayor en que los tres ganadores explican al menos el 60 % de la variación semanal en la prueba (R² ≥ 0.6).
+
+Estas cifras son las del estudio, con la prueba de abril de 2022 a diciembre de 2024. Las métricas que muestra la pestaña son las del manifest de cada paquete, evaluado en el 15 % final de 2007-2025 (sección 6), de febrero de 2023 a diciembre de 2025, así que no coinciden con estas. Esa prueba del paquete incluye el brote de 2025 y por eso sus errores son mayores: a 4 semanas el R² de XGBoost y de la LSTM queda por debajo de 0.6 y a 1 semana la persistencia supera a los tres modelos. Además se solapa con 2023 y 2024, que formaron parte de la prueba con que se eligió el ganador de cada familia; los hiperparámetros, en cambio, se eligieron solo con datos hasta abril de 2022. El horizonte recomendado y la elección de los modelos salen del estudio, no de las métricas del paquete; estas sirven como referencia del error en el periodo más reciente.
 
 ## 16. Generar un paquete fuera de la aplicación
 

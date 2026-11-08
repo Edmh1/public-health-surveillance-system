@@ -1,9 +1,11 @@
 """Prophet-AR: estacionalidad anual de Prophet + rezagos de log1p(casos) como
-regresores (notebook 05, seccion 7.4). Familia estadistica.
+regresores. Familia estadistica.
 
 Trabaja en escala log1p. En el pronostico multipaso los rezagos que caen dentro
-del horizonte se completan con la propia prediccion (path_prophet_ms del
-notebook 05).
+del horizonte se completan con la propia prediccion. El conjunto de rezagos y los
+parametros de Prophet son hiperparametros que elige la experimentacion con Optuna
+(notebook 06 del repositorio de experimentacion); los valores por defecto solo son
+el punto de partida.
 """
 
 from pathlib import Path

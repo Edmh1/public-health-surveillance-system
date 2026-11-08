@@ -1,8 +1,9 @@
-"""XGBoost sobre rezagos de casos (notebook 05, seccion 7.5). Familia de
-aprendizaje automatico.
+"""XGBoost sobre rezagos de casos. Familia de aprendizaje automatico.
 
-Por defecto trabaja en escala original (como el notebook); el hiperparametro
-transformacion permite probar log1p. Ojo: un modelo de arboles no predice por
+Por defecto trabaja en escala original; el hiperparametro transformacion permite
+usar log1p. Los rezagos y los demas hiperparametros los elige la experimentacion
+con Optuna (notebook 06 del repositorio de experimentacion); los valores por
+defecto solo son el punto de partida. Ojo: un modelo de arboles no predice por
 encima del maximo que vio al entrenar, asi que un brote mas grande que todo el
 historico queda subestimado.
 

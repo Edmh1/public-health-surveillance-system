@@ -260,7 +260,7 @@ Cuando se carga un año nuevo, el pronóstico sigue usando los modelos activos, 
 ### Capas geográficas
 
 - core/references/municipios_magdalena.geojson: los 30 municipios, versión filtrada y simplificada del MGN.
-- core/references/urbano_rural_magdalena.geojson: cada municipio partido en cabecera, centros poblados y rural disperso (340 polígonos), a partir de la capa original de 12,6 MB. Se corrigió la cabecera: en el original era todo el sector urbano del municipio, con el casco de los centros poblados incluido; ahora la cabecera es la pieza que no toca ningún centro poblado y cada casco se sumó a su centro poblado. Simplificada a 0,5 MB. Alimenta el tercer nivel del mapa de Tendencia, que dibuja dos zonas: cabecera y resto rural (centros poblados y rural disperso unidos), las únicas con tasa válida porque el DANE no separa la población de centro poblado y la de rural disperso. Los centros poblados no se dibujan por separado: no hay datos a ese nivel. Límites: el polígono de un centro poblado parte de la unión de las manzanas censales de 2018, no de un perímetro normativo; las clases vienen de 2018 y 2020 y se solapan un poco; dos centros poblados (47570008 y 47660015) no tienen nombre en la DIVIPOLA consultada.
+- core/references/urbano_rural_magdalena.geojson: cada municipio partido en cabecera, centros poblados y rural disperso (340 polígonos), a partir de la capa original de 12,6 MB. La cabecera es la parte del sector urbano que no toca ningún centro poblado; el casco urbano de cada centro poblado se asigna a su centro poblado y no a la cabecera. Simplificada a 0,5 MB. Alimenta el tercer nivel del mapa de Tendencia, que dibuja dos zonas: cabecera y resto rural (centros poblados y rural disperso unidos), las únicas con tasa válida porque el DANE no separa la población de centro poblado y la de rural disperso. Los centros poblados no se dibujan por separado: no hay datos a ese nivel. Límites: el polígono de un centro poblado parte de la unión de las manzanas censales de 2018, no de un perímetro normativo; las clases vienen de 2018 y 2020 y se solapan un poco; dos centros poblados (47570008 y 47660015) no tienen nombre en la DIVIPOLA consultada.
 
 Referencias:
 
@@ -281,28 +281,22 @@ El selector de patología, los filtros globales, la subida de archivos, la papel
 
 ## Investigación y modelado
 
-El análisis y la experimentación previos al sistema viven en un repositorio aparte: [dengue-surveillance-magdalena](https://github.com/Edmh1/dengue-surveillance-magdalena). Usa la serie histórica de SIVIGILA 2007-2024 del Magdalena y deja trazados los experimentos con MLflow. Este repositorio lleva a producción lo que allí se validó.
+El análisis y la experimentación previos al sistema viven en un repositorio aparte: [dengue-surveillance-magdalena](https://github.com/Edmh1/dengue-surveillance-magdalena). Los notebooks de investigación usan la serie histórica de SIVIGILA 2007-2024 del Magdalena y los de producción la serie del tablero 2007-2025; los experimentos quedan trazados con MLflow. Este repositorio lleva a producción lo que allí se validó.
 
 | Notebook | Qué contiene | Qué aportó a SIVIDEM |
 |---|---|---|
 | [01 Análisis exploratorio](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/01_dengue_eda.ipynb) | Limpieza y consolidación de los microdatos SIVIGILA | Las reglas de limpieza que aplica el worker (pathologies/dengue/clean.py) y la evidencia de subnotificación que llevó a calcular tasas por subregión |
 | [02 Variables climáticas](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/02_dengue_climate_feature.ipynb) | Temperatura, precipitación y humedad de NASA POWER, ERA5 y CHIRPS, validadas contra estaciones del IDEAM | Las covariables climáticas que se evaluaron en el modelado |
-| [03 Modelado](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/03_dengue_modeling.ipynb) | Comparación de SARIMAX, Prophet, XGBoost, LightGBM, LSTM y N-BEATS con evaluación walk-forward | Los rezagos de 1, 2, 4 y 8 semanas y la configuración de los modelos |
+| [03 Modelado](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/03_dengue_modeling.ipynb) | Comparación de SARIMAX, Prophet, XGBoost, LightGBM, LSTM y N-BEATS con evaluación walk-forward | La transformación log1p, las entradas autorregresivas (rezagos de casos y ventana de semanas), las familias candidatas y la evaluación multipaso |
 | [04 Agrupamiento](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/04_dengue_clustering.ipynb) | Agrupación de los municipios del Magdalena según su clima | Trabajo exploratorio, no integrado al sistema |
-| [05 Ablación clima vs. rezagos](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/05_dengue_ablacion_clima_vs_lags.ipynb) | Aporte del clima frente al de los casos de semanas anteriores, por horizonte, y pronóstico multipaso sin clima | Pronóstico sin variables climáticas y el enfoque de un modelo por familia |
+| [05 Ablación clima vs. rezagos](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/05_dengue_ablacion_clima_vs_lags.ipynb) | Aporte del clima frente al de los casos de semanas anteriores, por horizonte, y pronóstico multipaso sin clima | Pronóstico sin variables climáticas |
 | 06 y 07 Producción | Ajuste, selección y exportación del mejor modelo de cada familia con el mismo código y la misma serie del tablero | Los modelos que se suben al tablero y el horizonte recomendado |
 
 ### Pronóstico: modelos y desempeño
 
 El tablero muestra el mejor modelo de cada familia, sin covariables climáticas. Candidatos: ARIMA, SARIMA y Prophet-AR (estadística), XGBoost y LightGBM (aprendizaje automático), LSTM y N-BEATS (aprendizaje profundo). Cuál ocupa cada familia lo decide la experimentación y lo activa el perfil de administración.
 
-La metodología completa está en [METODOLOGIA_PRONOSTICO.md](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/METODOLOGIA_PRONOSTICO.md), en el repositorio de experimentación. En resumen:
-
-- Periodos iguales para las tres familias: entrenamiento de 2007 a abril de 2022, prueba de abril de 2022 a diciembre de 2024 y prueba final en 2025, que no se usa para ninguna decisión.
-- Evaluación multipaso walk-forward en todos los horizontes de 1 a 6 semanas.
-- Hiperparámetros con Optuna dentro del entrenamiento: validación cruzada temporal en los modelos estadísticos y de aprendizaje automático; bloque de validación aparte en las redes, con 5 semillas, eligiendo la configuración más estable.
-- Ganador de cada familia por RMSE (MAE como desempate) en los horizontes 1 a 4. La persistencia es un control: se comprueba si el ganador la supera, no se usa para elegir. Reporte completo con MAE, RMSE, MAPE y R² de 1 a 6 semanas.
-- El horizonte recomendado se decide con esos resultados y se configura en pathologies/dengue/pronostico/configuracion.py.
+La metodología con que se eligen, evalúan y exportan los modelos está en [METODOLOGIA_PRONOSTICO.md](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/METODOLOGIA_PRONOSTICO.md), en el repositorio de experimentación, y su resumen con los ganadores de la corrida oficial en las secciones 14 y 15 de [docs/pronostico.md](docs/pronostico.md). El horizonte recomendado que sale de ese estudio se configura en pathologies/dengue/pronostico/configuracion.py.
 
 La documentación técnica del sistema de pronóstico está en [docs/pronostico.md](docs/pronostico.md): ciclo de vida (entrenamiento, evaluación, exportación, importación e inferencia), formatos nativos de cada modelo, estructura del paquete .zip, división temporal, evaluación con orígenes móviles, métricas con sus fórmulas y ejemplos numéricos, rango orientativo ±RMSE y comparación con la persistencia. La Fundamentación de la pestaña muestra esas mismas secciones.
 

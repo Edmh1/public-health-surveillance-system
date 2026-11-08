@@ -1,16 +1,17 @@
-"""ARIMA sobre log1p(casos) (notebook 05, seccion 7.2). Familia estadistica.
+"""ARIMA sobre log1p(casos). Familia estadistica.
 
-El orden por defecto es el que encontro auto_arima en el notebook 05 sin clima:
-(2, 1, 2). La app no corre auto_arima (no depende de pmdarima): el orden es un
-hiperparametro que se fija en la experimentacion.
+El orden (p, d, q) es un hiperparametro: lo elige la experimentacion con Optuna
+(notebook 06 del repositorio de experimentacion) y viaja en el manifest de cada
+version. La app no busca ordenes; el valor por defecto (2, 1, 2) solo es el punto
+de partida cuando no hay una version de este modelo de la que partir.
 
 El modelo entrenado son sus parametros estimados por maxima verosimilitud
 (coeficientes AR y MA y la varianza de las innovaciones sigma2), que se exportan
 en parametros_estimados.json; el orden (p, d, q) es un hiperparametro y va en el
 manifest. Para pronosticar desde un origen se arma el mismo ARIMA con la serie
 hasta ese origen y se aplica el filtro de Kalman con esos parametros fijos
-(filter): no se vuelve a estimar nada. Es lo mismo que
-results.apply(endog, refit=False) del notebook 05, y un JSON no se rompe entre
+(filter): no se vuelve a estimar nada. Equivale a
+results.apply(endog, refit=False) de statsmodels, y un JSON no se rompe entre
 versiones de statsmodels como un pickle.
 """
 

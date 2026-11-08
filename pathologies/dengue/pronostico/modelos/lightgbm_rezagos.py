@@ -1,6 +1,7 @@
-"""LightGBM sobre rezagos de casos (notebook 05, seccion 7.6). Familia de
-aprendizaje automatico. Mismas variables que XGBoost y mismos hiperparametros
-que encontro la busqueda del notebook 05 sin clima.
+"""LightGBM sobre rezagos de casos. Familia de aprendizaje automatico. Mismas
+entradas que XGBoost. Los rezagos y los demas hiperparametros los elige la
+experimentacion con Optuna (notebook 06 del repositorio de experimentacion); los
+valores por defecto solo son el punto de partida.
 
 El archivo no se llama lightgbm.py para no tapar la libreria lightgbm al importarla.
 """

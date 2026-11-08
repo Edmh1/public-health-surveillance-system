@@ -2,17 +2,18 @@
 aprendizaje profundo.
 
 Escrito en Keras (el mismo framework de la LSTM) para no sumar PyTorch y darts
-a la imagen. Reproduce la arquitectura generica de darts.NBEATSModel que uso el
-notebook 05: num_pilas pilas de bloques_por_pila bloques; cada bloque es una
+a la imagen. Sigue la arquitectura generica de darts.NBEATSModel, la que usan los
+notebooks de investigacion 03 y 05: num_pilas pilas de bloques_por_pila bloques; cada bloque es una
 pila de capas densas ReLU que produce coeficientes (dimension_expansion) para un
 "backcast" (lo que el bloque explica de la ventana, que se resta antes del
 bloque siguiente) y un aporte al pronostico (que se suma). Salida de una semana
-y pronostico recursivo, igual que output_chunk_length=1 del notebook.
+y pronostico recursivo, equivalente a output_chunk_length=1 de darts.
 
-Valores por defecto: los que encontro la busqueda del notebook 05 sin clima
-(ventana 12, 1 bloque, 2 capas, ancho 128) y los valores por defecto de darts
-(30 pilas, dimension de expansion 5, Adam con tasa 0.001, perdida MSE, parada
-temprana con paciencia 20) y dropout 0.0.
+Los hiperparametros los elige la experimentacion con Optuna y 5 semillas
+(notebook 07 del repositorio de experimentacion). Valores por defecto, solo como
+punto de partida: ventana 12, 1 bloque, 2 capas, ancho 128 y los valores por
+defecto de darts (30 pilas, dimension de expansion 5, Adam con tasa 0.001,
+perdida MSE, parada temprana con paciencia 20) y dropout 0.0.
 
 A diferencia de darts, la ventana se escala con el mismo min-max de la LSTM
 (pronostico/redes.py): las dos redes se entrenan y evaluan de la misma forma.

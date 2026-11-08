@@ -111,7 +111,7 @@ def _anios_del_rango(rango: dict) -> str:
 # muestran con 1 decimal (R2 con 2, porque no esta en casos).
 FORMATO_COLUMNAS_METRICAS = {
     "RMSE": st.column_config.NumberColumn("RMSE", format="%.1f"),
-    "RMSE H4": st.column_config.NumberColumn("RMSE H4", format="%.1f"),
+    "RMSE global": st.column_config.NumberColumn("RMSE global", format="%.1f"),
     "MAE": st.column_config.NumberColumn("MAE", format="%.1f"),
     "MAPE (%)": st.column_config.NumberColumn("MAPE (%)", format="%.1f"),
     "R²": st.column_config.NumberColumn("R²", format="%.2f"),
@@ -305,9 +305,10 @@ def _hiperparametros_de_partida(patologia: str, clase) -> tuple[dict, str]:
 
 def _mostrar_entrenar(patologia: str, usuario, modulo_pronostico, familias: dict[str, str]) -> None:
     st.markdown(
-        "Entrena una versión nueva en el procesador, con las semanas del rango elegido. La "
-        "validación usa el último 15 % del rango como prueba (error por horizonte de 1 a 6 "
-        "semanas); después el modelo se entrena con todo el rango."
+        "Entrena una versión nueva en el procesador, con las semanas del rango elegido. Primero "
+        "un modelo de evaluación, entrenado con el 85 % inicial del rango, pronostica la prueba "
+        "(el último 15 %) y de ahí sale el error por horizonte de 1 a 6 semanas; después el "
+        "modelo definitivo se entrena con todo el rango."
     )
     catalogo = modulo_pronostico.catalogo()
 
@@ -360,7 +361,7 @@ def _mostrar_entrenar(patologia: str, usuario, modulo_pronostico, familias: dict
         value=(etiquetas[0], etiquetas[-1]),
         key=f"entrenar_rango_{patologia}",
         help=(
-            "Semanas con las que se valida y entrena el modelo. Por ejemplo, para dejar fuera "
+            "Semanas con las que se evalúa y entrena el modelo. Por ejemplo, para dejar fuera "
             "semanas recientes todavía incompletas, o para comparar cómo cambia el error al "
             "incluir un año atípico."
         ),
@@ -587,12 +588,12 @@ def _tabla_versiones(versiones: list[dict], activas: set, familias: dict[str, st
     for elemento in versiones:
         manifest = elemento["manifest"]
         rango = manifest.get("rango", {})
-        horizonte_4 = manifest.get("metricas_prueba", {}).get("por_horizonte", {}).get("4", {})
-        rmse_4 = horizonte_4.get("modelo", {}).get("RMSE")
-        rmse_persistencia_4 = horizonte_4.get("persistencia", {}).get("RMSE")
-        razon_4 = None
-        if rmse_4 is not None and rmse_persistencia_4:
-            razon_4 = rmse_4 / rmse_persistencia_4
+        metricas_globales = manifest.get("metricas_prueba", {}).get("global") or {}
+        rmse_global = metricas_globales.get("modelo", {}).get("RMSE")
+        rmse_persistencia_global = metricas_globales.get("persistencia", {}).get("RMSE")
+        razon_global = None
+        if rmse_global is not None and rmse_persistencia_global:
+            razon_global = rmse_global / rmse_persistencia_global
         es_activa = (elemento["modelo"], elemento["version"]) in activas
         fecha = manifest.get("fecha_entrenamiento")
         filas.append({
@@ -604,11 +605,11 @@ def _tabla_versiones(versiones: list[dict], activas: set, familias: dict[str, st
             "Datos": describir_rango(rango) if rango else "-",
             "Entrenada el": formatear_fecha_larga(fecha) if fecha else "-",
             "Por": manifest.get("usuario", "-"),
-            "RMSE": rmse_4,
-            "Razón RMSE vs persistencia": razon_4,
+            "RMSE": rmse_global,
+            "Razón RMSE vs persistencia": razon_global,
         })
     tabla = pd.DataFrame(filas)
-    return tabla.rename(columns={"RMSE": "RMSE H4"})
+    return tabla.rename(columns={"RMSE": "RMSE global"})
 
 
 def _mostrar_versiones(patologia: str, usuario, familias: dict[str, str]) -> None:
@@ -664,9 +665,10 @@ def _mostrar_versiones(patologia: str, usuario, familias: dict[str, str]) -> Non
             column_config=FORMATO_COLUMNAS_METRICAS,
         )
         st.caption(
-            "RMSE H4: métrica acumulada de los pronósticos a 4 semanas en la prueba. Razón: RMSE del "
-            "modelo dividido por el de la persistencia en los mismos registros; menos de 1 = el "
-            "modelo le gana."
+            "RMSE global: calculado en la prueba con todos los registros de H1 a H6 a la vez, la "
+            "misma métrica con que se elige el modelo de cada familia. Razón: RMSE del modelo "
+            "dividido por el de la persistencia en los mismos registros; menos de 1 = el modelo le "
+            "gana."
         )
     else:
         st.markdown("No hay versiones del esquema vigente en esta familia.")
