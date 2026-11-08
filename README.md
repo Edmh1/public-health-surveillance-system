@@ -18,7 +18,7 @@ La investigación que sustenta el sistema (análisis exploratorio, variables cli
 ## Qué ofrece
 
 - Situación actual: incidencia, mortalidad y letalidad del año (con alerta si la letalidad supera la meta nacional del INS), mapa del estado epidemiológico de cada subregión y canal endémico del territorio filtrado, con selector de método (cuartiles por defecto, o Bortman).
-- Pronóstico: casos esperados en las próximas 1 a 6 semanas (se recomiendan hasta 4) con tres modelos sin clima, uno por familia: Prophet autorregresivo (estadístico, por defecto), XGBoost (aprendizaje automático) y LSTM (aprendizaje profundo), con opción de compararlos sobre la misma serie. Junto al pronóstico se muestra el error esperado por horizonte, medido en la validación walk-forward que el propio sistema corre al entrenar. Los modelos los reentrena el perfil de administración desde Gestión; cada reentrenamiento es una versión que se conserva. Incluye un modo de verificación con ejemplos históricos reales en el que el modelo solo ve datos hasta una fecha pasada y se compara con lo que ocurrió después. Ver [Pronóstico: modelos y desempeño](#pronóstico-modelos-y-desempeño).
+- Pronóstico: casos esperados en las próximas 1 a 6 semanas con el mejor modelo de cada familia (estadístico, aprendizaje automático y aprendizaje profundo), sin variables climáticas, con opción de compararlos. Cada semana pronosticada va con un rango orientativo (±RMSE) y, en un bloque aparte, con las métricas que tuvo el modelo en la prueba para ese horizonte. Un modo de semana pasada muestra los pronósticos individuales de la prueba, en semanas que el modelo no había visto, contra lo que ocurrió. La pestaña solo muestra: los modelos se gestionan desde Gestión, solo por el perfil de administración. Ver [Pronóstico: modelos y desempeño](#pronóstico-modelos-y-desempeño).
 - Tendencia: casos por año filtrables desde el mapa, comparación semanal contra el año anterior, variación porcentual, mapa interactivo de incidencia en tres niveles (subregión, municipio y el municipio partido en cabecera, centros poblados y rural disperso) y evolución por territorio.
 - Sociodemográfica: pirámide por sexo y edad, grupos vulnerables, área, estrato, etnia, pueblos indígenas, régimen de salud, EPS y UPGD notificadoras.
 - Morbilidad: gravedad, hospitalización, flujo de clasificación inicial a final (diagrama de Sankey), fuente de notificación y tasas por subregión y municipio.
@@ -31,7 +31,7 @@ La descripción completa de cada pestaña, con sus gráficas, selectores y regla
 
 ## Arquitectura
 
-SIVIDEM se despliega como cuatro contenedores orquestados con Docker Compose: la aplicación web (Streamlit), un worker de procesamiento (RQ), la cola (Redis) y el proveedor de identidad (Keycloak). Los datos de casos se guardan en Parquet y el estado operativo (procesamientos, bitácora, registro de archivos) en SQLite.
+SIVIDEM se despliega como cuatro contenedores orquestados con Docker Compose: la aplicación web (Streamlit), un worker de procesamiento (RQ), la cola (Redis) y el proveedor de identidad (Keycloak). Los datos de casos se guardan en Parquet, los modelos de pronóstico en carpetas versionadas (data/<patología>/modelos) y el estado operativo (procesamientos, bitácora de piezas, registro de archivos y bitácora de modelos) en SQLite.
 
 ### Vista de contenedores
 
@@ -44,6 +44,17 @@ SIVIDEM se despliega como cuatro contenedores orquestados con Docker Compose: la
 ### Vista de componentes
 
 El núcleo (core/) no conoce ninguna patología en particular; cada patología vive en pathologies/ e implementa el contrato PathologyPlugin.
+
+El sistema tiene cuatro contratos (clases abstractas):
+
+| Contrato | Dónde se define | Quién lo implementa | Para qué |
+|---|---|---|---|
+| AuthProvider | core/auth/base.py | core/auth/keycloak_provider.py | Identidad; el resto de la app no habla con Keycloak |
+| PathologyPlugin | core/registry.py | pathologies/dengue/plugin.py | Limpieza, indicadores, canal endémico, pestañas y, opcionalmente, pronóstico |
+| ModuloPronostico | core/registry.py | pathologies/dengue/pronostico/modulo.py | Lo que el núcleo pide al pronóstico de una patología: familias, catálogo de modelos, semanas disponibles, entrenar y exportar una versión, revisar un paquete subido y describir la estructura del paquete |
+| ModeloPronostico | core/registry.py | un archivo por modelo en pathologies/dengue/pronostico/modelos/ | Un modelo: entrenar, pronosticar trayectorias, guardar y cargar |
+
+Un plugin con pronóstico devuelve su ModuloPronostico desde obtener_pronostico(). Para el pronóstico, el núcleo aporta las piezas que no dependen de la patología: el almacén de versiones por modelo y la versión activa por familia (core/storage/modelos.py), los trabajos del worker para entrenar e importar modelos (core/ingestion/entrenamiento.py), la bitácora de modelos (core/audit/entrenamientos.py) y el apartado de Gestión (core/dashboard_base/gestion_entrenamiento.py). La patología aporta la serie, la evaluación, los modelos, el formato de los paquetes y la pestaña (pathologies/dengue/pronostico y pathologies/dengue/views/pronostico.py).
 
 ![Diagrama de componentes del núcleo y los módulos de patología](docs/img/arquitectura-componentes.png)
 
@@ -99,6 +110,28 @@ sequenceDiagram
 - El consolidado nuevo se escribe aparte y se verifica antes de reemplazar al oficial con un cambio de nombre atómico. Por eso, si algo falla, el consolidado anterior sigue intacto.
 - Las demás sesiones abiertas también revisan cada 4 segundos si cambió la fecha de modificación del consolidado. Cuando cambia, muestran el aviso de datos nuevos; los datos solo se recargan cuando cada persona pulsa Actualizar.
 
+### Ciclo de vida de un modelo de pronóstico
+
+```mermaid
+flowchart TD
+    A["Admin en Gestión, apartado Pronóstico"] -->|"Entrenar: modelo, rango e hiperparámetros"| B["Cola de trabajos"]
+    A -->|"Subir .zip entrenado en otro equipo"| B
+    B --> C["Worker"]
+    C -->|"Entrenar"| D["Evalúa: el modelo de evaluación (85 % del rango)<br/>pronostica desde cada semana de origen de la prueba (15 %)"]
+    D --> E["Guarda los resultados individuales en pronosticos_prueba.csv<br/>y calcula desde ellos las métricas globales y por horizonte"]
+    E --> F["Entrena el modelo definitivo con todo el rango"]
+    C -->|"Subir"| G["Descomprime de forma segura y revisa sin entrenar:<br/>serie, catálogo, versiones, archivos, métricas contra el CSV,<br/>carga y pronóstico"]
+    F --> H["Versión nueva en data/dengue/modelos/modelo/versión"]
+    G --> H
+    H --> I{"¿Activar?"}
+    I -->|"Sí, o la familia no tenía activa"| J["activos.json: versión activa de su familia"]
+    I -->|"No"| K["Queda disponible para activarla después"]
+    C --> L["Bitácora de modelos en SQLite<br/>(entrenar, subir, activar, eliminar)"]
+    J --> M["Pestaña Pronóstico: en vivo con el modelo definitivo y el rango ±RMSE<br/>y semana pasada desde los resultados individuales del CSV"]
+```
+
+Si un entrenamiento o una revisión falla, no se guarda ninguna versión y el motivo queda en la bitácora. La versión activa de una familia no se puede eliminar; las demás se eliminan de forma definitiva y la bitácora conserva una copia de su manifest.
+
 ## Tecnologías
 
 | Área | Herramienta |
@@ -110,7 +143,7 @@ sequenceDiagram
 | Estado, bitácora y registro | SQLite |
 | Lectura de Excel grandes (.xls y .xlsx) | calamine |
 | Limpieza de datos | pandas, scikit-learn |
-| Pronóstico | Prophet (cmdstanpy), XGBoost, TensorFlow/Keras (LSTM), epiweeks |
+| Pronóstico | statsmodels (ARIMA, SARIMA), Prophet (cmdstanpy), XGBoost, LightGBM, TensorFlow/Keras (LSTM, N-BEATS), epiweeks |
 | Despliegue | Docker, Docker Compose |
 
 ## Estructura del repositorio
@@ -127,11 +160,11 @@ sequenceDiagram
 │   ├── auth/                   # Contrato AuthProvider, implementación Keycloak y permisos por rol
 │   ├── audit/                  # SQLite: procesamientos, bitácora, registro de piezas y entrenamientos
 │   ├── dashboard_base/         # Layout, login, filtros globales, avisos y pestaña de Gestión
-│   ├── ingestion/              # Cola, procesador de piezas, papelera y reentrenamiento del pronóstico
+│   ├── ingestion/              # Cola, procesador de piezas, papelera y trabajos de modelos de pronóstico
 │   ├── storage/                # Piezas, consolidado, escritura atómica y versiones de modelos
 │   ├── references/             # GeoJSON de municipios y de zonas urbano-rurales
 │   ├── geografia.py
-│   └── registry.py             # Contrato PathologyPlugin y registro de patologías
+│   └── registry.py             # Contratos PathologyPlugin, ModuloPronostico y ModeloPronostico
 ├── pathologies/
 │   └── dengue/                 # Plugin de dengue
 │       ├── manifest.yaml       # Nombre, códigos esperados, rutas y columnas
@@ -141,12 +174,12 @@ sequenceDiagram
 │       ├── canal_endemico.py   # Cuartiles y Bortman
 │       ├── estratificacion.py  # Estratificación de riesgo MSPS/INS
 │       ├── poblacion.py        # Población DANE y población en riesgo
-│       ├── prediccion.py       # Prophet-AR, XGBoost y LSTM: entrenamiento, pronóstico recursivo y validación
-│       ├── entrenamiento.py    # Reentrenamiento y exportación con manifest (lo corre el worker)
+│       ├── pronostico/         # Pronóstico: evaluación, versiones, paquetes .zip y catálogo
+│       │   └── modelos/        # Un archivo por modelo (ARIMA, SARIMA, Prophet-AR, XGBoost, LightGBM, LSTM, N-BEATS)
 │       ├── schema.py           # Esquema estable de los datos procesados
 │       ├── config/             # Subregiones y tablas de referencia
 │       └── views/              # Las seis pestañas de análisis
-├── docs/                       # Guía de módulos y diagramas
+├── docs/                       # Guía de módulos, documentación técnica del pronóstico (pronostico.md) y diagramas
 └── data/                       # Piezas, consolidado, papelera y sistema.db (generados en ejecución)
 ```
 
@@ -181,9 +214,9 @@ docker compose up --build
 - Dashboard: http://localhost:8501
 - Consola de Keycloak: http://localhost:8080 (credenciales iniciales admin / admin definidas en docker-compose.yml; cambiarlas fuera de un entorno local)
 
-La primera construcción tarda varios minutos porque Prophet compila cmdstan durante la instalación y TensorFlow (para la LSTM del pronóstico) es una dependencia pesada.
+La primera construcción tarda varios minutos porque Prophet compila cmdstan durante la instalación y TensorFlow (para las redes del pronóstico, LSTM y N-BEATS) es una dependencia pesada.
 
-Después de cargar los datos, un Admin tiene que entrenar el pronóstico por primera vez desde Gestión, apartado Pronóstico. Hasta entonces la pestaña Pronóstico explica que no hay modelo y solo funcionan sus modos históricos.
+Después de cargar los datos, un Admin tiene que entrenar o subir al menos un modelo por familia desde Gestión, apartado Pronóstico. Hasta entonces la pestaña Pronóstico explica que no hay modelos activos.
 
 ### 3. Configurar Keycloak
 
@@ -196,7 +229,7 @@ Después de cargar los datos, un Admin tiene que entrenar el pronóstico por pri
 |---|---|
 | Visor | Ver todas las pestañas de análisis. |
 | Editor | Todo lo del Visor, más subir, reemplazar y enviar a papelera archivos, restaurar desde la papelera y consultar procesamientos y bitácora. |
-| Admin | Todo lo del Editor, más eliminar archivos para siempre desde la papelera y reentrenar el pronóstico. |
+| Admin | Todo lo del Editor, más eliminar archivos para siempre desde la papelera y gestionar los modelos de pronóstico (entrenar, subir, activar y eliminar versiones). |
 
 Los permisos de cada rol se definen en la aplicación (core/auth/permisos.py); Keycloak solo entrega la identidad y el rol.
 
@@ -222,12 +255,12 @@ Algunos análisis necesitan historia acumulada: el canal endémico pide al menos
 
 El procesamiento recorta automáticamente los casos al Magdalena por departamento de ocurrencia, valida los municipios contra DIVIPOLA y enriquece el dato con las tablas de referencia de pathologies/dengue/config/referencias (DIVIPOLA, países, ocupaciones, aseguradoras, CIE-10, grupos étnicos y proyecciones de población DANE).
 
-Cuando se carga un año nuevo, el pronóstico sigue usando el modelo entrenado con los datos anteriores hasta que un Admin lo reentrene; la pestaña Pronóstico lo avisa.
+Cuando se carga un año nuevo, el pronóstico sigue usando los modelos activos, entrenados con los datos que había, hasta que un Admin entrene o suba versiones nuevas desde Gestión; la pestaña Pronóstico lo avisa.
 
 ### Capas geográficas
 
 - core/references/municipios_magdalena.geojson: los 30 municipios, versión filtrada y simplificada del MGN.
-- core/references/urbano_rural_magdalena.geojson: cada municipio partido en cabecera, centros poblados y rural disperso (340 polígonos), a partir de la capa original de 12,6 MB. Se corrigió la cabecera: en el original era todo el sector urbano del municipio, con el casco de los centros poblados incluido; ahora la cabecera es la pieza que no toca ningún centro poblado y cada casco se sumó a su centro poblado. Simplificada a 0,5 MB. Alimenta el tercer nivel del mapa de Tendencia, que dibuja dos zonas: cabecera y resto rural (centros poblados y rural disperso unidos), las únicas con tasa válida porque el DANE no separa la población de centro poblado y la de rural disperso. Los centros poblados no se dibujan por separado: no hay datos a ese nivel. Límites: el polígono de un centro poblado parte de la unión de las manzanas censales de 2018, no de un perímetro normativo; las clases vienen de 2018 y 2020 y se solapan un poco; dos centros poblados (47570008 y 47660015) no tienen nombre en la DIVIPOLA consultada.
+- core/references/urbano_rural_magdalena.geojson: cada municipio partido en cabecera, centros poblados y rural disperso (340 polígonos), a partir de la capa original de 12,6 MB. La cabecera es la parte del sector urbano que no toca ningún centro poblado; el casco urbano de cada centro poblado se asigna a su centro poblado y no a la cabecera. Simplificada a 0,5 MB. Alimenta el tercer nivel del mapa de Tendencia, que dibuja dos zonas: cabecera y resto rural (centros poblados y rural disperso unidos), las únicas con tasa válida porque el DANE no separa la población de centro poblado y la de rural disperso. Los centros poblados no se dibujan por separado: no hay datos a ese nivel. Límites: el polígono de un centro poblado parte de la unión de las manzanas censales de 2018, no de un perímetro normativo; las clases vienen de 2018 y 2020 y se solapan un poco; dos centros poblados (47570008 y 47660015) no tienen nombre en la DIVIPOLA consultada.
 
 Referencias:
 
@@ -242,56 +275,36 @@ Departamento Administrativo Nacional de Estadística. (s. f.). DIVIPOLA: código
 1. Crear la carpeta pathologies/nombre_patologia/ con su manifest.yaml (nombre, códigos esperados, rutas y columnas).
 2. Implementar una clase que herede de PathologyPlugin (core/registry.py): limpieza, indicadores, canal endémico, esquema, mapeo de subregiones y la lista de pestañas que expone. La estratificación de riesgo es opcional.
 3. Registrar el plugin en app.py y en worker.py con registrar_patologia(...).
-4. Opcional: si la patología tiene pronóstico, devolver desde obtener_pronostico() un objeto que implemente ModuloPronostico (core/registry.py). Con eso aparece el apartado de reentrenamiento en Gestión para el perfil de administración; sin él, la patología funciona igual.
+4. Opcional: si la patología tiene pronóstico, devolver desde obtener_pronostico() un objeto que implemente ModuloPronostico (core/registry.py), con sus modelos en pathologies/nombre_patologia/pronostico/modelos/ (un archivo por modelo, cada uno implementa ModeloPronostico). Con eso aparece el apartado de modelos en Gestión para el perfil de administración; sin él, la patología funciona igual.
 
 El selector de patología, los filtros globales, la subida de archivos, la papelera, el historial, los avisos y la escritura atómica funcionan sin cambios para la nueva patología.
 
 ## Investigación y modelado
 
-El análisis y la experimentación previos al sistema viven en un repositorio aparte: [dengue-surveillance-magdalena](https://github.com/Edmh1/dengue-surveillance-magdalena). Usa la serie histórica de SIVIGILA 2007-2024 del Magdalena y deja trazados los experimentos con MLflow. Este repositorio lleva a producción lo que allí se validó.
+El análisis y la experimentación previos al sistema viven en un repositorio aparte: [dengue-surveillance-magdalena](https://github.com/Edmh1/dengue-surveillance-magdalena). Los notebooks de investigación usan la serie histórica de SIVIGILA 2007-2024 del Magdalena y los de producción la serie del tablero 2007-2025; los experimentos quedan trazados con MLflow. Este repositorio lleva a producción lo que allí se validó.
 
 | Notebook | Qué contiene | Qué aportó a SIVIDEM |
 |---|---|---|
 | [01 Análisis exploratorio](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/01_dengue_eda.ipynb) | Limpieza y consolidación de los microdatos SIVIGILA | Las reglas de limpieza que aplica el worker (pathologies/dengue/clean.py) y la evidencia de subnotificación que llevó a calcular tasas por subregión |
 | [02 Variables climáticas](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/02_dengue_climate_feature.ipynb) | Temperatura, precipitación y humedad de NASA POWER, ERA5 y CHIRPS, validadas contra estaciones del IDEAM | Las covariables climáticas que se evaluaron en el modelado |
-| [03 Modelado](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/03_dengue_modeling.ipynb) | Comparación de SARIMAX, Prophet, XGBoost, LightGBM, LSTM y N-BEATS con evaluación walk-forward | Los rezagos de 1, 2, 4 y 8 semanas y la configuración de los modelos |
+| [03 Modelado](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/03_dengue_modeling.ipynb) | Comparación de SARIMAX, Prophet, XGBoost, LightGBM, LSTM y N-BEATS con evaluación walk-forward | La transformación log1p, las entradas autorregresivas (rezagos de casos y ventana de semanas), las familias candidatas y la evaluación multipaso |
 | [04 Agrupamiento](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/04_dengue_clustering.ipynb) | Agrupación de los municipios del Magdalena según su clima | Trabajo exploratorio, no integrado al sistema |
-| [05 Ablación clima vs. rezagos](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/05_dengue_ablacion_clima_vs_lags.ipynb) | Aporte del clima frente al de los casos de semanas anteriores, por horizonte, y pronóstico multipaso sin clima | Pronóstico sin variables climáticas, la elección del mejor modelo de cada familia y el horizonte recomendado de 4 semanas |
+| [05 Ablación clima vs. rezagos](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/notebooks/05_dengue_ablacion_clima_vs_lags.ipynb) | Aporte del clima frente al de los casos de semanas anteriores, por horizonte, y pronóstico multipaso sin clima | Pronóstico sin variables climáticas |
+| 06 y 07 Producción | Ajuste, selección y exportación del mejor modelo de cada familia con el mismo código y la misma serie del tablero | Los modelos que se suben al tablero y el horizonte recomendado |
 
 ### Pronóstico: modelos y desempeño
 
-El tablero despliega el mejor modelo de cada familia a multipaso y sin covariables climáticas, según el notebook 05: Prophet-AR (estadístico; descartado SARIMAX), XGBoost (aprendizaje automático; descartado LightGBM) y LSTM (aprendizaje profundo; descartado N-BEATS, que se derrumba desde la tercera semana). Prophet queda por defecto por ser el único que se sostiene en todo el rango de horizontes y el mejor a 4 semanas.
+El tablero muestra el mejor modelo de cada familia, sin covariables climáticas. Candidatos: ARIMA, SARIMA y Prophet-AR (estadística), XGBoost y LightGBM (aprendizaje automático), LSTM y N-BEATS (aprendizaje profundo). Cuál ocupa cada familia lo decide la experimentación y lo activa el perfil de administración.
 
-Desempeño por horizonte (H, en semanas), sin clima, evaluación walk-forward del notebook 05 sobre la serie de investigación 2007-2024:
+La metodología con que se eligen, evalúan y exportan los modelos está en [METODOLOGIA_PRONOSTICO.md](https://github.com/Edmh1/dengue-surveillance-magdalena/blob/main/METODOLOGIA_PRONOSTICO.md), en el repositorio de experimentación, y su resumen con los ganadores de la corrida oficial en las secciones 14 y 15 de [docs/pronostico.md](docs/pronostico.md). El horizonte recomendado que sale de ese estudio se configura en pathologies/dengue/pronostico/configuracion.py.
 
-| Modelo | H | RMSE | MAE | MAPE | R² |
-|---|---|---|---|---|---|
-| Prophet | 1 | 12.335 | 8.909 | 23.07 % | 0.8672 |
-| Prophet | 2 | 14.027 | 10.062 | 24.64 % | 0.8283 |
-| Prophet | 3 | 16.292 | 11.638 | 28.45 % | 0.7684 |
-| Prophet | 4 | 17.468 | 12.415 | 30.75 % | 0.7337 |
-| Prophet | 6 | 20.761 | 14.152 | 35.37 % | 0.6239 |
-| XGBoost | 1 | 12.912 | 9.528 | 24.65 % | 0.8545 |
-| XGBoost | 2 | 13.937 | 10.112 | 26.48 % | 0.8305 |
-| XGBoost | 3 | 15.884 | 11.807 | 30.42 % | 0.7798 |
-| XGBoost | 4 | 17.804 | 13.361 | 35.29 % | 0.7234 |
-| XGBoost | 6 | 23.585 | 16.665 | 40.74 % | 0.5146 |
-| LSTM | 1 | 12.968 | 9.025 | 22.40 % | 0.8533 |
-| LSTM | 2 | 14.661 | 10.229 | 24.37 % | 0.8124 |
-| LSTM | 3 | 17.387 | 11.787 | 27.40 % | 0.7362 |
-| LSTM | 4 | 19.815 | 13.479 | 31.10 % | 0.6574 |
-| LSTM | 6 | 24.317 | 16.267 | 35.89 % | 0.4840 |
-| Persistencia (línea base) | 1 | 13.211 | 9.950 | 26.11 % | 0.8477 |
-| Persistencia (línea base) | 2 | 14.007 | 10.440 | 25.90 % | 0.8288 |
-| Persistencia (línea base) | 3 | 17.543 | 12.702 | 30.76 % | 0.7315 |
-| Persistencia (línea base) | 4 | 19.942 | 14.929 | 36.52 % | 0.6530 |
-| Persistencia (línea base) | 6 | 24.926 | 17.702 | 44.25 % | 0.4579 |
+La documentación técnica del sistema de pronóstico está en [docs/pronostico.md](docs/pronostico.md): ciclo de vida (entrenamiento, evaluación, exportación, importación e inferencia), formatos nativos de cada modelo, estructura del paquete .zip, división temporal, evaluación con orígenes móviles, métricas con sus fórmulas y ejemplos numéricos, rango orientativo ±RMSE y comparación con la persistencia. La Fundamentación de la pestaña muestra esas mismas secciones.
 
-XGBoost es el mejor en la segunda y la tercera semana; Prophet en la primera, la cuarta y la sexta. La LSTM apenas supera a la persistencia a partir de la cuarta semana.
+En resumen, cada versión de un modelo se crea así: un modelo de evaluación se entrena con el 85 % del rango y pronostica, desde cada semana de origen, las 6 siguientes del 15 % final (la prueba); esos resultados individuales se guardan en pronosticos_prueba.csv y desde ellos se calculan las métricas globales y por horizonte del manifest; después se entrena el modelo definitivo con el 100 % del rango, que es el que pronostica en vivo. El mismo procedimiento se usa en el tablero y fuera de él, así que un paquete .zip entrenado en otro equipo se importa sin volver a entrenar.
 
-Esta tabla justifica la elección de las familias y está también en el diálogo de Fundamentación de la pestaña Pronóstico. El error que acompaña al pronóstico en la pestaña es otro: el que calcula el propio sistema cada vez que se reentrena (validación walk-forward sobre el último 15 % de los datos cargados, horizontes de 1 a 6 semanas), guardado en el manifest de cada versión de modelos.
+Los resultados por horizonte de cada candidato, la prueba final en 2025 y la elección del ganador de cada familia están en los notebooks 06 y 07 del repositorio de experimentación.
 
-Reentrenamiento: el modelo no se entrena solo. Un Admin lo lanza desde Gestión, apartado Pronóstico; el worker valida y entrena los tres modelos con todo el histórico, los exporta en una carpeta versionada (data/dengue/modelos/<versión>, con un manifest.json que dice fecha, usuario, rango de datos, hiperparámetros, error por horizonte y versión del código) y la deja activa. Las versiones anteriores se conservan y se puede volver a cualquiera; queda registrado quién lo hizo, cuándo, con qué datos y cuánto tardó.
+Gestión de modelos: el pronóstico no se entrena en la pestaña. Desde Gestión, apartado Pronóstico, el perfil de administración entrena una versión nueva eligiendo el modelo, el rango de semanas y los hiperparámetros, o sube un .zip entrenado en otro equipo, que el procesador revisa (formato, serie, librerías y versiones, archivos, métricas reconstruidas desde el CSV, carga y pronóstico de prueba) sin entrenar. Cada modelo tiene sus propias versiones (data/dengue/modelos/<modelo>/<versión>) y cada familia una versión activa. Se puede activar cualquier versión vigente y eliminar las que no estén activas. El historial registra quién entrenó, subió, activó o eliminó qué, cuándo y con qué datos, y guarda una copia del manifest de cada versión eliminada.
 
 ## Metodología y referencias
 

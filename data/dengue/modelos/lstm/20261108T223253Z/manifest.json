@@ -1,0 +1,211 @@
+{
+  "formato": 2,
+  "patologia": "dengue",
+  "serie": "Casos notificados de dengue y dengue grave (210+220, probables y confirmados) por semana epidemiologica, departamento del Magdalena",
+  "modelo": "lstm",
+  "nombre": "LSTM",
+  "familia": "aprendizaje_profundo",
+  "origen": "subido",
+  "usuario": "eddie",
+  "fecha_entrenamiento": "2026-11-07T20:27:36.957530+00:00",
+  "rango": {
+    "anio_inicio": 2007,
+    "semana_inicio": 1,
+    "anio_fin": 2025,
+    "semana_fin": 53,
+    "fecha_primera_semana": "2006-12-31",
+    "fecha_ultima_semana": "2025-12-28"
+  },
+  "semanas": 992,
+  "hiperparametros": {
+    "ventana_semanas": 18,
+    "unidades": [
+      90,
+      126
+    ],
+    "activacion": "tanh",
+    "dropout": 0.3681465439943041,
+    "optimizador": {
+      "class_name": "adam",
+      "config": {
+        "learning_rate": 0.00036531236053328293
+      }
+    },
+    "perdida": "mean_absolute_error",
+    "batch_size": 32,
+    "epocas_maximas": 200,
+    "fraccion_validacion": 0.17647058823529413,
+    "paciencia": 20,
+    "paciencia_tasa_aprendizaje": 10,
+    "semilla": 42
+  },
+  "archivos_modelo": [
+    "lstm.keras",
+    "escalador.json"
+  ],
+  "archivo_pronosticos_prueba": "pronosticos_prueba.csv",
+  "horizonte_maximo_semanas": 6,
+  "prueba": {
+    "descripcion": "Evaluación con orígenes móviles en el conjunto de prueba: el último 15 % del rango de entrenamiento se reserva como prueba y el modelo de evaluación se entrena con el 85 % anterior. Desde cada semana de origen recibe los casos reales hasta esa semana y pronostica las 6 siguientes realimentando su propia predicción. Se guardan todos los pronósticos cuya semana objetivo pertenece a la prueba, junto con la persistencia (repetir el último valor real) en los mismos orígenes y horizontes.",
+    "semanas_entrenamiento": 843,
+    "semanas_prueba": 149,
+    "inicio_prueba": "2023-02-26",
+    "fin_prueba": "2025-12-28",
+    "cantidad_origenes": 154,
+    "registros": 894
+  },
+  "metricas_prueba": {
+    "alcance": "Rendimiento histórico en el conjunto de prueba (15 %) del modelo de evaluación, entrenado con el 85 % anterior, antes de entrenar el modelo definitivo con el 100 % de los datos. No es una evaluación del modelo definitivo ni el error de los pronósticos futuros.",
+    "global": {
+      "modelo": {
+        "RMSE": 31.52732712925851,
+        "MAE": 18.199559638430873,
+        "MAPE": 28.623623033479323,
+        "R2": 0.6166905226620063,
+        "n": 894,
+        "n_mape": 894
+      },
+      "persistencia": {
+        "RMSE": 28.347279105095648,
+        "MAE": 17.212527964205815,
+        "MAPE": 29.399581603001714,
+        "R2": 0.690116815186947,
+        "n": 894,
+        "n_mape": 894
+      }
+    },
+    "por_horizonte": {
+      "1": {
+        "modelo": {
+          "RMSE": 19.65199642125752,
+          "MAE": 12.053435274418568,
+          "MAPE": 20.301068279432286,
+          "R2": 0.8510678003017507,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 13.75163199588818,
+          "MAE": 9.684563758389261,
+          "MAPE": 19.603773038259316,
+          "R2": 0.9270737747033445,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "2": {
+        "modelo": {
+          "RMSE": 23.602523151672944,
+          "MAE": 14.280195556230993,
+          "MAPE": 23.004558541386334,
+          "R2": 0.7851713912858327,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 20.053284723154945,
+          "MAE": 13.275167785234899,
+          "MAPE": 23.503586340051356,
+          "R2": 0.8449233925781664,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "3": {
+        "modelo": {
+          "RMSE": 28.411212153629112,
+          "MAE": 16.805213089757316,
+          "MAPE": 26.69156180927449,
+          "R2": 0.688717448576098,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 25.611448782230813,
+          "MAE": 16.469798657718123,
+          "MAPE": 27.883185359408706,
+          "R2": 0.7470448395643992,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "4": {
+        "modelo": {
+          "RMSE": 33.18345479853931,
+          "MAE": 19.043850687526216,
+          "MAPE": 29.898040077092308,
+          "R2": 0.5753623967526719,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 30.66631407247937,
+          "MAE": 19.51006711409396,
+          "MAPE": 31.992726996567676,
+          "R2": 0.6373410417275345,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "5": {
+        "modelo": {
+          "RMSE": 37.492005300845996,
+          "MAE": 22.102151429093123,
+          "MAPE": 33.9142884739156,
+          "R2": 0.4579334721908297,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 34.391254546203236,
+          "MAE": 21.161073825503355,
+          "MAPE": 35.33322364759165,
+          "R2": 0.5438882205254321,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "6": {
+        "modelo": {
+          "RMSE": 41.31059141602083,
+          "MAE": 24.91251179355903,
+          "MAPE": 37.93222101977491,
+          "R2": 0.3418906268648553,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 38.09252247431739,
+          "MAE": 23.174496644295303,
+          "MAPE": 38.08099423613155,
+          "R2": 0.44042962202280556,
+          "n": 149,
+          "n_mape": 149
+        }
+      }
+    }
+  },
+  "detalles_entrenamiento": {
+    "epocas_ejecutadas": 155,
+    "mejor_epoca": 135,
+    "perdida_validacion_mejor": 0.03689
+  },
+  "librerias": {
+    "tensorflow": "2.21.0",
+    "keras": "3.15.1"
+  },
+  "subido_por": "eddie",
+  "fecha_subida": "2026-11-08T22:33:07.577281+00:00",
+  "compatibilidad": {
+    "tensorflow": {
+      "exportado": "2.21.0",
+      "instalado": "2.21.0",
+      "estado": "igual"
+    },
+    "keras": {
+      "exportado": "3.15.1",
+      "instalado": "3.15.1",
+      "estado": "igual"
+    }
+  }
+}

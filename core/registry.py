@@ -1,35 +1,186 @@
 """Registro de patologias: sistema de plugins que descubre e indexa cada patologia disponible."""
 
+import copy
+import importlib.util
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
+
+
+class ModeloPronostico(ABC):
+    """Contrato de UN modelo de pronostico (Prophet, XGBoost, LSTM...).
+
+    El contrato es comun; las implementaciones viven en cada patologia
+    (pathologies/<patologia>/pronostico/modelos/, un archivo por modelo), porque
+    la forma de preparar la serie y de evaluar puede cambiar entre patologias.
+    Agregar un modelo es agregar un archivo con una subclase de este contrato e
+    instalar su libreria; no se toca nada mas.
+
+    Atributos de clase que toda implementacion declara:
+      - clave: identificador unico y estable (tambien es el nombre de su carpeta
+        de versiones en data/<patologia>/modelos/<clave>/).
+      - nombre: rotulo legible.
+      - familia: clave de la familia a la que pertenece (las familias las
+        declara la patologia).
+      - paquetes_requeridos: nombres de importacion de las librerias que usa. Si
+        falta alguna, el modelo se muestra como no disponible y el resto del
+        sistema sigue funcionando.
+      - hiperparametros_por_defecto: los que se usan si no se indican otros.
+      - archivos_exportados: {nombre de archivo: que contiene}, los archivos que
+        escribe guardar(). Gestion los muestra a quien arma un paquete .zip.
+
+    Las implementaciones importan su libreria DENTRO de los metodos, nunca al
+    inicio del archivo: asi la ausencia de una libreria solo afecta a su modelo,
+    y librerias lentas de importar (TensorFlow) no frenan el arranque.
+
+    La serie que reciben es la que construye la patologia; el contrato solo
+    exige que el modelo sepa entrenar con ella, pronosticar trayectorias
+    multipaso desde posiciones de origen, guardarse y cargarse.
+    """
+
+    clave: str = ""
+    nombre: str = ""
+    familia: str = ""
+    paquetes_requeridos: tuple[str, ...] = ()
+    hiperparametros_por_defecto: dict[str, Any] = {}
+    archivos_exportados: dict[str, str] = {}
+
+    def __init__(self, hiperparametros: dict[str, Any] | None = None) -> None:
+        combinados = copy.deepcopy(self.hiperparametros_por_defecto)
+        if hiperparametros is not None:
+            combinados.update(hiperparametros)
+        self.hiperparametros = combinados
+
+    @classmethod
+    def paquetes_faltantes(cls) -> list[str]:
+        """Librerias requeridas que no estan instaladas (sin importarlas)."""
+        faltantes = []
+        for paquete in cls.paquetes_requeridos:
+            if importlib.util.find_spec(paquete) is None:
+                faltantes.append(paquete)
+        return faltantes
+
+    @classmethod
+    def versiones_paquetes(cls) -> dict[str, str]:
+        """Version instalada de cada libreria requerida, para el manifest. Importa
+        las librerias: llamarlo solo cuando ya se van a usar."""
+        versiones = {}
+        for paquete in cls.paquetes_requeridos:
+            modulo = importlib.import_module(paquete)
+            versiones[paquete] = str(getattr(modulo, "__version__", "desconocida"))
+        return versiones
+
+    @abstractmethod
+    def entrenar(self, serie: pd.DataFrame) -> None:
+        """Ajusta el modelo con toda la serie recibida."""
+
+    @abstractmethod
+    def pronosticar_trayectorias(self, serie: pd.DataFrame, origenes: list[int], horizonte: int) -> np.ndarray:
+        """Pronostico multipaso desde cada posicion de origen de la serie (el
+        origen es la ultima semana con dato real que el modelo ve). Devuelve una
+        matriz (len(origenes) x horizonte) en la escala original de la serie."""
+
+    @abstractmethod
+    def guardar(self, carpeta: Path) -> list[str]:
+        """Exporta el modelo entrenado en carpeta. Devuelve los archivos escritos."""
+
+    @abstractmethod
+    def cargar(self, carpeta: Path) -> None:
+        """Carga un modelo exportado por guardar. Los hiperparametros llegan por
+        el constructor (salen del manifest de la version)."""
+
+    def detalles_entrenamiento(self) -> dict[str, Any]:
+        """Datos del ultimo entrenamiento que vale la pena dejar en el manifest
+        (por ejemplo, en que epoca se detuvo una red). Opcional."""
+        return {}
 
 
 class ModuloPronostico(ABC):
     """Contrato del pronostico de una patologia que lo tenga. El nucleo lo usa
-    para el reentrenamiento que lanza el perfil de administracion desde Gestion
-    (core/ingestion/entrenamiento.py) sin saber que modelos hay detras.
+    para el apartado de modelos de Gestion (solo perfil de administracion) y los
+    trabajos del worker (core/ingestion/entrenamiento.py), sin saber que modelos
+    hay detras ni como se arma la serie.
 
-    entrenar_y_exportar entrena con el consolidado completo, valida y escribe
-    los modelos en carpeta, junto con un manifest.json. El nucleo lee del
-    manifest estos campos, que toda implementacion debe incluir:
+    Cada modelo tiene sus propias versiones (core/storage/modelos.py) y cada
+    familia una version activa. Una version llega por uno de dos caminos:
+    entrenada en la app (entrenar_y_exportar) o subida en un .zip entrenado en
+    otro equipo (importar).
+
+    El nucleo lee del manifest.json de cada version estos campos, que toda
+    implementacion debe escribir:
+      - modelo (clave del catalogo), nombre, familia, origen
       - fecha_entrenamiento (ISO 8601, UTC) y usuario
       - rango: {"anio_inicio", "semana_inicio", "anio_fin", "semana_fin",
-        "fecha_ultima_semana"} de los datos usados
-      - semanas: cantidad de semanas de la serie de entrenamiento
-      - modelos: {clave: rotulo legible}
-      - metricas: {clave_modelo: {"1": {"RMSE", "MAE", "MAPE", "R2"}, ...}}
-    Puede agregar los campos propios que necesite (hiperparametros, etc.).
-    Si no se puede entrenar (ej. historico insuficiente), lanza una excepcion
-    con un mensaje legible: el nucleo lo registra como fallo y no toca la
-    version activa.
+        "fecha_primera_semana", "fecha_ultima_semana"} del modelo definitivo
+      - semanas: cantidad de semanas del rango
+      - hiperparametros
+      - prueba: {"inicio_prueba", "fin_prueba", ...}
+      - metricas_prueba: {"alcance": texto, "global": {"modelo": m, "persistencia": m},
+        "por_horizonte": {"1": {"modelo": m, "persistencia": m}, ...}}, con
+        m = {"RMSE", "MAE", "MAPE", "R2", "n", "n_mape"}: rendimiento historico en
+        la prueba, no del modelo definitivo
+    Puede agregar los campos propios que necesite. Las versiones que no cumplen
+    el formato vigente (es_version_vigente) se muestran como historico y no se
+    pueden activar.
+
+    Si algo no se puede hacer (historico insuficiente, paquete invalido), los
+    metodos lanzan una excepcion con un mensaje legible: el nucleo lo registra
+    como fallo y no toca ninguna version.
     """
 
     @abstractmethod
-    def entrenar_y_exportar(self, datos: pd.DataFrame, carpeta: Path, usuario: str) -> dict[str, Any]:
-        """Entrena, valida y exporta los modelos en carpeta. Devuelve el manifest."""
+    def familias(self) -> dict[str, str]:
+        """Familias de modelos, en el orden en que se muestran: {clave: rotulo}."""
+
+    @abstractmethod
+    def catalogo(self) -> dict[str, type[ModeloPronostico]]:
+        """Modelos disponibles, por clave (incluidos los que no tienen su
+        libreria instalada; ver ModeloPronostico.paquetes_faltantes)."""
+
+    @abstractmethod
+    def semanas_disponibles(self, datos: pd.DataFrame) -> pd.DataFrame:
+        """Semanas de la serie que se puede armar con datos, para elegir el
+        rango de entrenamiento. Columnas: fecha_semana, ano, semana."""
+
+    @abstractmethod
+    def entrenar_y_exportar(
+        self,
+        datos: pd.DataFrame,
+        modelo: str,
+        desde: pd.Timestamp | None,
+        hasta: pd.Timestamp | None,
+        hiperparametros: dict[str, Any] | None,
+        carpeta: Path,
+        usuario: str,
+    ) -> dict[str, Any]:
+        """Valida y entrena el modelo con las semanas entre desde y hasta (None
+        = sin limite) y escribe en carpeta sus archivos y el manifest.json.
+        Devuelve el manifest."""
+
+    @abstractmethod
+    def importar(self, carpeta: Path, datos: pd.DataFrame, usuario: str) -> dict[str, Any]:
+        """Revisa un paquete ya descomprimido en carpeta (manifest, archivos,
+        que cargue y pronostique). Devuelve el manifest completado con quien lo
+        subio; lanza ValueError si el paquete no sirve."""
+
+    def es_version_vigente(self, manifest: dict) -> bool:
+        """True si la version es del formato vigente. Las demas se conservan
+        como historico pero no se activan."""
+        return True
+
+    def describir_paquete(self) -> dict[str, Any] | None:
+        """Descripcion del paquete .zip que acepta importar, para quien entrena
+        un modelo en otro equipo. Gestion la muestra en "Ver estructura del
+        paquete":
+          - secciones: [{"titulo", "markdown"}] con la estructura del paquete y
+            como generarlo
+          - ejemplos_por_modelo: {nombre: {"arbol": texto, "archivos":
+            [{"titulo", "lenguaje", "contenido"}]}} con muestras reales
+        None si la patologia no la declara."""
+        return None
 
 
 class PathologyPlugin(ABC):
@@ -146,8 +297,8 @@ class PathologyPlugin(ABC):
 
     def obtener_pronostico(self) -> ModuloPronostico | None:
         """Modulo de pronostico de la patologia, o None si no tiene. Habilita el
-        apartado de reentrenamiento en Gestion (solo perfil de administracion) y
-        el trabajo de entrenamiento del worker.
+        apartado de modelos de pronostico en Gestion (solo perfil de administracion) y
+        los trabajos de entrenar e importar modelos del worker.
 
         No es abstracto: el default None deja a las patologias sin pronostico
         (ej. tuberculosis) funcionando sin cambios. El nucleo nunca pregunta por

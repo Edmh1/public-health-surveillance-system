@@ -1,0 +1,195 @@
+{
+  "formato": 2,
+  "patologia": "dengue",
+  "serie": "Casos notificados de dengue y dengue grave (210+220, probables y confirmados) por semana epidemiologica, departamento del Magdalena",
+  "modelo": "xgboost",
+  "nombre": "XGBoost",
+  "familia": "aprendizaje_automatico",
+  "origen": "subido",
+  "usuario": "eddie",
+  "fecha_entrenamiento": "2026-11-07T19:04:46.821855+00:00",
+  "rango": {
+    "anio_inicio": 2007,
+    "semana_inicio": 1,
+    "anio_fin": 2025,
+    "semana_fin": 53,
+    "fecha_primera_semana": "2006-12-31",
+    "fecha_ultima_semana": "2025-12-28"
+  },
+  "semanas": 992,
+  "hiperparametros": {
+    "rezagos": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "transformacion": "ninguna",
+    "learning_rate": 0.010996981647089267,
+    "max_depth": 5,
+    "min_child_weight": 4.312965121208432,
+    "n_estimators": 1213,
+    "subsample": 0.5175676440133128,
+    "colsample_bytree": 0.7753065139358523,
+    "reg_lambda": 0.03128990601615032,
+    "random_state": 42
+  },
+  "archivos_modelo": [
+    "xgboost.json"
+  ],
+  "archivo_pronosticos_prueba": "pronosticos_prueba.csv",
+  "horizonte_maximo_semanas": 6,
+  "prueba": {
+    "descripcion": "Evaluación con orígenes móviles en el conjunto de prueba: el último 15 % del rango de entrenamiento se reserva como prueba y el modelo de evaluación se entrena con el 85 % anterior. Desde cada semana de origen recibe los casos reales hasta esa semana y pronostica las 6 siguientes realimentando su propia predicción. Se guardan todos los pronósticos cuya semana objetivo pertenece a la prueba, junto con la persistencia (repetir el último valor real) en los mismos orígenes y horizontes.",
+    "semanas_entrenamiento": 843,
+    "semanas_prueba": 149,
+    "inicio_prueba": "2023-02-26",
+    "fin_prueba": "2025-12-28",
+    "cantidad_origenes": 154,
+    "registros": 894
+  },
+  "metricas_prueba": {
+    "alcance": "Rendimiento histórico en el conjunto de prueba (15 %) del modelo de evaluación, entrenado con el 85 % anterior, antes de entrenar el modelo definitivo con el 100 % de los datos. No es una evaluación del modelo definitivo ni el error de los pronósticos futuros.",
+    "global": {
+      "modelo": {
+        "RMSE": 33.234688318696385,
+        "MAE": 19.52097843370715,
+        "MAPE": 30.30199296721588,
+        "R2": 0.5740501479736633,
+        "n": 894,
+        "n_mape": 894
+      },
+      "persistencia": {
+        "RMSE": 28.347279105095648,
+        "MAE": 17.212527964205815,
+        "MAPE": 29.399581603001714,
+        "R2": 0.690116815186947,
+        "n": 894,
+        "n_mape": 894
+      }
+    },
+    "por_horizonte": {
+      "1": {
+        "modelo": {
+          "RMSE": 23.169500662452727,
+          "MAE": 13.453673164316472,
+          "MAPE": 21.613946629124044,
+          "R2": 0.7929817659155742,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 13.75163199588818,
+          "MAE": 9.684563758389261,
+          "MAPE": 19.603773038259316,
+          "R2": 0.9270737747033445,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "2": {
+        "modelo": {
+          "RMSE": 25.97909473196532,
+          "MAE": 15.513349417872076,
+          "MAPE": 24.98005787251623,
+          "R2": 0.7397304996302771,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 20.053284723154945,
+          "MAE": 13.275167785234899,
+          "MAPE": 23.503586340051356,
+          "R2": 0.8449233925781664,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "3": {
+        "modelo": {
+          "RMSE": 29.650513628694316,
+          "MAE": 18.03755500332621,
+          "MAPE": 27.889263034369467,
+          "R2": 0.6609687794671675,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 25.611448782230813,
+          "MAE": 16.469798657718123,
+          "MAPE": 27.883185359408706,
+          "R2": 0.7470448395643992,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "4": {
+        "modelo": {
+          "RMSE": 34.344463543385906,
+          "MAE": 20.671898150604044,
+          "MAPE": 32.06946767865324,
+          "R2": 0.5451285014902192,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 30.66631407247937,
+          "MAE": 19.51006711409396,
+          "MAPE": 31.992726996567676,
+          "R2": 0.6373410417275345,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "5": {
+        "modelo": {
+          "RMSE": 38.29757311595045,
+          "MAE": 22.983888517290154,
+          "MAPE": 35.71630536627718,
+          "R2": 0.4343891143916717,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 34.391254546203236,
+          "MAE": 21.161073825503355,
+          "MAPE": 35.33322364759165,
+          "R2": 0.5438882205254321,
+          "n": 149,
+          "n_mape": 149
+        }
+      },
+      "6": {
+        "modelo": {
+          "RMSE": 43.475610182096545,
+          "MAE": 26.46550634883394,
+          "MAPE": 39.542917222355086,
+          "R2": 0.2711022269470702,
+          "n": 149,
+          "n_mape": 149
+        },
+        "persistencia": {
+          "RMSE": 38.09252247431739,
+          "MAE": 23.174496644295303,
+          "MAPE": 38.08099423613155,
+          "R2": 0.44042962202280556,
+          "n": 149,
+          "n_mape": 149
+        }
+      }
+    }
+  },
+  "detalles_entrenamiento": {},
+  "librerias": {
+    "xgboost": "3.4.1"
+  },
+  "subido_por": "eddie",
+  "fecha_subida": "2026-11-08T22:36:19.186368+00:00",
+  "compatibilidad": {
+    "xgboost": {
+      "exportado": "3.4.1",
+      "instalado": "3.4.1",
+      "estado": "igual"
+    }
+  }
+}
